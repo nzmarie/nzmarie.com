@@ -12,20 +12,13 @@ export default function Footer({ lang = "en" }: { lang?: Language }) {
           {/* Left side - About */}
           <div className="single-footer-widget">
             <h6 className="text-xl font-semibold mb-4">{t.aboutTitle}</h6>
-            <p className="text-gray-300 mb-6 leading-relaxed">
+            <p className="text-gray-300 mb-6 leading-relaxed whitespace-pre-line">
               {t.aboutText}
             </p>
-            <p className="footer-text text-sm text-gray-400">
-              Copyright © {new Date().getFullYear()} All rights reserved | This
-              website is made with <span className="text-red-400">❤️</span> by{" "}
-              <a
-                href="http://nzlouis.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors duration-300"
-              >
-                NZ Louis
-              </a>
+            <p className="footer-text text-sm text-gray-400 leading-relaxed">
+              {t.copyright.replace("{year}", new Date().getFullYear().toString())}
+              <br />
+              {t.license}
             </p>
           </div>
 
