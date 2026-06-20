@@ -9,6 +9,21 @@ import { translations, Language } from "../lib/translations";
 export default function Hero({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].hero;
 
+  const formatBadge = (badgeText: string) => {
+    const target = "(Under REAA 2008)";
+    if (badgeText.includes(target)) {
+      const parts = badgeText.split(target);
+      return (
+        <>
+          {parts[0]}
+          <span style={{ fontSize: "0.8rem", fontWeight: "normal", opacity: 0.8 }}>{target}</span>
+          {parts[1]}
+        </>
+      );
+    }
+    return badgeText;
+  };
+
   return (
     <Box id="home" position="relative">
       <Container
@@ -45,7 +60,7 @@ export default function Hero({ lang = "en" }: { lang?: Language }) {
                 border: "1px solid var(--blue-6)",
               }}
             >
-              {t.badge}
+              {formatBadge(t.badge)}
             </Flex>
 
             {/* Main heading */}
@@ -94,14 +109,32 @@ export default function Hero({ lang = "en" }: { lang?: Language }) {
                 asChild
                 size="4"
                 style={{
-                  backgroundColor: "var(--blue-9)",
+                  background: "linear-gradient(135deg, var(--blue-9), var(--blue-10))",
                   color: "white",
                   fontSize: "1rem",
                   fontWeight: 600,
                   padding: "0 2rem",
+                  boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+                  cursor: "pointer",
                 }}
               >
-                <Link href="#about">{t.btnAbout}</Link>
+                <Link href="#appraisal">{t.btnAppraisal}</Link>
+              </Button>
+
+              <Button
+                asChild
+                size="4"
+                style={{
+                  backgroundColor: "var(--blue-3)",
+                  color: "var(--blue-11)",
+                  border: "1px solid var(--blue-6)",
+                  fontSize: "1rem",
+                  fontWeight: 600,
+                  padding: "0 2rem",
+                  cursor: "pointer",
+                }}
+              >
+                <Link href="#download-report">{t.btnReport}</Link>
               </Button>
 
               <Button
@@ -109,14 +142,15 @@ export default function Hero({ lang = "en" }: { lang?: Language }) {
                 size="4"
                 variant="outline"
                 style={{
-                  borderColor: "var(--blue-9)",
-                  color: "var(--blue-9)",
+                  borderColor: "var(--gray-6)",
+                  color: "var(--gray-11)",
                   fontSize: "1rem",
                   fontWeight: 600,
                   padding: "0 2rem",
+                  cursor: "pointer",
                 }}
               >
-                <Link href="#contact">{t.btnContact}</Link>
+                <Link href="#about">{t.btnAbout}</Link>
               </Button>
             </Flex>
 

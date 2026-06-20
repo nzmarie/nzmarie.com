@@ -230,7 +230,10 @@ function TownhousePageContent() {
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/20 bg-amber-500/5 text-amber-400 text-xs font-medium uppercase tracking-widest mb-6">
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Licensed Real Estate Salesperson (REAA 2008)</span>
+                    <span>
+                      Licensed Residential Sales{" "}
+                      <span style={{ fontSize: "0.8em", fontWeight: 400, opacity: 0.8 }}>(REAA 2008)</span>
+                    </span>
                   </div>
 
                   <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6 leading-[1.1] max-w-3xl">

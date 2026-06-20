@@ -82,7 +82,7 @@ describe("TownhousePage", () => {
 
   it("renders Licensed Salesperson badge", () => {
     render(<TownhousePage />);
-    expect(screen.getByText("Licensed Real Estate Salesperson (REAA 2008)")).toBeDefined();
+    expect(screen.getByText(/Licensed Residential Sales/i)).toBeDefined();
   });
 
   it("renders all three bottom credential icons", () => {

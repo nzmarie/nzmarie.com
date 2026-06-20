@@ -5,47 +5,60 @@ import Image from "next/image";
 
 import { translations, Language } from "../lib/translations";
 
+const formatLicense = (text: string) => {
+  const targets = ["(Under REAA 2008)", "(REAA 2008)"];
+  for (const target of targets) {
+    if (text.includes(target)) {
+      const parts = text.split(target);
+      return (
+        <>
+          {parts[0]}
+          <span style={{ fontSize: "0.78em", fontWeight: 400, opacity: 0.7 }}>{target}</span>
+          {parts[1]}
+        </>
+      );
+    }
+  }
+  return <>{text}</>;
+};
+
 export default function About({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].about;
   const skills = t.skills;
 
   return (
     <section className="about-area section-gap" id="about">
-      <div className="container mx-auto px-4">
-        <div className="flex justify-center mb-16">
-          <div className="text-center max-w-2xl">
-            <h1 className="text-4xl font-bold mb-4 text-gray-800">
-              {t.title}
-            </h1>
-            <p className="text-lg text-gray-600">
-              {t.license}
-            </p>
-          </div>
+      <div className="mx-auto px-4 sm:px-6 lg:px-8 max-w-screen-xl">
+
+        <div className="text-center mb-12 lg:mb-16">
+          <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold mb-3 text-gray-800">
+            {t.title}
+          </h1>
+          <p className="text-base sm:text-lg text-gray-500 max-w-xl mx-auto">
+            {formatLicense(t.license)}
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 xl:gap-16 items-center lg:items-start">
-          {/* Left side - Text content and skills */}
-          <div className="w-full lg:max-w-2xl mx-auto lg:mx-0">
-            <div className="space-y-6 mb-12 text-center lg:text-left">
-              <p className="text-gray-700 leading-relaxed text-base md:text-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 xl:gap-20 items-start max-w-6xl mx-auto">
+
+          <div className="w-full order-2 md:order-1">
+            <div className="space-y-5 mb-10 text-center md:text-left">
+              <p className="text-gray-700 leading-relaxed text-base lg:text-lg">
                 {t.p1}
               </p>
-
-              <p className="text-gray-700 leading-relaxed text-base md:text-lg">
+              <p className="text-gray-700 leading-relaxed text-base lg:text-lg">
                 {t.p2}
               </p>
-
-              <h5 className="text-xl md:text-2xl font-semibold text-gray-800 pt-8">
+              <p className="text-lg lg:text-xl font-semibold text-gray-800 pt-4 border-t border-gray-100">
                 {t.footer}
-              </h5>
+              </p>
             </div>
 
-            {/* Skills section */}
-            <div className="max-w-xl mx-auto lg:mx-0">
-              <h4 className="text-2xl font-bold mb-8 text-gray-800 text-center lg:text-left">
+            <div className="max-w-lg mx-auto md:mx-0">
+              <h4 className="text-xl lg:text-2xl font-bold mb-6 text-gray-800 text-center md:text-left">
                 {t.experienceTitle}
               </h4>
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {skills.map((skill, index) => (
                   <div key={index} className="skillbar">
                     <div className="skill-bar-percent">{skill.name}</div>
@@ -61,38 +74,37 @@ export default function About({ lang = "en" }: { lang?: Language }) {
             </div>
           </div>
 
-          {/* Right side - Profile card */}
-          <div className="w-full flex justify-center lg:justify-end">
-            <div className="myself-wrap bg-white rounded-lg shadow-lg overflow-hidden w-full sm:max-w-sm lg:max-w-md">
+          <div className="w-full flex justify-center md:justify-end order-1 md:order-2">
+            <div className="myself-wrap bg-white rounded-2xl shadow-lg overflow-hidden w-full max-w-xs sm:max-w-sm md:max-w-full">
               <div className="relative">
                 <Image
                   src="/img/about-img.jpg"
-                  alt="Marie Nian - Licensed Real Estate Consultant"
-                  width={400}
-                  height={500}
+                  alt="Marie Nian - Licensed Residential Sales, Barfoot & Thompson"
+                  width={480}
+                  height={560}
                   className="w-full h-auto object-cover"
                 />
               </div>
 
-              <div className="desc p-6 text-center lg:text-left">
-                <h4 className="text-2xl font-bold mb-2 text-gray-800">
+              <div className="desc p-5 sm:p-6 text-center md:text-left">
+                <h4 className="text-xl sm:text-2xl font-bold mb-1 text-gray-800">
                   {t.name}
                 </h4>
-                <p className="text-gray-600 mb-4 text-sm md:text-base">
-                  {t.license}
+                <p className="text-gray-500 mb-4 text-sm leading-snug">
+                  {formatLicense(t.license)}
                 </p>
-                <p className="text-gray-600 mb-4 text-sm md:text-base font-medium">
+                <p className="text-gray-600 mb-4 text-sm font-medium">
                   {t.fluent}
                 </p>
 
-                <div className="contact-info space-y-2 mb-6">
-                  <p className="flex flex-col items-center lg:flex-row lg:items-center text-gray-700 text-sm md:text-base">
-                    <span className="w-5 h-5 mb-1 lg:mb-0 lg:mr-3 text-blue-600">📞</span>
+                <div className="contact-info space-y-2 mb-6 text-sm text-gray-700">
+                  <p className="flex items-center justify-center md:justify-start gap-2">
+                    <span className="text-blue-600">📞</span>
                     (+64) 21 069 3089
                   </p>
-                  <p className="flex flex-col items-center lg:flex-row lg:items-center text-gray-700 text-sm md:text-base">
-                    <span className="w-5 h-5 mb-1 lg:mb-0 lg:mr-3 text-blue-600">✉️</span>
-                    nzmarie.com@gmail.com
+                  <p className="flex items-center justify-center md:justify-start gap-2">
+                    <span className="text-blue-600">✉️</span>
+                    m.nian@barfoot.co.nz
                   </p>
                 </div>
 
@@ -105,6 +117,7 @@ export default function About({ lang = "en" }: { lang?: Language }) {
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </section>

@@ -11,10 +11,10 @@ export default function Contact({ lang = "en" }: { lang?: Language }) {
   const contactLinks = [
     {
       label: t.email,
-      href: "mailto:nzmarie.com@gmail.com",
+      href: "mailto:m.nian@barfoot.co.nz",
       Icon: FaEnvelope,
       target: "_self",
-      detail: "nzmarie.com@gmail.com",
+      detail: "m.nian@barfoot.co.nz",
       copyKey: "email",
     },
     {

@@ -65,36 +65,13 @@ The modernised kitchen makes cooking a pleasure, while the dining area connects 
 The outdoor areas are a true highlight! A spacious yard provides plenty of off-street parking for cars, a boat, or a trailer, giving you flexibility for your lifestyle needs along with a lovely open deck which is ideal for family barbecues or simply soaking up the sun and enjoying the peace and quiet. The back garden invites you to grow flowers and vegetables, and even keep a few hens or small pets – perfect for those who love a touch of country life.
 
 With convenient transport options, it’s just a 2-minute walk to the bus stop - don’t miss this opportunity to make this peaceful retreat your new family home. Come to an open home or book a private viewing today!`,
-    openHomes: ["Sat, 2 Nov 2026, 1:00-1:30pm", "Sun, 3 Nov 2026, 1:00-1:30pm"],
-    deadline: "Wednesday 12 November 2026 @ 1pm (unless sold prior)",
-  },
-  {
-    id: 2,
-    title: "4 Rokewa Way, Paparangi, Wellington",
-    price: "Coming Soon",
-    location: "4 Rokewa Way, Paparangi, Wellington 6037",
-    bedrooms: 3,
-    bathrooms: 2,
-    parking: 2,
-    area: "160m²",
-    landArea: "601m²",
-    imageUrl: "/img/4-rokewa-way-paparangi-wellington/ejrqzi6p4ai6pdppk636t3qs44.jpg",
-    status: "Coming Soon",
-    description: "Advertisements launch next Tuesday. A well-maintained residential property built in 1974.",
-    details: `This property is not yet on the market. Advertising is scheduled to commence next Tuesday. 
-
-Key Details:
-- Year Built: 1974
-- Property Type: Residential
-- Last Sold on 1 Apr 2019
-
-Stay tuned for more information and marketing materials coming soon.`,
-    openHomes: [],
+    openHomes: ["Sat, 1 Nov 2025, 1:00-1:30pm", "Sun, 2 Nov 2025, 1:00-1:30pm"],
+    deadline: "Wednesday 12 November 2025 @ 1pm (unless sold prior)",
   },
   {
     id: 3,
     title: "1b Arawa Road, Hataitai, Wellington",
-    price: "Sneak Peek",
+    price: "",
     location: "1b Arawa Road, Hataitai, Wellington 6021",
     bedrooms: 2,
     bathrooms: 1,
@@ -102,16 +79,18 @@ Stay tuned for more information and marketing materials coming soon.`,
     area: "75m²",
     landArea: "-",
     imageUrl: "/img/1B-Arawa-Road-Hataitai/6dgaz4ppoqi6tftmy6nrtdtc5a.jpg",
-    status: "Coming Soon",
-    description: "Stunning apartment in Hataitai. Photos scheduled for this Wednesday.",
-    details: `Are you the owner? This residential apartment was built in 1994 and is preparing to enter the market.
+    status: "For Sale",
+    description: "Modern apartment now on the market in sought-after Hataitai.",
+    details: `Welcome to 1b Arawa Road — a beautifully presented apartment in the heart of Hataitai, now available for sale.
 
 Key Details:
 - Year Built: 1994
-- Property Type: Residential
+- Property Type: Residential Apartment
 - Floor Area: 75m²
 
-Professional photography is being captured this Wednesday. We will update the listing with new photos and full details shortly.`,
+This well-maintained apartment offers a fantastic opportunity for first home buyers or investors looking to secure a property in one of Wellington's most desirable inner-city suburbs. Enjoy proximity to public transport, local cafes, and the stunning Wellington harbour.
+
+Contact Marie Nian today to arrange a private viewing.`,
     openHomes: [],
   },
   {
@@ -272,21 +251,23 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
                 </Box>
 
                 {/* Price Tag */}
-                <Box
-                  style={{
-                    position: "absolute",
-                    bottom: "12px",
-                    left: "12px",
-                    backgroundColor: "rgba(0, 0, 0, 0.8)",
-                    color: "white",
-                    padding: "8px 12px",
-                    borderRadius: "6px",
-                  }}
-                >
-                  <Text size="3" weight="bold">
-                    {property.price}
-                  </Text>
-                </Box>
+                {property.price && (
+                  <Box
+                    style={{
+                      position: "absolute",
+                      bottom: "12px",
+                      left: "12px",
+                      backgroundColor: "rgba(0, 0, 0, 0.8)",
+                      color: "white",
+                      padding: "8px 12px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <Text size="3" weight="bold">
+                      {property.price}
+                    </Text>
+                  </Box>
+                )}
               </Box>
 
               {/* Property Details */}

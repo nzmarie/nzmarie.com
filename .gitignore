@@ -26,6 +26,9 @@ build/
 .DS_Store
 *.pem
 
+# ignore generated PDF reports
+pdf/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

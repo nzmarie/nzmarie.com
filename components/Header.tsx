@@ -13,7 +13,7 @@ export default function Header({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].nav;
 
   useEffect(() => {
-    const sections = ["home", "about", "service", "properties", "contact"];
+    const sections = ["home", "about", "appraisal", "service", "properties", "contact"];
     const fromHash =
       typeof window !== "undefined"
         ? window.location.hash.replace("#", "")
@@ -56,7 +56,7 @@ export default function Header({ lang = "en" }: { lang?: Language }) {
           <Link href="#home" aria-label="Go to home" className="navbar-brand">
             <Image
               src="/img/nzmarie-logo.png"
-              alt="NZ Marie - Real Estate Consultant"
+              alt="Marie Nian | Residential Sales, Barfoot & Thompson"
               width={120}
               height={40}
               priority
@@ -80,9 +80,9 @@ export default function Header({ lang = "en" }: { lang?: Language }) {
               {t.about}
             </Link>
             <Link
-              href="#service"
-              className={linkCls("service")}
-              onClick={() => setActiveSection("service")}
+              href="#appraisal"
+              className={`hover:text-blue-600 transition-colors duration-300 ${activeSection === "appraisal" || activeSection === "service" ? "text-blue-600 font-semibold" : "text-gray-700"}`}
+              onClick={() => setActiveSection("appraisal")}
             >
               {t.service}
             </Link>
@@ -160,12 +160,12 @@ export default function Header({ lang = "en" }: { lang?: Language }) {
               {t.about}
             </Link>
             <Link
-              href="#service"
+              href="#appraisal"
               onClick={() => {
-                setActiveSection("service");
+                setActiveSection("appraisal");
                 setOpen(false);
               }}
-              className={linkCls("service")}
+              className={`hover:text-blue-600 transition-colors duration-300 ${activeSection === "appraisal" || activeSection === "service" ? "text-blue-600 font-semibold" : "text-gray-700"}`}
             >
               {t.service}
             </Link>
