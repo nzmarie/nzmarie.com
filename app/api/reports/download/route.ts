@@ -95,13 +95,25 @@ export async function POST(req: Request) {
       const r2Access = process.env.R2_ACCESS_KEY_ID;
       const r2Secret = process.env.R2_SECRET_ACCESS_KEY;
       const r2Bucket = process.env.R2_BUCKET_NAME;
-      if (
+      const r2Public = process.env.R2_PUBLIC_DOMAIN;
+
+      const r2Misconfigured =
         !r2Access ||
         !r2Secret ||
         !r2Bucket ||
         r2Access.startsWith('mock-') ||
-        r2Secret.startsWith('mock-')
-      ) {
+        r2Secret.startsWith('mock-');
+
+      if (r2Misconfigured) {
+        // Fallback: if a public R2 domain is configured, return a public URL so downloads still work
+        if (r2Public) {
+          const publicDomain = r2Public.replace(/\/+$/, '');
+          const publicPath = r2Key.replace(/^\//, '');
+          const downloadUrl = `${publicDomain}/${publicPath}`;
+          await query(`UPDATE report_download_events SET status = 'completed' WHERE id = $1`, [eventId]);
+          return NextResponse.json({ success: true, action: 'download', downloadUrl });
+        }
+
         console.error('R2 is not configured in production environment');
         return NextResponse.json(
           { success: false, message: 'Report storage is not configured in production.' },
