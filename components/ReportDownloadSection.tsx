@@ -46,8 +46,8 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(30,58,138,0.3),transparent_70%)] pointer-events-none" />
       <div className="container mx-auto px-4 max-w-3xl relative z-10">
         <div className="text-center mb-12">
-          <span className="text-blue-400 font-bold uppercase tracking-wider text-sm">
-            Exclusive Insights
+          <span className="text-blue-400 font-bold capitalize tracking-wider text-sm">
+            Local Market Reports
           </span>
           <h2 className="text-3xl md:text-4xl font-extrabold mt-2 mb-4 tracking-tight text-white">
             {t.title}

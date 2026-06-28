@@ -136,8 +136,8 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   return (
     <section className="py-20 bg-slate-50 border-t border-b border-gray-100" id="appraisal">
       <div className="container mx-auto px-4 max-w-4xl text-center">
-        <span className="text-blue-600 font-semibold uppercase tracking-wider text-sm">
-          {lang === "en" ? "Complimentary Private Consultation" : "高定私密资产咨询"}
+        <span className="text-blue-600 font-semibold capitalize tracking-wider text-sm">
+          {lang === "en" ? "Free Property Appraisal" : "免费房产评估"}
         </span>
         <h2 className="text-4xl font-bold text-slate-900 mt-2 mb-6">
           {t.title}
