@@ -192,7 +192,7 @@ describe("ReportDownloadSection", () => {
 
   it("should render translations and handle inputs", () => {
     render(<ReportDownloadSection lang="en" />);
-    expect(screen.getByText("Access the 2026 Auckland & North Shore Hyper-Local Market Report")).toBeDefined();
+    expect(screen.getByText("Access the Latest Auckland & North Shore Hyper-Local Market Report")).toBeDefined();
 
     const firstNameInput = screen.getByPlaceholderText("e.g. Jane");
     const emailInput = screen.getByPlaceholderText("e.g. jane@example.com");

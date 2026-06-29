@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import {
   Box,
   Container,
@@ -226,10 +227,6 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
               <Box
                 className="property-image"
                 style={{
-                  height: "400px",
-                  backgroundImage: `url("${property.imageUrl}")`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
                   position: "relative",
                   backgroundColor: "var(--gray-3)", // fallback color
                   overflow: "hidden",
@@ -237,6 +234,17 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
                 }}
                 onClick={() => setSelectedProperty(property)}
               >
+                <Image
+                  src={property.imageUrl}
+                  alt={property.title}
+                  fill
+                  style={{
+                    objectFit: "cover",
+                    objectPosition: "top center",
+                  }}
+                  priority={false}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 50vw, 50vw"
+                />
                 {/* Status Badge */}
                 <Box
                   style={{ position: "absolute", top: "12px", right: "12px" }}
