@@ -1,20 +1,12 @@
 "use client";
 
-import { signIn, useSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, Suspense } from "react";
+import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 function LoginContent() {
-  const { data: session } = useSession();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/admin/dashboard";
-
-  useEffect(() => {
-    if (session?.user) {
-      router.push(callbackUrl);
-    }
-  }, [session, router, callbackUrl]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900">
@@ -53,7 +45,11 @@ function LoginContent() {
 
 export default function AdminLoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    }>
       <LoginContent />
     </Suspense>
   );

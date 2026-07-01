@@ -17,7 +17,8 @@
     "test:r2": "npx tsx scripts/test-r2-connection.ts",
     "init-db": "npx tsx scripts/init-database.ts",
     "seed-admin": "npx tsx scripts/seed-admin.ts",
-    "upload-report": "npx tsx scripts/upload-report.ts"
+    "upload-report": "npx tsx scripts/upload-report.ts",
+    "db:migrate": "npx tsx scripts/run-migrations.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1071.0",
@@ -27,6 +28,7 @@
     "@radix-ui/react-icons": "^1.3.2",
     "@radix-ui/themes": "^3.2.1",
     "@supabase/supabase-js": "^2.108.1",
+    "@tanstack/react-query": "^5.101.2",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.539.0",
     "luxon": "^3.7.2",

@@ -1,4 +1,11 @@
+import path from "path";
+
 export default {
+  resolve: {
+    alias: {
+      "@": path.resolve(process.cwd(), "."),
+    },
+  },
   test: {
     environment: "jsdom",
     include: ["__tests__/**/*.test.{ts,tsx}"],

@@ -5,6 +5,8 @@ import { query } from "./db";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   callbacks: {
+    ...authConfig.callbacks,
+    // Override signIn to add database checks
     async signIn({ user }) {
       const email = user.email?.toLowerCase();
       if (!email) return false;
@@ -32,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return true;
     },
-
+    // Override jwt to add role from database
     async jwt({ token, user }) {
       if (user?.email) {
         const result = await query<{ id: string; role: string }>(
@@ -46,14 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return token;
     },
-
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.role = token.role as "super_admin" | "admin" | "viewer";
-        session.user.adminId = token.adminId as string;
-      }
-      return session;
-    },
+    // session callback is inherited from authConfig
   },
 });
 

@@ -10,8 +10,27 @@ vi.mock("pg", () => {
       if (sql.includes("appraisal_leads") && sql.includes("SELECT")) {
         return Promise.resolve({ rows: [] });
       }
+      if (sql.includes("INSERT INTO appraisal_leads")) {
+        return Promise.resolve({
+          rows: [
+            {
+              id: "1",
+              name: "Alice",
+              email: "alice@example.com",
+              phone: null,
+              property_address: "123 Test Street",
+              suburb: "Auckland",
+              message: null,
+              source: "website",
+            },
+          ],
+        });
+      }
       if (sql.includes("market_reports") && sql.includes("SELECT")) {
         return Promise.resolve({ rows: [{ r2_key: "reports/Albany/latest.pdf" }] });
+      }
+      if (sql.includes("INSERT INTO report_download_events")) {
+        return Promise.resolve({ rows: [{ id: 1 }] });
       }
       return Promise.resolve({ rows: [{ count: "0", id: 1 }] });
     }),
@@ -64,13 +83,18 @@ describe("POST /api/submit-appraisal", () => {
     const req = new Request("http://localhost/api/submit-appraisal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Alice", email: "alice@example.com" }),
+      body: JSON.stringify({
+        name: "Alice",
+        email: "alice@example.com",
+        address: "123 Test Street",
+        suburb: "Auckland",
+      }),
     });
     const res = await submitAppraisal(req);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
-    expect(json.data.name).toBe("Alice");
+    expect(json.lead.name).toBe("Alice");
   });
 
   it("returns 400 on invalid JSON body", async () => {
