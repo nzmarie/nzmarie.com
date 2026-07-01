@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { translations, Language } from "../lib/translations";
+import { extractSuburb, getSuburbOptions } from "../lib/address-parser";
 
 const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
 
@@ -10,6 +11,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   const [formData, setFormData] = useState({
     name: "",
     address: "",
+    suburb: "",
     email: "",
     phone: "",
     timeline: "",
@@ -76,7 +78,12 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   };
 
   const handleSelectSuggestion = (address: string) => {
-    setFormData((prev) => ({ ...prev, address }));
+    const detectedSuburb = extractSuburb(address);
+    setFormData((prev) => ({ 
+      ...prev, 
+      address,
+      suburb: detectedSuburb || prev.suburb
+    }));
     setIsAddressSelected(true);
     setSuggestions([]);
     setShowSuggestions(false);
@@ -122,7 +129,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
       });
       if (res.ok) {
         setStatus("success");
-        setFormData({ name: "", address: "", email: "", phone: "", timeline: "", motivation: "", languagePreference: "", heardFrom: "" });
+        setFormData({ name: "", address: "", suburb: "", email: "", phone: "", timeline: "", motivation: "", languagePreference: "", heardFrom: "" });
         setIsAddressSelected(false);
         setStep(1);
       } else {
@@ -283,6 +290,30 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                       placeholder="e.g. john@example.com"
                     />
                   </div>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Suburb <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.suburb}
+                    onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
+                  >
+                    <option value="">Select suburb...</option>
+                    {getSuburbOptions().map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {formData.suburb && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✓ Auto-detected from address
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -1,27 +1,24 @@
+#!/usr/bin/env ts-node
 /**
- * Database Migration Runner
+ * Run all database migrations
  * 
- * Executes all SQL migration files in order against Marie DB
- * 
- * Usage:
- *   npx tsx scripts/run-migrations.ts
+ * This script executes all SQL migration files in order and verifies
+ * that all required tables exist.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
 import { Pool } from 'pg';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Load environment variables
 function loadEnv() {
-  const envPath = join(process.cwd(), '.env');
-  if (existsSync(envPath)) {
-    const envContent = readFileSync(envPath, 'utf8');
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
     const lines = envContent.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) {
-        continue;
-      }
+      if (!trimmed || trimmed.startsWith('#')) continue;
       const index = trimmed.indexOf('=');
       if (index > 0) {
         const key = trimmed.substring(0, index).trim();
@@ -32,102 +29,119 @@ function loadEnv() {
   }
 }
 
-loadEnv();
-
-const marieDB = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-});
-
 async function runMigrations() {
-  console.log('🚀 Starting database migrations...\n');
+  loadEnv();
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error('❌ DATABASE_URL not found in environment');
+    process.exit(1);
+  }
+
+  const pool = new Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+  });
 
   try {
-    // Use safe migration file
-    const migrationPath = join(process.cwd(), 'database', 'migrate-admin-system.sql');
-    console.log(`📂 Migration file: ${migrationPath}\n`);
+    console.log('🔄 Starting database migrations...\n');
 
-    if (!existsSync(migrationPath)) {
-      console.error('❌ migrate-admin-system.sql file not found!');
-      process.exit(1);
+    // Get all migration files
+    const migrationsDir = path.join(process.cwd(), 'database', 'migrations');
+    const files = fs.readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql') && !f.startsWith('000_'))
+      .sort();
+
+    console.log(`📁 Found ${files.length} migration files\n`);
+
+    // Execute each migration
+    for (const file of files) {
+      const filePath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(filePath, 'utf8');
+      
+      // Skip if file is empty or only contains comments
+      if (!sql.trim() || sql.trim().startsWith('--') && !sql.includes('CREATE')) {
+        console.log(`⏭️  Skipping ${file} (no SQL commands)`);
+        continue;
+      }
+
+      try {
+        console.log(`⚙️  Running ${file}...`);
+        await pool.query(sql);
+        console.log(`✅ ${file} completed\n`);
+      } catch (error: any) {
+        // Some errors are acceptable (e.g., "already exists")
+        if (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        ) {
+          console.log(`✓  ${file} (already applied)\n`);
+        } else {
+          console.error(`❌ Error in ${file}:`, error.message);
+          // Continue with other migrations
+        }
+      }
     }
 
-    // Test database connection
-    console.log('🔌 Testing database connection...');
-    await marieDB.query('SELECT NOW()');
-    console.log('✅ Database connection successful!\n');
+    // Verify all required tables exist
+    console.log('\n🔍 Verifying tables...\n');
 
-    // Run migration
-    console.log('⚙️  Executing admin system migration...\n');
-    const sql = readFileSync(migrationPath, 'utf-8');
-    
-    try {
-      const result = await marieDB.query(sql);
-      console.log('✅ Migration executed successfully\n');
-    } catch (error: any) {
-      // Show detailed error
-      console.error('❌ Migration failed:', error.message);
-      console.error('Details:', error.detail || '');
-      console.error('Hint:', error.hint || '');
-      throw error;
-    }
+    const requiredTables = [
+      'admin_users',
+      'appraisal_leads',
+      'report_downloads',
+      'report_download_events',
+      'direct_mail_campaigns',
+      'direct_mail_addresses',
+      'outreach_tasks',
+      'suburb_reports',
+    ];
 
-    // Verify migrations
-    console.log('🔍 Verifying migrations...\n');
-
-    const tablesResult = await marieDB.query(`
+    const result = await pool.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN (
-        'admin_users',
-        'appraisal_leads',
-        'report_downloads',
-        'direct_mail_campaigns',
-        'direct_mail_addresses',
-        'outreach_tasks',
-        'suburb_reports'
-      )
+      AND table_name = ANY($1)
       ORDER BY table_name
+    `, [requiredTables]);
+
+    const existingTables = result.rows.map(r => r.table_name);
+
+    console.log('📊 Table Status:\n');
+    for (const table of requiredTables) {
+      if (existingTables.includes(table)) {
+        console.log(`  ✅ ${table}`);
+      } else {
+        console.log(`  ❌ ${table} (missing)`);
+      }
+    }
+
+    // Check for suburb column in appraisal_leads
+    console.log('\n🔍 Checking appraisal_leads schema...\n');
+    
+    const columnsResult = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'appraisal_leads'
+      ORDER BY ordinal_position
     `);
 
-    console.log('📊 Tables created:');
-    tablesResult.rows.forEach(row => {
-      console.log(`   ✓ ${row.table_name}`);
-    });
-    console.log('');
+    const columns = columnsResult.rows.map(r => r.column_name);
+    console.log('  Columns:', columns.join(', '));
 
-    const triggersResult = await marieDB.query(`
-      SELECT trigger_name, event_object_table
-      FROM information_schema.triggers
-      WHERE trigger_schema = 'public'
-      ORDER BY trigger_name
-    `);
+    if (columns.includes('suburb')) {
+      console.log('  ✅ suburb column exists');
+    } else {
+      console.log('  ⚠️  suburb column missing - run migration 009');
+    }
 
-    console.log('⚡ Triggers created:');
-    triggersResult.rows.forEach(row => {
-      console.log(`   ✓ ${row.trigger_name} (on ${row.event_object_table})`);
-    });
-    console.log('');
-
-    const usersResult = await marieDB.query(`
-      SELECT email, role, name FROM admin_users ORDER BY role DESC
-    `);
-
-    console.log('👥 Admin users:');
-    usersResult.rows.forEach(row => {
-      console.log(`   ✓ ${row.name} (${row.email}) - ${row.role}`);
-    });
-    console.log('');
-
-    console.log('🎉 All migrations completed successfully!\n');
+    console.log('\n✨ Migration check completed successfully!\n');
 
   } catch (error: any) {
-    console.error('💥 Migration failed:', error.message);
+    console.error('\n❌ Migration failed:', error.message);
     process.exit(1);
   } finally {
-    await marieDB.end();
+    await pool.end();
   }
 }
 

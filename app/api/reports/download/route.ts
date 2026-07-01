@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
 import { hashEmail, hashIP } from "../../../../lib/hash";
 import { getSignedDownloadUrl } from "../../../../lib/r2-storage";
+import { updateDownloadTracking } from "../../../../lib/tracking";
 
 const DOWNLOAD_LIMIT = 5;
 const DOWNLOAD_WINDOW_DAYS = 30;
@@ -125,6 +126,40 @@ export async function POST(req: Request) {
     const downloadUrl = await getSignedDownloadUrl(r2Key, 300);
 
     await query(`UPDATE report_download_events SET status = 'completed' WHERE id = $1`, [eventId]);
+
+    // Also insert into report_downloads table (design document schema)
+    // This table is used for tracking and correlation with direct_mail_addresses
+    const trackingCodeFromUrl = new URL(req.url).searchParams.get('tc');
+    try {
+      await query(
+        `INSERT INTO report_downloads 
+         (email, name, suburb, report_type, downloaded_at, source, tracking_code, user_agent, ip_address)
+         VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8)
+         ON CONFLICT DO NOTHING`,
+        [
+          normalizedEmail,
+          firstName.trim(),
+          suburb,
+          'local_market',
+          trackingCodeFromUrl ? 'direct_mail' : 'organic',
+          trackingCodeFromUrl || null,
+          userAgent,
+          ipHash,
+        ]
+      );
+    } catch (err) {
+      console.error('Failed to insert into report_downloads:', err);
+      // Don't fail the request
+    }
+
+    // Update tracking for direct mail campaigns (if tracking code exists)
+    // This replaces what would normally be done by database triggers
+    if (trackingCodeFromUrl) {
+      await updateDownloadTracking(normalizedEmail, suburb, trackingCodeFromUrl).catch(err => {
+        console.error('Failed to update download tracking:', err);
+        // Don't fail the request if tracking fails
+      });
+    }
 
     return NextResponse.json({ success: true, action: "download", downloadUrl });
   } catch (error) {

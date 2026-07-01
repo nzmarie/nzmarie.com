@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { query } from "../../../lib/db";
 import { hashEmail, isValidEmail } from "../../../lib/hash";
 import { sendAppraisalNotification } from "../../../lib/email";
+import { updateAppraisalTracking } from "../../../lib/tracking";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, address, email, phone, timeline, motivation, languagePreference, heardFrom } = body;
+    const { name, address, suburb, email, phone, timeline, motivation, languagePreference, heardFrom } = body;
 
     if (!email || !isValidEmail(email)) {
       return NextResponse.json({ success: false, error: "Invalid email address" }, { status: 400 });
@@ -19,6 +20,9 @@ export async function POST(req: Request) {
     }
     if (!phone || typeof phone !== "string" || phone.trim().length === 0) {
       return NextResponse.json({ success: false, error: "Phone is required" }, { status: 400 });
+    }
+    if (!suburb || typeof suburb !== "string" || suburb.trim().length === 0) {
+      return NextResponse.json({ success: false, error: "Suburb is required" }, { status: 400 });
     }
 
     const emailHash = hashEmail(email);
@@ -40,11 +44,12 @@ export async function POST(req: Request) {
 
     await query(
       `INSERT INTO appraisal_leads
-       (client_name, property_address, email, email_hash, phone, timeline, motivation, language_preference, heard_from)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       (client_name, property_address, suburb, email, email_hash, phone, timeline, motivation, language_preference, heard_from)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         name.trim(),
         address.trim(),
+        suburb.trim(),
         email.trim().toLowerCase(),
         emailHash,
         phone.trim(),
@@ -54,6 +59,14 @@ export async function POST(req: Request) {
         heardFrom || null,
       ]
     );
+
+    // Update tracking for direct mail campaigns
+    // This replaces what would normally be done by database triggers
+    // Marks direct_mail_addresses.has_requested_appraisal = TRUE
+    await updateAppraisalTracking(address.trim(), suburb.trim()).catch(err => {
+      console.error('Failed to update appraisal tracking:', err);
+      // Don't fail the request if tracking fails
+    });
 
     sendAppraisalNotification({
       name: name.trim(),

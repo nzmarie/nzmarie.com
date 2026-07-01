@@ -5,6 +5,7 @@ import { translations, Language } from "../lib/translations";
 
 export default function ReportDownloadSection({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].reportDownload;
+  
   const [formData, setFormData] = useState({
     firstName: "",
     email: "",
@@ -12,10 +13,51 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
     suburb: "Northcross",
     subscribe: false,
   });
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "limit">("idle");
+  const [limitInfo, setLimitInfo] = useState<{ remaining: number; canDownload: boolean } | null>(null);
+  const [isCheckingLimit, setIsCheckingLimit] = useState(false);
+
+  // Check download limit when email changes
+  React.useEffect(() => {
+    const checkLimit = async () => {
+      if (formData.email && formData.email.includes('@') && formData.suburb) {
+        setIsCheckingLimit(true);
+        try {
+          const res = await fetch(
+            `/api/reports/check-limit?email=${encodeURIComponent(formData.email)}&suburb=${encodeURIComponent(formData.suburb)}`
+          );
+          const data = await res.json();
+          if (data.success) {
+            setLimitInfo({
+              remaining: data.remaining,
+              canDownload: data.canDownload,
+            });
+            if (!data.canDownload) {
+              setStatus("limit");
+            } else if (status === "limit") {
+              setStatus("idle");
+            }
+          }
+        } catch (error) {
+          console.error("Failed to check download limit:", error);
+        } finally {
+          setIsCheckingLimit(false);
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(checkLimit, 500);
+    return () => clearTimeout(timeoutId);
+  }, [formData.email, formData.suburb, status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent submission if limit is reached
+    if (status === "limit" || (limitInfo && !limitInfo.canDownload)) {
+      return;
+    }
+
     setStatus("loading");
     try {
       const res = await fetch("/api/reports/download", {
@@ -29,10 +71,13 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
       if (res.ok && data.action === "download" && data.downloadUrl) {
         setStatus("success");
         window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
-        setTimeout(() => setStatus("idle"), 3000);
+        setTimeout(() => {
+          setStatus("idle");
+          // Re-check limit after download
+          setLimitInfo(null);
+        }, 3000);
       } else if (data.reason === "limit") {
-        setStatus("error");
-        alert(data.message); // Simple way to show the limit message for now
+        setStatus("limit");
       } else {
         setStatus("error");
       }
@@ -136,11 +181,30 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
 
           <button
             type="submit"
-            disabled={status === "loading"}
+            disabled={status === "loading" || status === "limit" || (limitInfo !== null && !limitInfo.canDownload)}
             className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-center"
           >
             {status === "loading" ? t.loading : t.submit}
           </button>
+
+          {limitInfo && !limitInfo.canDownload && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-2">
+              <p className="text-amber-800 text-sm font-medium">
+                ⚠️ Download limit reached (5 per month).{" "}
+                <a href="#appraisal" className="text-blue-600 underline hover:text-blue-700">
+                  Request a personalized analysis instead
+                </a>
+              </p>
+            </div>
+          )}
+
+          {limitInfo && limitInfo.canDownload && limitInfo.remaining <= 2 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+              <p className="text-blue-700 text-xs">
+                ℹ️ {limitInfo.remaining} download{limitInfo.remaining !== 1 ? 's' : ''} remaining this month
+              </p>
+            </div>
+          )}
 
           {status === "success" && (
             <p className="text-green-600 text-sm text-center font-medium mt-2">{t.success}</p>
@@ -148,6 +212,10 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
 
           {status === "error" && (
             <p className="text-red-500 text-sm text-center font-medium mt-2">{t.error}</p>
+          )}
+
+          {isCheckingLimit && (
+            <p className="text-gray-500 text-xs text-center mt-2">Checking download availability...</p>
           )}
         </form>
       </div>

@@ -49,7 +49,7 @@ export function AdminNavbar() {
           {/* Left: Logo */}
           <div className="flex items-center">
             <Link 
-              href="/admin/bookings"
+              href="/admin"
               className="text-xl font-semibold text-gray-900 hover:text-gray-700"
             >
               NZ Marie Admin

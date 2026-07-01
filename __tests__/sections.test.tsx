@@ -75,18 +75,14 @@ describe("AppraisalSection", () => {
 
     // Try to select address from suggestions
     try {
-      const suggestions = screen.queryAllByRole("heading") || [];
       const suggestionItems = screen.queryAllByText(/Queen Street/i) || [];
       
       if (suggestionItems.length > 0) {
-        // Select first matching suggestion
         fireEvent.mouseDown(suggestionItems[0]);
       } else {
-        // If no suggestions found, simulate selection by directly triggering the input with full address
         fireEvent.change(addressInput, { target: { value: "1 Queen Street, Auckland Central, Auckland, 1010, New Zealand" } });
       }
     } catch (e) {
-      // Fallback: just proceed with the input value
       fireEvent.change(addressInput, { target: { value: "1 Queen Street, Auckland Central, Auckland, 1010, New Zealand" } });
     }
 
@@ -97,7 +93,6 @@ describe("AppraisalSection", () => {
 
     const nextBtn = screen.getByRole("button", { name: /Request Bespoke Analysis/i });
     
-    // Verify button is enabled (address is selected)
     if (nextBtn.getAttribute('disabled') === null) {
       fireEvent.click(nextBtn);
     }
@@ -109,13 +104,19 @@ describe("AppraisalSection", () => {
     const nameInput = screen.getByPlaceholderText("e.g. John Doe");
     const emailInput = screen.getByPlaceholderText("e.g. john@example.com");
     const phoneInput = screen.getByPlaceholderText("e.g. +64 21 000 0000");
-    const timelineSelect = screen.getAllByRole("combobox")[0];
-    const motivationSelect = screen.getAllByRole("combobox")[1];
 
-    fireEvent.change(nameInput, { target: { value: "Bob" } });
-    fireEvent.change(emailInput, { target: { value: "bob@example.com" } });
-    fireEvent.change(phoneInput, { target: { value: "12345" } });
-    fireEvent.change(timelineSelect, { target: { value: "within-3-months" } });
+    // Combobox order after suburb field added:
+    // [0] = suburb, [1] = timeline, [2] = motivation, [3] = languagePreference, [4] = heardFrom
+    const allSelects = screen.getAllByRole("combobox");
+    const suburbSelect   = allSelects[0];
+    const timelineSelect = allSelects[1];
+    const motivationSelect = allSelects[2];
+
+    fireEvent.change(nameInput,        { target: { value: "Bob" } });
+    fireEvent.change(emailInput,       { target: { value: "bob@example.com" } });
+    fireEvent.change(phoneInput,       { target: { value: "12345" } });
+    fireEvent.change(suburbSelect,     { target: { value: "Albany" } });
+    fireEvent.change(timelineSelect,   { target: { value: "within-3-months" } });
     fireEvent.change(motivationSelect, { target: { value: "upsizing" } });
   };
 

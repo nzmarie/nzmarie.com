@@ -8,12 +8,14 @@ import { query } from "../../lib/db";
 import { getSignedDownloadUrl } from "../../lib/r2-storage";
 
 describe("reports download route extra cases", () => {
+  const originalEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NODE_ENV = "test";
   });
 
   it("returns 500 in production when R2 is not configured", async () => {
+    // @ts-ignore - Allow assignment for testing
     process.env.NODE_ENV = "production";
     process.env.R2_ACCESS_KEY_ID = "mock-1";
     process.env.R2_SECRET_ACCESS_KEY = "mock-2";
@@ -30,6 +32,7 @@ describe("reports download route extra cases", () => {
   });
 
   it("uses default r2Key when no report row found", async () => {
+    // @ts-ignore - Allow assignment for testing
     process.env.NODE_ENV = "test";
     vi.mocked(query)
       .mockResolvedValueOnce({ rows: [{ count: "0" }] } as any) // recent count

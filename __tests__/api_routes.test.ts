@@ -115,7 +115,7 @@ describe("POST /api/appraisal", () => {
     const req = new Request("http://localhost/api/appraisal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Bob", email: "bob@example.com", address: "1 Main St", phone: "123" }),
+      body: JSON.stringify({ name: "Bob", email: "bob@example.com", address: "1 Main St", suburb: "Albany", phone: "123" }),
     });
     const res = await appraisal(req);
     expect(res.status).toBe(200);

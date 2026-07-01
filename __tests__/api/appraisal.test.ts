@@ -19,6 +19,7 @@ describe("POST /api/appraisal (refactored)", () => {
   const validBody = {
     name: "Jane Smith",
     address: "42 Queen Street, Auckland CBD",
+    suburb: "Albany",
     email: "jane@example.com",
     phone: "+64 21 555 0101",
     timeline: "within-3-months",

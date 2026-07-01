@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -54,8 +54,8 @@ export default function AdminDashboardPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-gray-600 text-xl">Loading...</div>
       </div>
     );
   }
@@ -77,131 +77,118 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-bold">N</span>
-            </div>
-            <span className="font-bold text-slate-800 text-lg">nzmarie Admin</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-600">{session?.user?.name}</span>
-            <button
-              id="signout-btn"
-              onClick={() => signOut({ callbackUrl: "/admin/login" })}
-              className="text-sm px-4 py-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors text-slate-700"
-            >
-              Sign Out
-            </button>
-          </div>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600 mt-1">
+          Welcome back, {session?.user?.name || session?.user?.email?.split('@')[0]}
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p className="text-sm text-slate-500 mb-1">Total Leads</p>
+          <p className="text-3xl font-bold text-slate-800">{leads.length}</p>
         </div>
-      </header>
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p className="text-sm text-slate-500 mb-1">High Priority</p>
+          <p className="text-3xl font-bold text-red-600">
+            {leads.filter((l) => l.timeline === "within-3-months").length}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p className="text-sm text-slate-500 mb-1">Active Reports</p>
+          <p className="text-3xl font-bold text-indigo-600">{reports.filter((r) => r.is_active).length}</p>
+        </div>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <p className="text-sm text-slate-500 mb-1">Total Leads</p>
-            <p className="text-3xl font-bold text-slate-800">{leads.length}</p>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <p className="text-sm text-slate-500 mb-1">High Priority</p>
-            <p className="text-3xl font-bold text-red-600">
-              {leads.filter((l) => l.timeline === "within-3-months").length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <p className="text-sm text-slate-500 mb-1">Active Reports</p>
-            <p className="text-3xl font-bold text-indigo-600">{reports.filter((r) => r.is_active).length}</p>
-          </div>
+      {/* Tabs Content */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
+        <div className="flex border-b border-slate-100">
+          <button
+            id="tab-leads"
+            onClick={() => setActiveTab("leads")}
+            className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "leads" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            Leads ({leads.length})
+          </button>
+          <button
+            id="tab-reports"
+            onClick={() => setActiveTab("reports")}
+            className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "reports" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            Reports ({reports.length})
+          </button>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100">
-          <div className="flex border-b border-slate-100">
-            <button
-              id="tab-leads"
-              onClick={() => setActiveTab("leads")}
-              className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "leads" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
-            >
-              Leads ({leads.length})
-            </button>
-            <button
-              id="tab-reports"
-              onClick={() => setActiveTab("reports")}
-              className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "reports" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
-            >
-              Reports ({reports.length})
-            </button>
-          </div>
-
-          {activeTab === "leads" && (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Name</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Address</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Timeline</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
+        {activeTab === "leads" && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Name</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Address</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Timeline</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead) => (
+                  <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-slate-800">{lead.client_name}</div>
+                      <div className="text-sm text-slate-500">{lead.phone}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">{lead.property_address}</td>
+                    <td className="px-6 py-4">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[lead.timeline] || "bg-slate-100 text-slate-600"}`}>
+                        {lead.timeline || "N/A"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[lead.status] || "bg-slate-100 text-slate-600"}`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-500">
+                      {new Date(lead.created_at).toLocaleDateString("en-NZ")}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {leads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-800">{lead.client_name}</div>
-                        <div className="text-sm text-slate-500">{lead.phone}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">{lead.property_address}</td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[lead.timeline] || "bg-slate-100 text-slate-600"}`}>
-                          {lead.timeline || "N/A"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[lead.status] || "bg-slate-100 text-slate-600"}`}>
-                          {lead.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-500">
-                        {new Date(lead.created_at).toLocaleDateString("en-NZ")}
-                      </td>
-                    </tr>
-                  ))}
-                  {leads.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400">No leads yet</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {activeTab === "reports" && (
-            <div className="p-6">
-              <div className="space-y-3">
-                {reports.map((report) => (
-                  <div key={report.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
-                    <div>
-                      <div className="font-medium text-slate-800">{report.title}</div>
-                      <div className="text-sm text-slate-500">{report.suburb} · v{report.version}</div>
-                    </div>
-                    {report.is_active && (
-                      <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">Active</span>
-                    )}
-                  </div>
                 ))}
-                {reports.length === 0 && (
-                  <p className="text-center text-slate-400 py-8">No reports uploaded yet</p>
+                {leads.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">No leads yet</td>
+                  </tr>
                 )}
-              </div>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "reports" && (
+          <div className="p-6">
+            <div className="space-y-3">
+              {reports.map((report) => (
+                <div key={report.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
+                  <div>
+                    <div className="font-medium text-slate-800">{report.title}</div>
+                    <div className="text-sm text-slate-500">{report.suburb} · v{report.version}</div>
+                  </div>
+                  {report.is_active && (
+                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">Active</span>
+                  )}
+                </div>
+              ))}
+              {reports.length === 0 && (
+                <p className="text-center text-slate-400 py-8">No reports uploaded yet</p>
+              )}
             </div>
-          )}
-        </div>
-      </main>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
