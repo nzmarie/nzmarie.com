@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { SkeletonDashboard } from "@/components/admin/Skeleton";
 
 interface Lead {
   id: string;
@@ -48,16 +49,13 @@ export default function AdminDashboardPage() {
         if (leadsData.success) setLeads(leadsData.leads);
         if (reportsData.success) setReports(reportsData.reports);
         setLoading(false);
-      });
+      }).catch(() => setLoading(false));
     }
   }, [status]);
 
+  // Show skeleton while session or data is loading — Navbar stays visible
   if (status === "loading" || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-gray-600 text-xl">Loading...</div>
-      </div>
-    );
+    return <SkeletonDashboard />;
   }
 
   const priorityColor: Record<string, string> = {
@@ -100,7 +98,9 @@ export default function AdminDashboardPage() {
         </div>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
           <p className="text-sm text-slate-500 mb-1">Active Reports</p>
-          <p className="text-3xl font-bold text-indigo-600">{reports.filter((r) => r.is_active).length}</p>
+          <p className="text-3xl font-bold text-indigo-600">
+            {reports.filter((r) => r.is_active).length}
+          </p>
         </div>
       </div>
 
@@ -110,14 +110,22 @@ export default function AdminDashboardPage() {
           <button
             id="tab-leads"
             onClick={() => setActiveTab("leads")}
-            className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "leads" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
+            className={`px-6 py-4 text-sm font-medium transition-colors ${
+              activeTab === "leads"
+                ? "text-indigo-600 border-b-2 border-indigo-600"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
           >
             Leads ({leads.length})
           </button>
           <button
             id="tab-reports"
             onClick={() => setActiveTab("reports")}
-            className={`px-6 py-4 text-sm font-medium transition-colors ${activeTab === "reports" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
+            className={`px-6 py-4 text-sm font-medium transition-colors ${
+              activeTab === "reports"
+                ? "text-indigo-600 border-b-2 border-indigo-600"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
           >
             Reports ({reports.length})
           </button>
@@ -142,7 +150,9 @@ export default function AdminDashboardPage() {
                       <div className="font-medium text-slate-800">{lead.client_name}</div>
                       <div className="text-sm text-slate-500">{lead.phone}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">{lead.property_address}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">
+                      {lead.property_address}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[lead.timeline] || "bg-slate-100 text-slate-600"}`}>
                         {lead.timeline || "N/A"}
@@ -160,7 +170,9 @@ export default function AdminDashboardPage() {
                 ))}
                 {leads.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">No leads yet</td>
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                      No leads yet
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -172,13 +184,20 @@ export default function AdminDashboardPage() {
           <div className="p-6">
             <div className="space-y-3">
               {reports.map((report) => (
-                <div key={report.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
+                <div
+                  key={report.id}
+                  className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100"
+                >
                   <div>
                     <div className="font-medium text-slate-800">{report.title}</div>
-                    <div className="text-sm text-slate-500">{report.suburb} · v{report.version}</div>
+                    <div className="text-sm text-slate-500">
+                      {report.suburb} · v{report.version}
+                    </div>
                   </div>
                   {report.is_active && (
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">Active</span>
+                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                      Active
+                    </span>
                   )}
                 </div>
               ))}
