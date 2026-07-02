@@ -5,41 +5,62 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 
-interface Lead {
+interface DashboardStats {
+  newLeads: number;
+  highPriorityLeads: number;
+  pendingOutreach: number;
+  todayFollowups: number;
+  overdueFollowups: number;
+  todayDownloads: number;
+}
+
+interface FollowUp {
   id: string;
-  client_name: string;
-  property_address: string;
+  name: string;
   email: string;
   phone: string;
-  timeline: string;
-  motivation: string;
-  status: string;
-  created_at: string;
-}
-
-interface Report {
-  id: string;
+  property_address: string;
   suburb: string;
-  version: string;
-  title: string;
-  is_active: boolean;
-  created_at: string;
+  priority: string;
+  contact_status: string;
+  follow_up_at: string;
+  last_contact_at: string;
+  agent_notes: string;
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  "within-3-months": "High",
-  "3-6-months": "Medium",
-  "6-12-months": "Low",
-  "just-exploring": "Low",
+const getPriorityColor = (priority: string): string => {
+  switch (priority) {
+    case "high":
+      return "bg-red-100 text-red-700";
+    case "medium":
+      return "bg-yellow-100 text-yellow-700";
+    case "low":
+      return "bg-green-100 text-green-700";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+};
+
+const getPriorityDot = (priority: string): string => {
+  switch (priority) {
+    case "high":
+      return "🔴";
+    case "medium":
+      return "🟡";
+    case "low":
+      return "🟢";
+    default:
+      return "⚪";
+  }
 };
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [activeTab, setActiveTab] = useState<"leads" | "reports">("leads");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -49,173 +70,254 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      Promise.all([
-        fetch("/api/admin/leads").then((r) => r.json()),
-        fetch("/api/admin/reports").then((r) => r.json()),
-      ])
-        .then(([leadsData, reportsData]) => {
-          if (leadsData.success) setLeads(leadsData.leads ?? []);
-          if (reportsData.success) setReports(reportsData.reports ?? []);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
+      fetchDashboardData();
     }
   }, [status]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [statsRes, followupsRes] = await Promise.all([
+        fetch("/api/admin/dashboard/stats"),
+        fetch("/api/admin/bookings?page=1&limit=10"),
+      ]);
+
+      if (!statsRes.ok || !followupsRes.ok) {
+        throw new Error("Failed to fetch dashboard data");
+      }
+
+      const statsData = await statsRes.json();
+      const followupsData = await followupsRes.json();
+
+      if (statsData.success) {
+        setStats(statsData.stats);
+      }
+
+      if (followupsData.data) {
+        const todayFollowups = followupsData.data.filter((lead: FollowUp) => {
+          if (!lead.follow_up_at) return false;
+          const followUpDate = new Date(lead.follow_up_at).toDateString();
+          const today = new Date().toDateString();
+          return (
+            followUpDate === today &&
+            !["converted", "lost"].includes(lead.contact_status)
+          );
+        });
+        setFollowUps(todayFollowups);
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load dashboard"
+      );
+      setLoading(false);
+    }
+  };
 
   if (status === "loading" || loading) {
     return <SkeletonDashboard />;
   }
 
-  const priorityColor: Record<string, string> = {
-    "within-3-months": "bg-red-100 text-red-700",
-    "3-6-months": "bg-yellow-100 text-yellow-700",
-    "6-12-months": "bg-green-100 text-green-700",
-    "just-exploring": "bg-slate-100 text-slate-600",
-  };
-
-  const statusColor: Record<string, string> = {
-    Pending: "bg-blue-100 text-blue-700",
-    Contacted: "bg-yellow-100 text-yellow-700",
-    Appraised: "bg-purple-100 text-purple-700",
-    Listed: "bg-indigo-100 text-indigo-700",
-    Won: "bg-green-100 text-green-700",
-    Lost: "bg-red-100 text-red-700",
-  };
+  const userName =
+    session?.user?.name || session?.user?.email?.split("@")[0] || "User";
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-1">
-          Welcome back, {session?.user?.name || session?.user?.email?.split('@')[0]}
-        </p>
+        <p className="text-gray-600 mt-1">Welcome back, {userName}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <p className="text-sm text-slate-500 mb-1">Total Leads</p>
-          <p className="text-3xl font-bold text-slate-800">{leads.length}</p>
-        </div>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <p className="text-sm text-slate-500 mb-1">High Priority</p>
-          <p className="text-3xl font-bold text-red-600">
-            {leads.filter((l) => l.timeline === "within-3-months").length}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            New Bookings
           </p>
-        </div>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <p className="text-sm text-slate-500 mb-1">Pending Outreach</p>
-          <p className="text-3xl font-bold text-amber-600">0</p>
-        </div>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <p className="text-sm text-slate-500 mb-1">Active Reports</p>
-          <p className="text-3xl font-bold text-indigo-600">
-            {reports.filter((r) => r.is_active).length}
+          <p className="text-2xl font-bold text-slate-800 mt-2">
+            {stats?.newLeads ?? 0}
           </p>
+          <p className="text-xs text-slate-400 mt-1">This month</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            Downloads
+          </p>
+          <p className="text-2xl font-bold text-indigo-600 mt-2">
+            {stats?.todayDownloads ?? 0}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Today</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            High Priority
+          </p>
+          <p className="text-2xl font-bold text-red-600 mt-2">
+            {stats?.highPriorityLeads ?? 0}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Urgent</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            Outreach
+          </p>
+          <p className="text-2xl font-bold text-amber-600 mt-2">
+            {stats?.pendingOutreach ?? 0}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Pending</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            Follow-ups
+          </p>
+          <p className="text-2xl font-bold text-blue-600 mt-2">
+            {stats?.todayFollowups ?? 0}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Today</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">
+            Overdue
+          </p>
+          <p className="text-2xl font-bold text-orange-600 mt-2">
+            {stats?.overdueFollowups ?? 0}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Follow-ups</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
-        <div className="flex border-b border-slate-100">
-          <button
-            id="tab-leads"
-            onClick={() => setActiveTab("leads")}
-            className={`px-6 py-4 text-sm font-medium transition-colors ${
-              activeTab === "leads"
-                ? "text-indigo-600 border-b-2 border-indigo-600"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Leads ({leads.length})
-          </button>
-          <button
-            id="tab-reports"
-            onClick={() => setActiveTab("reports")}
-            className={`px-6 py-4 text-sm font-medium transition-colors ${
-              activeTab === "reports"
-                ? "text-indigo-600 border-b-2 border-indigo-600"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Reports ({reports.length})
-          </button>
-        </div>
-
-        {activeTab === "leads" && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Name</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Address</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Timeline</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-800">{lead.client_name}</div>
-                      <div className="text-sm text-slate-500">{lead.phone}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">
-                      {lead.property_address}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[lead.timeline] || "bg-slate-100 text-slate-600"}`}>
-                        {PRIORITY_LABELS[lead.timeline] || lead.timeline || "N/A"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[lead.status] || "bg-slate-100 text-slate-600"}`}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      {new Date(lead.created_at).toLocaleDateString("en-NZ")}
-                    </td>
-                  </tr>
-                ))}
-                {leads.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                      No leads yet. New appraisal requests will appear here.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-100">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Today&apos;s Follow-ups
+            </h2>
+            {followUps.length > 0 && (
+              <p className="text-sm text-slate-500 mt-1">
+                {followUps.length} leads need attention
+              </p>
+            )}
           </div>
-        )}
 
-        {activeTab === "reports" && (
-          <div className="p-6">
-            <div className="space-y-3">
-              {reports.map((report) => (
-                <div
-                  key={report.id}
-                  className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100"
-                >
-                  <div>
-                    <div className="font-medium text-slate-800">{report.title}</div>
-                    <div className="text-sm text-slate-500">
-                      {report.suburb} · v{report.version}
+          <div className="divide-y divide-slate-100">
+            {followUps.length > 0 ? (
+              followUps.map((followUp) => (
+                <div key={followUp.id} className="p-4 hover:bg-slate-50">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">
+                          {getPriorityDot(followUp.priority)}
+                        </span>
+                        <h3 className="font-medium text-slate-900">
+                          {followUp.name}
+                        </h3>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(followUp.priority)}`}
+                        >
+                          {followUp.priority.charAt(0).toUpperCase() +
+                            followUp.priority.slice(1)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {followUp.property_address}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {followUp.suburb}
+                        {followUp.last_contact_at &&
+                          ` • Last contact: ${new Date(followUp.last_contact_at).toLocaleDateString("en-NZ")}`}
+                      </p>
+                      {followUp.agent_notes && (
+                        <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-2 rounded">
+                          {followUp.agent_notes}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right ml-4">
+                      <a
+                        href={`tel:${followUp.phone}`}
+                        className="inline-flex items-center justify-center w-9 h-9 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        title="Call"
+                      >
+                        📞
+                      </a>
+                      <a
+                        href={`mailto:${followUp.email}`}
+                        className="inline-flex items-center justify-center w-9 h-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors ml-2"
+                        title="Email"
+                      >
+                        ✉️
+                      </a>
                     </div>
                   </div>
-                  {report.is_active && (
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
-                      Active
-                    </span>
-                  )}
                 </div>
-              ))}
-              {reports.length === 0 && (
-                <p className="text-center text-slate-400 py-8">No reports uploaded yet. Upload a report to make it available here.</p>
-              )}
+              ))
+            ) : (
+              <div className="p-8 text-center">
+                <p className="text-slate-500">No follow-ups scheduled for today</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Quick Stats
+            </h2>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+              <span className="text-sm text-slate-700">Total Bookings</span>
+              <span className="text-xl font-bold text-blue-600">
+                {stats && stats.newLeads + stats.highPriorityLeads}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+              <span className="text-sm text-slate-700">Urgent</span>
+              <span className="text-xl font-bold text-red-600">
+                {stats?.highPriorityLeads ?? 0}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+              <span className="text-sm text-slate-700">Pending Outreach</span>
+              <span className="text-xl font-bold text-amber-600">
+                {stats?.pendingOutreach ?? 0}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+              <span className="text-sm text-slate-700">Overdue</span>
+              <span className="text-xl font-bold text-orange-600">
+                {stats?.overdueFollowups ?? 0}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
+              <span className="text-sm text-slate-700">Today Downloads</span>
+              <span className="text-xl font-bold text-indigo-600">
+                {stats?.todayDownloads ?? 0}
+              </span>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -41,6 +41,26 @@ describe('Extra admin pages', () => {
       if (url.includes('/api/admin/reports')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, reports: [] }) }) as any;
       }
+      if (url.includes('/api/admin/downloads')) {
+        return Promise.resolve({ 
+          ok: true, 
+          json: () => Promise.resolve({ 
+            data: [], 
+            suburbs: [], 
+            stats: { total_downloads: '0', this_month: '0', unique_users: '0' },
+            pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }
+          }) 
+        }) as any;
+      }
+      if (url.includes('/api/admin/dashboard/stats')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            stats: { newLeads: 0, highPriorityLeads: 0, pendingOutreach: 0, todayFollowups: 0, overdueFollowups: 0, todayDownloads: 0 },
+            followups: []
+          })
+        }) as any;
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as any;
     }) as any;
   });
@@ -64,8 +84,8 @@ describe('Extra admin pages', () => {
 
   it('renders downloads content for super admins', async () => {
     render(<DownloadsPage />);
-    expect(await screen.findByText('Downloads')).toBeTruthy();
-    expect(screen.getByText('Recent Downloads')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Downloads/ })).toBeTruthy();
+    expect(screen.getByText('Download Records')).toBeTruthy();
   });
 
   it('renders pdf manager content for super admins', async () => {

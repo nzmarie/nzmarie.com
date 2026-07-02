@@ -75,6 +75,10 @@ async function createOutreachTable() {
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_property_user ON outreach_selected_properties(louis_property_id, selected_by);`);
     
     await pool.query(`
+      DROP TRIGGER IF EXISTS trigger_update_outreach_updated_at ON outreach_selected_properties;
+    `);
+    
+    await pool.query(`
       CREATE OR REPLACE FUNCTION update_outreach_updated_at()
       RETURNS TRIGGER AS $$
       BEGIN
@@ -82,10 +86,6 @@ async function createOutreachTable() {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;
-    `);
-    
-    await pool.query(`
-      DROP TRIGGER IF EXISTS trigger_update_outreach_updated_at ON outreach_selected_properties;
     `);
     
     await pool.query(`

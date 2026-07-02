@@ -127,29 +127,46 @@ export async function POST(req: Request) {
 
     await query(`UPDATE report_download_events SET status = 'completed' WHERE id = $1`, [eventId]);
 
-    // Also insert into report_downloads table (design document schema)
-    // This table is used for tracking and correlation with direct_mail_addresses
     const trackingCodeFromUrl = new URL(req.url).searchParams.get('tc');
     try {
-      await query(
+      const result = await query(
         `INSERT INTO report_downloads 
-         (email, name, suburb, report_type, downloaded_at, source, tracking_code, user_agent, ip_address)
-         VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING`,
+         (email, name, phone, suburb, report_type, downloaded_at, source, tracking_code, user_agent, ip_address)
+         VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9)
+         RETURNING id, email, suburb`,
         [
           normalizedEmail,
           firstName.trim(),
+          typeof phone === 'string' && phone.trim().length > 0 ? phone.trim() : null,
           suburb,
           'local_market',
           trackingCodeFromUrl ? 'direct_mail' : 'organic',
           trackingCodeFromUrl || null,
-          userAgent,
-          ipHash,
+          userAgent.substring(0, 500),
+          ip.substring(0, 45),
         ]
       );
+      
+      if (result.rows.length > 0) {
+        console.log('✅ Successfully inserted into report_downloads:', {
+          id: result.rows[0].id,
+          email: result.rows[0].email,
+          suburb: result.rows[0].suburb,
+          source: trackingCodeFromUrl ? 'direct_mail' : 'organic'
+        });
+      } else {
+        console.warn('⚠️ No rows returned from report_downloads insert for:', normalizedEmail, suburb);
+      }
     } catch (err) {
-      console.error('Failed to insert into report_downloads:', err);
-      // Don't fail the request
+      console.error('❌ CRITICAL: Failed to insert into report_downloads:', {
+        error: err instanceof Error ? err.message : String(err),
+        email: normalizedEmail,
+        name: firstName.trim(),
+        phone: typeof phone === 'string' && phone.trim().length > 0 ? phone.trim() : null,
+        suburb,
+        source: trackingCodeFromUrl ? 'direct_mail' : 'organic',
+        trackingCode: trackingCodeFromUrl
+      });
     }
 
     // Update tracking for direct mail campaigns (if tracking code exists)
