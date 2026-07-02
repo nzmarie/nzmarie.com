@@ -56,43 +56,46 @@ export async function GET(request: Request) {
   const params: unknown[] = [];
   let paramIndex = 1;
 
-  if (suburbsParam) {
-    const suburbs = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
-    if (suburbs.length > 0) {
-      const suburbPlaceholders = suburbs.map((_, i) => `$${paramIndex + i}`).join(', ');
-      query += ` AND LOWER(suburb) IN (${suburbPlaceholders})`;
-      suburbs.forEach(suburb => params.push(suburb.toLowerCase()));
-      paramIndex += suburbs.length;
+  if (!search) {
+    if (suburbsParam) {
+      const suburbs = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
+      if (suburbs.length > 0) {
+        const suburbPlaceholders = suburbs.map((_, i) => `$${paramIndex + i}`).join(', ');
+        query += ` AND LOWER(suburb) IN (${suburbPlaceholders})`;
+        suburbs.forEach(suburb => params.push(suburb.toLowerCase()));
+        paramIndex += suburbs.length;
+      }
+    }
+
+    if (suburb) {
+      query += ` AND LOWER(suburb) = LOWER($${paramIndex})`;
+      params.push(suburb);
+      paramIndex++;
+    }
+
+    const CITY_TO_DB: Record<string, string> = {
+      'Auckland': 'Auckland - City',
+      'Auckland City': 'Auckland - City',
+    };
+
+    if (city) {
+      const dbCity = CITY_TO_DB[city] || city;
+      query += ` AND city = $${paramIndex}`;
+      params.push(dbCity);
+      paramIndex++;
+    }
+
+    if (region) {
+      query += ` AND LOWER(region) LIKE LOWER($${paramIndex})`;
+      params.push(`%${region}%`);
+      paramIndex++;
     }
   }
 
-  if (suburb) {
-    query += ` AND LOWER(suburb) = LOWER($${paramIndex})`;
-    params.push(suburb);
-    paramIndex++;
-  }
-
-  const CITY_TO_DB: Record<string, string> = {
-    'Auckland': 'Auckland - City',
-    'Auckland City': 'Auckland - City',
-  };
-
-  if (city) {
-    const dbCity = CITY_TO_DB[city] || city;
-    query += ` AND city = $${paramIndex}`;
-    params.push(dbCity);
-    paramIndex++;
-  }
-
-  if (region) {
-    query += ` AND LOWER(region) LIKE LOWER($${paramIndex})`;
-    params.push(`%${region}%`);
-    paramIndex++;
-  }
-
   if (search) {
-    query += ` AND address ILIKE $${paramIndex}`;
-    params.push(`%${search}%`);
+    const cleanSearch = search.split(',')[0].trim();
+    query += ` AND (address ILIKE $${paramIndex} OR suburb ILIKE $${paramIndex})`;
+    params.push(`%${cleanSearch}%`);
     paramIndex++;
   }
 

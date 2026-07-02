@@ -53,10 +53,11 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 
 vi.mock('@/components/property/AddressAutocomplete', () => ({
-  default: ({ onChange, value }: any) => (
+  default: ({ onChange, value, placeholder }: { onChange: (v: string) => void; value: string; placeholder?: string }) => (
     <input
       data-testid="address-autocomplete"
       value={value}
+      placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />
   ),
@@ -64,6 +65,15 @@ vi.mock('@/components/property/AddressAutocomplete', () => ({
 
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonProperties: () => <div>Loading Properties</div>,
+}));
+
+vi.mock('next/image', () => ({
+  default: ({ src, alt, ...rest }: { src: string; alt: string; [key: string]: unknown }) => {
+    const { unoptimized, onError, ...safeProps } = rest;
+    void unoptimized;
+    void onError;
+    return <img src={src} alt={alt} {...safeProps} />;
+  },
 }));
 
 global.fetch = vi.fn();

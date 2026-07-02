@@ -14,6 +14,7 @@ import {
 import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
+import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
 
 interface Property {
   id: string;
@@ -47,67 +48,6 @@ interface Filters {
   max_car_spaces: string;
   search: string;
 }
-
-const REGION_CITIES: Record<string, string[]> = {
-  Auckland: ["North Shore City", "Auckland", "Waitakere City", "Manukau City"],
-  Wellington: ["Wellington City", "Lower Hutt City", "Upper Hutt City", "Porirua City"],
-};
-
-const CITY_SUBURBS: Record<string, string[]> = {
-  "North Shore City": [
-    "Albany", "Bayview", "Beach Haven", "Birkenhead", "Browns Bay", "Campbells Bay",
-    "Castor Bay", "Devonport", "Fairview Heights", "Hauraki", "Hillcrest", "Long Bay",
-    "Narrow Neck", "Okura", "Oteha", "Paremoremo", "Schnapper Rock", "Stanley Point",
-    "Takapuna", "Totara Vale", "Waiake", "Wairau Valley"
-  ],
-  "Auckland": [
-    "Auckland Central", "Eden Terrace", "Epsom", "Freemans Bay", "Glendowie", "Grafton",
-    "Greenlane", "Hillsborough", "Leigh", "Mission Bay", "Morningside", "Mount Eden",
-    "Mount Wellington", "Newmarket", "Onetangi", "Orewa", "Palm Beach", "Papakura",
-    "Rakino Island", "Saint Marys Bay", "Sandringham", "St Johns", "Stonefields",
-    "Three Kings", "Wai O Taiki Bay", "Waterview", "Westmere"
-  ],
-  "Waitakere City": [
-    "Anawhata", "Blockhouse Bay", "Cornwallis", "Glen Eden", "Glendene", "Henderson",
-    "Hobsonville", "Laingholm", "Massey", "Oratia", "Parau", "Piha", "Sunnyvale",
-    "Swanson", "Te Atatu Peninsula", "Te Atatu South", "Titirangi", "Waiatarua",
-    "West Harbour", "Whenuapai"
-  ],
-  "Manukau City": [
-    "Alfriston", "Botany Downs", "Bucklands Beach", "Burswood", "Clevedon", "Clover Park",
-    "Cockle Bay", "East Tamaki Heights", "Farm Cove", "Favona", "Golflands", "Goodwood Heights",
-    "Half Moon Bay", "Highland Park", "Hillpark", "Howick", "Huntington Park", "Kawakawa Bay",
-    "Mangere", "Mangere Bridge", "Mangere East", "Manurewa", "Manurewa East", "Mellons Bay",
-    "Middlemore Hospital", "Northpark", "Orere Point", "Otahuhu", "Pahurehure", "Pakuranga",
-    "Pakuranga Heights", "Papatoetoe", "Shamrock Park", "Somerville", "Takanini", "Totara Heights",
-    "Whitford", "Wiri"
-  ],
-  "Wellington City": [
-    "Aro Valley", "Broadmeadows", "Crofton Downs", "Grenada North", "Grenada Village",
-    "Hataitai", "Highbury", "Horokiwi", "Houghton Bay", "Island Bay", "Johnsonville",
-    "Kelburn", "Khandallah", "Kingston", "Lyall Bay", "Maupuia", "Miramar", "Moa Point",
-    "Ngaio", "Ngauranga", "Northland", "Oriental Bay", "Owhiro Bay", "Rongotai",
-    "Strathmore Park", "Takapu Valley", "Te Aro", "Wellington Central"
-  ],
-  "Lower Hutt City": [
-    "Alicetown", "Avalon", "Belmont", "Boulcott", "Days Bay", "Eastbourne", "Epuni",
-    "Gracefield", "Harbour View", "Haywards", "Kelson", "Lowry Bay", "Manor Park",
-    "Maungaraki", "Naenae", "Seaview", "Sorrento Bay", "Sunshine Bay", "Taita",
-    "Tirohanga", "Wainuiomata", "Waiwhetu", "Waterloo", "Woburn", "York Bay"
-  ],
-  "Upper Hutt City": [
-    "Akatarawa", "Akatarawa Valley", "Birchville", "Blue Mountains", "Brown Owl",
-    "Clouston Park", "Craigs Flat", "Ebdentown", "Elderslea", "Heretaunga", "Kaitoke",
-    "Kingsley Heights", "Maidstone", "Mangaroa", "Maoribank", "Maymorn", "Moonshine Valley",
-    "Pinehaven", "Riverstone Terraces", "Silverstream", "Te Marua", "Timberlea",
-    "Totara Park", "Trentham", "Upper Hutt Central", "Wallaceville", "Whitemans Valley"
-  ],
-  "Porirua City": [
-    "Aotea", "Camborne", "Elsdon", "Judgeford", "Paekakariki Hill", "Paremata",
-    "Pauatahanui", "Plimmerton", "Porirua City Centre", "Pukerua Bay", "Waitangirua",
-    "Whitby"
-  ]
-};
 
 const PropertyCard = ({ property, selectMode, isSelected, onToggle }: { 
   property: Property; 
@@ -473,7 +413,7 @@ export default function PropertiesPage() {
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
 
   const handleRegionChange = (region: string) => {
-    const cities = REGION_CITIES[region] || [];
+    const cities = REGION_CITIES[region as keyof typeof REGION_CITIES] || [];
     const defaultCity = cities[0] || "";
     setFilters((prev) => ({
       ...prev,
@@ -730,6 +670,7 @@ export default function PropertiesPage() {
           <AddressAutocomplete
             value={addressInput}
             city={filters.city}
+            useGeoapify={true}
             onChange={(val) => {
               setAddressInput(val);
             }}
@@ -787,7 +728,7 @@ export default function PropertiesPage() {
                 cursor: "pointer",
               }}
             >
-              {(REGION_CITIES[filters.region] || []).map((city) => (
+              {(REGION_CITIES[filters.region as keyof typeof REGION_CITIES] || []).map((city) => (
                 <option key={city} value={city}>
                   {city}
                 </option>

@@ -3,6 +3,8 @@ import { POST } from "../../app/api/appraisal/route";
 
 vi.mock("../../lib/db", () => ({
   query: vi.fn(),
+  marieDB: { query: vi.fn() },
+  louisDB: { query: vi.fn() },
 }));
 
 vi.mock("../../lib/email", () => ({

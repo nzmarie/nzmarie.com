@@ -9,6 +9,7 @@ export default {
   test: {
     environment: "jsdom",
     include: ["__tests__/**/*.test.{ts,tsx}"],
+    setupFiles: ["__tests__/setup.ts"],
     coverage: {
       provider: "v8",
       include: [
