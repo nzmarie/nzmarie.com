@@ -1,90 +1,72 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { marieDB, louisDB } from '@/lib/db';
+import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
-import { generateTrackingCode } from '@/lib/tracking';
+
+interface PropertyInput {
+  louis_property_id: string;
+  property_address: string;
+  suburb: string;
+  street?: string;
+  city?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  rv_value?: number;
+}
 
 export async function POST(request: Request) {
   const session = await auth();
-  
+
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const { property_ids, campaign_id } = await request.json();
+    const { properties } = await request.json() as { properties: PropertyInput[] };
 
-    if (!property_ids || property_ids.length === 0) {
-      return NextResponse.json(
-        { error: 'No properties selected' },
-        { status: 400 }
-      );
+    if (!properties || properties.length === 0) {
+      return NextResponse.json({ error: 'No properties provided' }, { status: 400 });
     }
 
-    // Fetch property details from Louis DB
-    const propertiesResult = await louisDB.query(
-      `SELECT id, address, suburb, street 
-       FROM properties 
-       WHERE id = ANY($1)`,
-      [property_ids]
-    );
-
-    const properties = propertiesResult.rows;
-
-    if (properties.length === 0) {
-      return NextResponse.json(
-        { error: 'No valid properties found' },
-        { status: 404 }
-      );
-    }
-
-    // Prepare batch insert values
-    const values: unknown[] = [];
-    const placeholders: string[] = [];
-    
-    properties.forEach((prop, index) => {
-      const baseIndex = index * 8;
-      placeholders.push(
-        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8})`
-      );
-      
-      values.push(
-        campaign_id || null,
-        prop.id,
-        prop.address,
-        prop.street,
-        prop.suburb,
-        generateTrackingCode(),
-        'PENDING',
-        session.user.email
+    const insertPromises = properties.map((property: PropertyInput) => {
+      const trackingCode = `DM-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      return marieDB.query(
+        `INSERT INTO outreach_selected_properties
+         (louis_property_id, property_address, suburb, street, city,
+          bedrooms, bathrooms, rv_value, selected_by, tracking_code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (louis_property_id, selected_by) DO NOTHING
+         RETURNING id`,
+        [
+          property.louis_property_id,
+          property.property_address,
+          property.suburb,
+          property.street ?? null,
+          property.city ?? null,
+          property.bedrooms ?? null,
+          property.bathrooms ?? null,
+          property.rv_value ?? null,
+          session.user.email,
+          trackingCode,
+        ]
       );
     });
 
-    // Batch insert into outreach_tasks
-    const insertQuery = `
-      INSERT INTO outreach_tasks 
-      (campaign_id, property_id, property_address, street, suburb, tracking_code, status, added_by)
-      VALUES ${placeholders.join(', ')}
-      ON CONFLICT (property_address, suburb) 
-      WHERE status != 'RETURNED'
-      DO NOTHING
-      RETURNING *
-    `;
-
-    const result = await marieDB.query(insertQuery, values);
+    const results = await Promise.all(insertPromises);
+    const successCount = results.filter(r => r.rows.length > 0).length;
 
     return NextResponse.json({
       success: true,
-      added: result.rows.length,
-      skipped: properties.length - result.rows.length,
-      message: `Added ${result.rows.length} properties to outreach queue`,
-      tasks: result.rows,
+      added: successCount,
+      skipped: properties.length - successCount,
+      message: `Added ${successCount} properties to outreach queue${
+        successCount < properties.length
+          ? ` (${properties.length - successCount} already existed)`
+          : ''
+      }`,
     });
   } catch (error) {
     console.error('Error adding properties to outreach:', error);
-    return NextResponse.json(
-      { error: 'Failed to add properties to outreach' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to add properties to outreach' }, { status: 500 });
   }
 }

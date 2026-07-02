@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { SkeletonAnalytics } from '@/components/admin/Skeleton';
 
 const SUPER_ADMIN = 'nzlouis.com@gmail.com';
@@ -10,12 +10,40 @@ const SUPER_ADMIN = 'nzlouis.com@gmail.com';
 export default function AnalyticsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [stats, setStats] = useState({
+    totalCost: 0,
+    totalRevenue: 0,
+    totalMailed: 0,
+    totalDownloads: 0,
+    totalAppraisals: 0,
+    totalConversions: 0,
+  });
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email !== SUPER_ADMIN) {
       router.push('/admin/dashboard');
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.email === SUPER_ADMIN) {
+      fetch('/api/admin/analytics/overview')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && !data.error) {
+            setStats({
+              totalCost: data.total_cost ?? 0,
+              totalRevenue: data.total_revenue ?? 0,
+              totalMailed: data.total_mailed ?? 0,
+              totalDownloads: data.total_downloads ?? 0,
+              totalAppraisals: data.total_appraisals ?? 0,
+              totalConversions: data.total_conversions ?? 0,
+            });
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [status, session]);
 
   // Show skeleton while session resolves — Navbar stays visible
   if (status === 'loading') {
@@ -37,7 +65,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">📊 Analytics</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
         <p className="text-gray-600 mt-1">
           Campaign performance, ROI tracking, and conversion funnels
         </p>
@@ -45,10 +73,10 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Total Campaigns', value: '0', icon: '📬', color: 'blue' },
-          { label: 'Download Rate',   value: '0%', icon: '📥', color: 'green' },
-          { label: 'Conversion Rate', value: '0%', icon: '✅', color: 'purple' },
-          { label: 'Total Revenue',   value: '$0', icon: '💰', color: 'yellow' },
+          { label: 'Total Campaigns', value: stats.totalMailed.toString(), icon: '📬', color: 'blue' },
+          { label: 'Download Rate', value: `${stats.totalMailed > 0 ? ((stats.totalDownloads / stats.totalMailed) * 100).toFixed(0) : 0}%`, icon: '📥', color: 'green' },
+          { label: 'Conversion Rate', value: `${stats.totalAppraisals > 0 ? ((stats.totalConversions / stats.totalAppraisals) * 100).toFixed(0) : 0}%`, icon: '✅', color: 'purple' },
+          { label: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString('en-NZ')}`, icon: '💰', color: 'yellow' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -64,14 +92,23 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {['Conversion Funnel', 'ROI by Suburb'].map((title) => (
-          <div key={title} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-            <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-              <p className="text-gray-500">Chart coming soon</p>
-            </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversion Funnel</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm"><span>Mail sent</span><span>{stats.totalMailed}</span></div>
+            <div className="flex justify-between text-sm"><span>Downloads</span><span>{stats.totalDownloads}</span></div>
+            <div className="flex justify-between text-sm"><span>Appraisals</span><span>{stats.totalAppraisals}</span></div>
+            <div className="flex justify-between text-sm"><span>Conversions</span><span>{stats.totalConversions}</span></div>
           </div>
-        ))}
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">ROI Snapshot</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm"><span>Revenue</span><span>${stats.totalRevenue.toLocaleString('en-NZ')}</span></div>
+            <div className="flex justify-between text-sm"><span>Cost</span><span>${stats.totalCost.toLocaleString('en-NZ')}</span></div>
+            <div className="flex justify-between text-sm font-semibold"><span>Net</span><span>${(stats.totalRevenue - stats.totalCost).toLocaleString('en-NZ')}</span></div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

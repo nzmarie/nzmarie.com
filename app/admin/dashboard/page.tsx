@@ -1,8 +1,8 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 
 interface Lead {
@@ -26,6 +26,13 @@ interface Report {
   created_at: string;
 }
 
+const PRIORITY_LABELS: Record<string, string> = {
+  "within-3-months": "High",
+  "3-6-months": "Medium",
+  "6-12-months": "Low",
+  "just-exploring": "Low",
+};
+
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -45,15 +52,16 @@ export default function AdminDashboardPage() {
       Promise.all([
         fetch("/api/admin/leads").then((r) => r.json()),
         fetch("/api/admin/reports").then((r) => r.json()),
-      ]).then(([leadsData, reportsData]) => {
-        if (leadsData.success) setLeads(leadsData.leads);
-        if (reportsData.success) setReports(reportsData.reports);
-        setLoading(false);
-      }).catch(() => setLoading(false));
+      ])
+        .then(([leadsData, reportsData]) => {
+          if (leadsData.success) setLeads(leadsData.leads ?? []);
+          if (reportsData.success) setReports(reportsData.reports ?? []);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
     }
   }, [status]);
 
-  // Show skeleton while session or data is loading — Navbar stays visible
   if (status === "loading" || loading) {
     return <SkeletonDashboard />;
   }
@@ -76,7 +84,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600 mt-1">
@@ -84,8 +91,7 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
           <p className="text-sm text-slate-500 mb-1">Total Leads</p>
           <p className="text-3xl font-bold text-slate-800">{leads.length}</p>
@@ -97,6 +103,10 @@ export default function AdminDashboardPage() {
           </p>
         </div>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p className="text-sm text-slate-500 mb-1">Pending Outreach</p>
+          <p className="text-3xl font-bold text-amber-600">0</p>
+        </div>
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
           <p className="text-sm text-slate-500 mb-1">Active Reports</p>
           <p className="text-3xl font-bold text-indigo-600">
             {reports.filter((r) => r.is_active).length}
@@ -104,7 +114,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Tabs Content */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100">
         <div className="flex border-b border-slate-100">
           <button
@@ -155,7 +164,7 @@ export default function AdminDashboardPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColor[lead.timeline] || "bg-slate-100 text-slate-600"}`}>
-                        {lead.timeline || "N/A"}
+                        {PRIORITY_LABELS[lead.timeline] || lead.timeline || "N/A"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -171,7 +180,7 @@ export default function AdminDashboardPage() {
                 {leads.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                      No leads yet
+                      No leads yet. New appraisal requests will appear here.
                     </td>
                   </tr>
                 )}
@@ -202,7 +211,7 @@ export default function AdminDashboardPage() {
                 </div>
               ))}
               {reports.length === 0 && (
-                <p className="text-center text-slate-400 py-8">No reports uploaded yet</p>
+                <p className="text-center text-slate-400 py-8">No reports uploaded yet. Upload a report to make it available here.</p>
               )}
             </div>
           </div>

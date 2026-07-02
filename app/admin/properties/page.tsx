@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -109,7 +109,12 @@ const CITY_SUBURBS: Record<string, string[]> = {
   ]
 };
 
-const PropertyCard = ({ property }: { property: Property }) => {
+const PropertyCard = ({ property, selectMode, isSelected, onToggle }: { 
+  property: Property; 
+  selectMode: boolean;
+  isSelected: boolean;
+  onToggle: () => void;
+}) => {
   const [imageError, setImageError] = useState(false);
 
   const formatCurrency = (amount: number | null) => {
@@ -140,21 +145,46 @@ const PropertyCard = ({ property }: { property: Property }) => {
         borderRadius: "16px",
         overflow: "hidden",
         boxShadow: "0 8px 16px rgba(0,0,0,0.08)",
-        backgroundColor: "white",
+        backgroundColor: selectMode && isSelected ? '#eff6ff' : 'white',
         transition: "all 0.3s ease",
         height: "100%",
         display: "flex",
         flexDirection: "column",
+        outline: selectMode && isSelected ? '3px solid #3b82f6' : 'none',
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.transform = "translateY(-8px)";
-        (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 24px rgba(0,0,0,0.15)";
+        if (!selectMode) {
+          (e.currentTarget as HTMLElement).style.transform = "translateY(-8px)";
+          (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 24px rgba(0,0,0,0.15)";
+        }
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
-        (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.08)";
+        if (!selectMode) {
+          (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+          (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.08)";
+        }
       }}
     >
+      {selectMode && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          left: '16px',
+          zIndex: 10,
+        }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggle}
+            style={{
+              width: '24px',
+              height: '24px',
+              cursor: 'pointer',
+              accentColor: '#3b82f6',
+            }}
+          />
+        </div>
+      )}
       <div style={{ position: "relative" }}>
         <a
           href={property.property_url}
@@ -327,6 +357,11 @@ export default function PropertiesPage() {
   const { status } = useSession();
   const router = useRouter();
   const lastPropertyElementRef = useRef<HTMLDivElement>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
+  const [selectedPropertiesInfo, setSelectedPropertiesInfo] = useState<Property[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [filters, setFilters] = useState<Filters>({
     region: "Auckland",
     city: "North Shore City",
@@ -477,6 +512,77 @@ export default function PropertiesPage() {
     });
   };
 
+  const toggleSelection = (property: Property) => {
+    setSelectedProperties(prev => {
+      const next = new Set(prev);
+      if (next.has(property.id)) {
+        next.delete(property.id);
+        setSelectedPropertiesInfo(curr => curr.filter(p => p.id !== property.id));
+      } else {
+        next.add(property.id);
+        setSelectedPropertiesInfo(curr => [...curr, property]);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedProperties(new Set(properties.map(p => p.id)));
+    setSelectedPropertiesInfo([...properties]);
+  };
+
+  const clearSelection = () => {
+    setSelectedProperties(new Set());
+    setSelectedPropertiesInfo([]);
+    setSelectMode(false);
+  };
+
+  const showNotification = (type: 'success' | 'error', msg: string) => {
+    setNotification({ type, msg });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const addToOutreach = async () => {
+    if (selectedProperties.size === 0) return;
+    
+    const selectedData = selectedPropertiesInfo.map(p => ({
+      louis_property_id: p.id,
+      property_address: p.address,
+      suburb: p.suburb,
+      street: '',
+      city: p.city,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      rv_value: p.rv,
+    }));
+
+    try {
+      const response = await fetch('/api/admin/outreach/batch-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ properties: selectedData }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add properties');
+      }
+
+      const result = await response.json();
+      showNotification('success', result.message || `Added ${selectedProperties.size} properties to outreach queue`);
+      clearSelection();
+      setShowAddModal(false);
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Failed to add properties');
+    }
+  };
+
+  const groupedBySuburb = selectedPropertiesInfo.reduce((acc, p) => {
+    acc[p.suburb] = (acc[p.suburb] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+
   // Show skeleton while session resolves or initial data loads — Navbar stays visible
   if (status === "loading" || (isLoading && properties.length === 0)) {
     return <SkeletonProperties />;
@@ -496,6 +602,24 @@ export default function PropertiesPage() {
       "--text-muted": "#718096",
       "--background": "#f8fafc",
     } as React.CSSProperties}>
+      {notification && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 100,
+          padding: '16px 24px',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          backgroundColor: notification.type === 'success' ? '#22c55e' : '#ef4444',
+          color: 'white',
+          fontWeight: '600',
+          fontSize: '0.95rem',
+        }}>
+          {notification.msg}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <div>
           <h1 style={{
@@ -512,6 +636,77 @@ export default function PropertiesPage() {
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
             {properties.length} properties loaded • Scroll to load more
           </p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={() => setSelectMode(!selectMode)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: selectMode ? '#3b82f6' : '#e2e8f0',
+              color: selectMode ? 'white' : '#4a5568',
+              borderRadius: '10px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.95rem',
+            }}
+          >
+            {selectMode ? '✓ Select Mode' : '📋 Select Mode'}
+          </button>
+          {selectMode && (
+            <>
+              <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#4a5568' }}>
+                Selected: {selectedProperties.size} properties
+              </span>
+              <button
+                onClick={selectAll}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#4a5568',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Select All
+              </button>
+              <button
+                onClick={clearSelection}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#4a5568',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Clear All
+              </button>
+              {selectedProperties.size > 0 && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#22c55e',
+                    color: 'white',
+                    borderRadius: '10px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.95rem',
+                  }}
+                >
+                  Add to Outreach
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -834,7 +1029,12 @@ export default function PropertiesPage() {
           const isLast = index === properties.length - 1;
           return (
             <div key={`${property.id}-${index}`} ref={isLast ? lastPropertyElementRef : null}>
-              <PropertyCard property={property} />
+              <PropertyCard 
+                property={property} 
+                selectMode={selectMode}
+                isSelected={selectedProperties.has(property.id)}
+                onToggle={() => toggleSelection(property)}
+              />
             </div>
           );
         })}
@@ -860,6 +1060,120 @@ export default function PropertiesPage() {
       )}
 
       {/* No More Data Indicator */}
+      {!hasNextPage && properties.length > 0 && !isFetchingNextPage && (
+        <div style={{
+          textAlign: "center",
+          padding: "30px",
+          color: "#718096",
+          fontSize: "0.95rem",
+          fontWeight: "500",
+        }}>
+          No more properties to load
+        </div>
+      )}
+
+      {showAddModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            }}
+            onClick={() => setShowAddModal(false)}
+          />
+          <div style={{
+            position: 'relative',
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{
+              fontSize: '1.5rem',
+              fontWeight: '700',
+              color: '#2D3748',
+              marginBottom: '16px',
+            }}>
+              Add Properties to Outreach
+            </h2>
+            <p style={{
+              fontSize: '1rem',
+              color: '#4a5568',
+              marginBottom: '24px',
+            }}>
+              You are about to add {selectedProperties.size} {selectedProperties.size === 1 ? 'property' : 'properties'} to your outreach list.
+            </p>
+            {Object.keys(groupedBySuburb).length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <p style={{
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  color: '#4a5568',
+                  marginBottom: '12px',
+                }}>
+                  Selected suburbs:
+                </p>
+                <div style={{ paddingLeft: '12px' }}>
+                  {Object.entries(groupedBySuburb).map(([suburb, count]) => (
+                    <div key={suburb} style={{
+                      fontSize: '0.9rem',
+                      color: '#718096',
+                      marginBottom: '6px',
+                    }}>
+                      • {suburb} ({count} {count === 1 ? 'property' : 'properties'})
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowAddModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#4a5568',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.95rem',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addToOutreach}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  backgroundColor: '#22c55e',
+                  color: 'white',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.95rem',
+                }}
+              >
+                Confirm & Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!hasNextPage && properties.length > 0 && (
         <div style={{
           textAlign: "center",

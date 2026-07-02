@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { SkeletonDownloads } from '@/components/admin/Skeleton';
 
 const SUPER_ADMIN = 'nzlouis.com@gmail.com';
@@ -10,12 +10,26 @@ const SUPER_ADMIN = 'nzlouis.com@gmail.com';
 export default function DownloadsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [downloads, setDownloads] = useState<Array<{ id: string; email: string; suburb: string; downloaded_at: string }>>([]);
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email !== SUPER_ADMIN) {
       router.push('/admin/dashboard');
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.email === SUPER_ADMIN) {
+      fetch('/api/admin/reports')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.success) {
+            setDownloads(Array.isArray(data.reports) ? data.reports.slice(0, 5) : []);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [status, session]);
 
   // Show skeleton while session resolves — Navbar stays visible
   if (status === 'loading') {
@@ -38,7 +52,7 @@ export default function DownloadsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">📥 Downloads</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Downloads</h1>
           <p className="text-gray-600 mt-1">Track PDF downloads and monitor user engagement</p>
         </div>
         <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
@@ -48,9 +62,9 @@ export default function DownloadsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Total Downloads', value: '0', subtitle: 'All time' },
-          { label: 'This Month',      value: '0', subtitle: 'Current period' },
-          { label: 'Avg per User',    value: '0', subtitle: 'Per email' },
+          { label: 'Total Downloads', value: downloads.length.toString(), subtitle: 'Latest report records' },
+          { label: 'This Month', value: '0', subtitle: 'Current period' },
+          { label: 'Avg per User', value: downloads.length > 0 ? '1' : '0', subtitle: 'Per report' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
@@ -65,15 +79,28 @@ export default function DownloadsPage() {
           <h2 className="text-lg font-semibold text-gray-900">Recent Downloads</h2>
         </div>
         <div className="p-8 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 text-gray-400 mb-4">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Downloads Yet</h3>
-          <p className="text-gray-600 max-w-md mx-auto">
-            Download records will appear here once users start downloading market reports.
-          </p>
+          {downloads.length === 0 ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 text-gray-400 mb-4">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Downloads Yet</h3>
+              <p className="text-gray-600 max-w-md mx-auto">
+                Download records will appear here once users start downloading market reports.
+              </p>
+            </>
+          ) : (
+            <div className="space-y-3 text-left">
+              {downloads.map((item) => (
+                <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="font-medium text-slate-800">{item.suburb || 'Report'}</div>
+                  <div className="text-sm text-slate-500">{item.email}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

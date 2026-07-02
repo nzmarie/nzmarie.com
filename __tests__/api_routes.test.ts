@@ -6,22 +6,23 @@ import { POST as downloadReport } from "../app/api/reports/download/route";
 
 vi.mock("pg", () => {
   const mPool = {
-    query: vi.fn().mockImplementation((sql: string) => {
+    query: vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
       if (sql.includes("appraisal_leads") && sql.includes("SELECT")) {
         return Promise.resolve({ rows: [] });
       }
       if (sql.includes("INSERT INTO appraisal_leads")) {
+        const values = Array.isArray(params) ? params : [];
         return Promise.resolve({
           rows: [
             {
               id: "1",
-              name: "Alice",
-              email: "alice@example.com",
-              phone: null,
-              property_address: "123 Test Street",
-              suburb: "Auckland",
-              message: null,
-              source: "website",
+              name: values[0] || "Alice",
+              email: values[1] || "alice@example.com",
+              phone: values[2] || null,
+              property_address: values[3] || "123 Test Street",
+              suburb: values[4] || "Auckland",
+              message: values[5] || null,
+              source: values[6] || "website",
             },
           ],
         });
@@ -95,6 +96,55 @@ describe("POST /api/submit-appraisal", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.lead.name).toBe("Alice");
+  });
+
+  it("uses property_address and utmSource when provided", async () => {
+    const req = new Request("http://localhost/api/submit-appraisal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Bob",
+        email: "bob@example.com",
+        property_address: "45 Queen Street",
+        utmSource: "google",
+        message: "Hello",
+      }),
+    });
+    const res = await submitAppraisal(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.lead.source).toBe("google");
+  });
+
+  it("returns 400 when required fields are missing", async () => {
+    const req = new Request("http://localhost/api/submit-appraisal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Carol", email: "carol@example.com" }),
+    });
+    const res = await submitAppraisal(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain("Missing required fields");
+  });
+
+  it("returns 400 for invalid email format", async () => {
+    const req = new Request("http://localhost/api/submit-appraisal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Dana",
+        email: "invalid-email",
+        address: "10 Main Road",
+      }),
+    });
+    const res = await submitAppraisal(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain("Invalid email format");
   });
 
   it("returns 400 on invalid JSON body", async () => {
