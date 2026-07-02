@@ -3,12 +3,45 @@ import { query } from "../../../lib/db";
 import { hashEmail, isValidEmail } from "../../../lib/hash";
 import { sendAppraisalNotification } from "../../../lib/email";
 import { updateAppraisalTracking } from "../../../lib/tracking";
+import { findLocationBySuburb } from "../../../lib/geo-data";
+
+// Cache whether region/city columns exist to avoid checking every request
+let hasLocationColumns: boolean | null = null;
+
+async function checkLocationColumns(): Promise<boolean> {
+  if (hasLocationColumns !== null) return hasLocationColumns;
+  try {
+    const result = await query<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'appraisal_leads'
+        AND column_name IN ('region', 'city')
+    `);
+    hasLocationColumns = result.rows.length === 2;
+  } catch {
+    hasLocationColumns = false;
+  }
+  return hasLocationColumns;
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, address, suburb, email, phone, timeline, motivation, languagePreference, heardFrom } = body;
+    const {
+      name,
+      address,
+      region,
+      city,
+      suburb,
+      email,
+      phone,
+      timeline,
+      motivation,
+      languagePreference,
+      heardFrom,
+    } = body;
 
+    // --- Validation ---
     if (!email || !isValidEmail(email)) {
       return NextResponse.json({ success: false, error: "Invalid email address" }, { status: 400 });
     }
@@ -25,8 +58,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Suburb is required" }, { status: 400 });
     }
 
+    // --- Resolve region and city from suburb if not provided ---
+    let resolvedRegion = region?.trim() || null;
+    let resolvedCity = city?.trim() || null;
+
+    if (!resolvedRegion || !resolvedCity) {
+      const location = findLocationBySuburb(suburb.trim());
+      if (location) {
+        resolvedRegion = resolvedRegion || location.region;
+        resolvedCity = resolvedCity || location.city;
+      }
+    }
+
     const emailHash = hashEmail(email);
 
+    // --- Duplicate check ---
     const duplicate = await query<{ id: string }>(
       `SELECT id FROM appraisal_leads
        WHERE email_hash = $1
@@ -42,30 +88,58 @@ export async function POST(req: Request) {
       );
     }
 
-    await query(
-      `INSERT INTO appraisal_leads
-       (client_name, property_address, suburb, email, email_hash, phone, timeline, motivation, language_preference, heard_from)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        name.trim(),
-        address.trim(),
-        suburb.trim(),
-        email.trim().toLowerCase(),
-        emailHash,
-        phone.trim(),
-        timeline || null,
-        motivation || null,
-        languagePreference || null,
-        heardFrom || null,
-      ]
-    );
+    // --- Check whether region/city columns exist (migration 011) ---
+    const useLocationColumns = await checkLocationColumns();
+
+    if (useLocationColumns) {
+      // Full insert with region and city
+      await query(
+        `INSERT INTO appraisal_leads
+         (client_name, property_address, region, city, suburb, email, email_hash, phone,
+          timeline, motivation, language_preference, heard_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          name.trim(),
+          address.trim(),
+          resolvedRegion,
+          resolvedCity,
+          suburb.trim(),
+          email.trim().toLowerCase(),
+          emailHash,
+          phone.trim(),
+          timeline || null,
+          motivation || null,
+          languagePreference || null,
+          heardFrom || null,
+        ]
+      );
+    } else {
+      // Fallback insert without region/city (migration 011 not yet applied)
+      await query(
+        `INSERT INTO appraisal_leads
+         (client_name, property_address, suburb, email, email_hash, phone,
+          timeline, motivation, language_preference, heard_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          name.trim(),
+          address.trim(),
+          suburb.trim(),
+          email.trim().toLowerCase(),
+          emailHash,
+          phone.trim(),
+          timeline || null,
+          motivation || null,
+          languagePreference || null,
+          heardFrom || null,
+        ]
+      );
+      // Reset cache so next request re-checks (in case migration runs soon)
+      hasLocationColumns = null;
+    }
 
     // Update tracking for direct mail campaigns
-    // This replaces what would normally be done by database triggers
-    // Marks direct_mail_addresses.has_requested_appraisal = TRUE
     await updateAppraisalTracking(address.trim(), suburb.trim()).catch(err => {
-      console.error('Failed to update appraisal tracking:', err);
-      // Don't fail the request if tracking fails
+      console.error("Failed to update appraisal tracking:", err);
     });
 
     sendAppraisalNotification({
@@ -77,7 +151,7 @@ export async function POST(req: Request) {
       motivation,
       languagePreference,
       heardFrom,
-    }).catch((err) => console.error("Email send failed:", err));
+    }).catch(err => console.error("Email send failed:", err));
 
     return NextResponse.json({ success: true });
   } catch (error) {

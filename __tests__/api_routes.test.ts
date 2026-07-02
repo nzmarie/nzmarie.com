@@ -21,8 +21,10 @@ vi.mock("pg", () => {
               phone: values[2] || null,
               property_address: values[3] || "123 Test Street",
               suburb: values[4] || "Auckland",
-              message: values[5] || null,
-              source: values[6] || "website",
+              region: values[5] || null,
+              city: values[6] || null,
+              message: values[7] || null,
+              source: values[8] || "website",
             },
           ],
         });
@@ -115,6 +117,25 @@ describe("POST /api/submit-appraisal", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.lead.source).toBe("google");
+  });
+
+  it("resolves region and city from a known suburb when inserting a lead", async () => {
+    const req = new Request("http://localhost/api/submit-appraisal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Eve",
+        email: "eve@example.com",
+        address: "5 Cottam Grove",
+        suburb: "Northcross",
+      }),
+    });
+    const res = await submitAppraisal(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.lead.region).toBe("Auckland");
+    expect(json.lead.city).toBe("North Shore City");
   });
 
   it("returns 400 when required fields are missing", async () => {

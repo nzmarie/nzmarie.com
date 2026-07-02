@@ -19,6 +19,8 @@ describe("POST /api/appraisal (refactored)", () => {
   const validBody = {
     name: "Jane Smith",
     address: "42 Queen Street, Auckland CBD",
+    region: "Auckland",
+    city: "North Shore City",
     suburb: "Albany",
     email: "jane@example.com",
     phone: "+64 21 555 0101",
@@ -97,5 +99,50 @@ describe("POST /api/appraisal (refactored)", () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(500);
+  });
+
+  it("returns 400 for missing suburb", async () => {
+    const res = await POST(makeRequest({ ...validBody, suburb: "" }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain("Suburb");
+  });
+
+  it("accepts valid submission with region and city", async () => {
+    vi.mocked(query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ id: "new-uuid" }] } as any);
+
+    const res = await POST(makeRequest({
+      ...validBody,
+      region: "Auckland",
+      city: "Auckland City",
+      suburb: "Takapuna",
+    }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+  });
+
+  it("auto-resolves region and city from suburb when not provided", async () => {
+    vi.mocked(query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ id: "new-uuid" }] } as any);
+
+    const bodyWithoutLocation = {
+      name: "Jane Smith",
+      address: "42 Queen Street, Auckland CBD",
+      suburb: "Albany",
+      email: "jane@example.com",
+      phone: "+64 21 555 0101",
+      timeline: "within-3-months",
+      motivation: "upsizing",
+    };
+
+    const res = await POST(makeRequest(bodyWithoutLocation));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { NZ_SUBURBS } from '@/lib/address-parser';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -31,8 +32,12 @@ export async function GET(request: Request) {
   let idx = 1;
 
   if (suburb && suburb !== 'all') {
-    query += ` AND suburb = $${idx++}`;
-    params.push(suburb);
+    if (suburb === 'Other') {
+      query += ` AND (suburb IS NULL OR suburb = '')`;
+    } else {
+      query += ` AND COALESCE(suburb, '') = $${idx++}`;
+      params.push(suburb);
+    }
   }
 
   if (source && source !== 'all') {
@@ -61,13 +66,22 @@ export async function GET(request: Request) {
   try {
     const result = await marieDB.query(query, params);
 
+    const mappedRows = result.rows.map(row => ({
+      ...row,
+      suburb: row.suburb || 'Other',
+    }));
+
     let countQuery = `SELECT COUNT(*) FROM report_downloads WHERE 1=1`;
     const countParams: unknown[] = [];
     let ci = 1;
     
-    if (suburb && suburb !== 'all') { 
-      countQuery += ` AND suburb = $${ci++}`; 
-      countParams.push(suburb); 
+    if (suburb && suburb !== 'all') {
+      if (suburb === 'Other') {
+        countQuery += ` AND (suburb IS NULL OR suburb = '')`;
+      } else {
+        countQuery += ` AND COALESCE(suburb, '') = $${ci++}`;
+        countParams.push(suburb);
+      }
     }
     if (source && source !== 'all') { 
       countQuery += ` AND source = $${ci++}`; 
@@ -89,10 +103,6 @@ export async function GET(request: Request) {
     const countResult = await marieDB.query(countQuery, countParams);
     const total = parseInt(countResult.rows[0].count);
 
-    const suburbsResult = await marieDB.query(
-      `SELECT DISTINCT suburb FROM report_downloads ORDER BY suburb`
-    );
-
     const statsResult = await marieDB.query(`
       SELECT 
         COUNT(*) as total_downloads,
@@ -103,8 +113,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data: result.rows,
-      suburbs: suburbsResult.rows.map((r: { suburb: string }) => r.suburb),
+      data: mappedRows,
+      suburbs: Array.from(new Set([...NZ_SUBURBS, 'Other'])),
       stats: statsResult.rows[0],
       pagination: {
         page,

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
+import { SuburbFilter } from "@/components/admin/SuburbFilter";
 
 interface DashboardStats {
   newLeads: number;
@@ -61,6 +62,7 @@ export default function AdminDashboardPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [suburbFilter, setSuburbFilter] = useState<string>('all');
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -68,20 +70,25 @@ export default function AdminDashboardPage() {
     }
   }, [status, router]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchDashboardData();
-    }
-  }, [status]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
+      const statsParams = new URLSearchParams();
+      if (suburbFilter && suburbFilter !== 'all') {
+        statsParams.set('suburb', suburbFilter);
+      }
+
+      const bookingsParams = new URLSearchParams({ page: '1', limit: '10' });
+      if (suburbFilter && suburbFilter !== 'all') {
+        bookingsParams.set('suburb', suburbFilter);
+      }
+
+      const statsUrl = `/api/admin/dashboard/stats${statsParams.toString() ? `?${statsParams}` : ''}`;
       const [statsRes, followupsRes] = await Promise.all([
-        fetch("/api/admin/dashboard/stats"),
-        fetch("/api/admin/bookings?page=1&limit=10"),
+        fetch(statsUrl),
+        fetch(`/api/admin/bookings?${bookingsParams}`),
       ]);
 
       if (!statsRes.ok || !followupsRes.ok) {
@@ -116,7 +123,13 @@ export default function AdminDashboardPage() {
       );
       setLoading(false);
     }
-  };
+  }, [suburbFilter]);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchDashboardData();
+    }
+  }, [status, fetchDashboardData]);
 
   if (status === "loading" || loading) {
     return <SkeletonDashboard />;
@@ -138,10 +151,19 @@ export default function AdminDashboardPage() {
         <p className="text-gray-600 mt-1">Welcome back, {userName}</p>
       </div>
 
+      <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-4">
+        <SuburbFilter
+          value={suburbFilter}
+          onChange={setSuburbFilter}
+          label="Filter by Suburb"
+          showLabel={true}
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
           <p className="text-xs text-slate-500 font-medium">
-            New Bookings
+            Total Leads
           </p>
           <p className="text-2xl font-bold text-slate-800 mt-2">
             {stats?.newLeads ?? 0}

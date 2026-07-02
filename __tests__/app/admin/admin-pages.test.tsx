@@ -46,6 +46,8 @@ describe('Admin pages', () => {
                 email: 'john@example.com',
                 phone: '0210000000',
                 property_address: '15 Marine Parade',
+                region: 'Auckland',
+                city: 'North Shore City',
                 suburb: 'Takapuna',
                 contact_status: 'new',
                 priority: 'high',
@@ -54,6 +56,9 @@ describe('Admin pages', () => {
               },
             ],
             pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+            locationStats: [
+              { region: 'Auckland', city: 'North Shore City', suburb: 'Northcross', count: 1 },
+            ],
           }),
         }) as any;
       }
@@ -97,6 +102,33 @@ describe('Admin pages', () => {
 
     expect(screen.getAllByText('New').length).toBeGreaterThan(0);
     expect(screen.getAllByText('High').length).toBeGreaterThan(0);
+  });
+
+  it('shows the booking summary and location filters', async () => {
+    render(<BookingsPage />);
+
+    expect(await screen.findByText('Total Bookings')).toBeTruthy();
+    expect(screen.getByPlaceholderText(/search/i)).toBeTruthy();
+    expect(screen.getByLabelText('Region')).toBeTruthy();
+    expect(screen.getByLabelText('City / District')).toBeTruthy();
+    expect(screen.getByLabelText('Suburb')).toBeTruthy();
+  });
+
+  it('updates city and suburb options based on the selected region and city', async () => {
+    render(<BookingsPage />);
+
+    fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'Auckland' } });
+
+    const citySelect = screen.getByLabelText('City / District') as HTMLSelectElement;
+    expect(screen.getByRole('option', { name: 'North Shore City' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Wellington City' })).toBeNull();
+
+    fireEvent.change(citySelect, { target: { value: 'North Shore City' } });
+
+    const suburbSelect = screen.getByLabelText('Suburb') as HTMLSelectElement;
+    expect(screen.getByRole('option', { name: 'Northcross' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Aro Valley' })).toBeNull();
+    expect(suburbSelect.value).toBe('');
   });
 
   it('shows the mark as sent action for super admins', async () => {

@@ -3,14 +3,23 @@ import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth();
 
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const suburb = searchParams.get('suburb');
+
   try {
+    const suburbFilter = suburb && suburb !== 'all' ? suburb : null;
+    const suburbCondition = suburbFilter 
+      ? 'AND COALESCE(suburb, \'\') = $1' 
+      : '';
+    const suburbParams = suburbFilter ? [suburbFilter] : [];
+
     const [
       newLeadsResult,
       highPriorityResult,
@@ -21,29 +30,41 @@ export async function GET() {
     ] = await Promise.all([
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
-         WHERE created_at >= date_trunc('month', CURRENT_TIMESTAMP)`
+         WHERE created_at >= date_trunc('month', CURRENT_TIMESTAMP)
+         ${suburbCondition}`,
+        suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
-         WHERE priority = 'high'`
+         WHERE priority = 'high'
+         ${suburbCondition}`,
+        suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM outreach_selected_properties 
-         WHERE status = 'PENDING'`
+         WHERE status = 'PENDING'
+         ${suburbCondition}`,
+        suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
          WHERE follow_up_at::date = CURRENT_DATE 
-         AND contact_status NOT IN ('converted', 'lost')`
+         AND contact_status NOT IN ('converted', 'lost')
+         ${suburbCondition}`,
+        suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
          WHERE follow_up_at::date < CURRENT_DATE 
-         AND contact_status NOT IN ('converted', 'lost')`
+         AND contact_status NOT IN ('converted', 'lost')
+         ${suburbCondition}`,
+        suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM report_downloads 
-         WHERE downloaded_at >= CURRENT_DATE`
+         WHERE downloaded_at >= CURRENT_DATE
+         ${suburbCondition}`,
+        suburbParams
       ),
     ]);
 
@@ -59,6 +80,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       stats,
+      suburb: suburbFilter || 'all',
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

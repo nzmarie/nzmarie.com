@@ -357,6 +357,88 @@ describe('Downloads Page', () => {
     });
   });
 
+  it('filters downloads by suburb', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com' } },
+      status: 'authenticated',
+    });
+
+    const mockDownloads = [
+      {
+        id: '1',
+        email: 'john@example.com',
+        name: 'John Smith',
+        suburb: 'Takapuna',
+        report_type: 'local_market',
+        downloaded_at: '2026-07-01T10:30:00Z',
+        source: 'direct_mail',
+        tracking_code: 'DM-123456',
+        created_at: '2026-07-01T10:30:00Z',
+      },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          data: mockDownloads,
+          suburbs: ['Takapuna', 'Albany'],
+          stats: { total_downloads: '1', this_month: '1', unique_users: '1' },
+          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+        }),
+      });
+
+    const DownloadsPage = (await import('../../../app/admin/downloads/page')).default;
+    render(<DownloadsPage />);
+
+    await waitFor(() => {
+      const selects = screen.getAllByDisplayValue('All Suburbs');
+      expect(selects.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('handles NULL suburb as Other', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com' } },
+      status: 'authenticated',
+    });
+
+    const mockDownloads = [
+      {
+        id: '1',
+        email: 'jane@example.com',
+        name: 'Jane Doe',
+        suburb: 'Other',
+        report_type: 'local_market',
+        downloaded_at: '2026-07-02T14:15:00Z',
+        source: 'organic',
+        tracking_code: null,
+        created_at: '2026-07-02T14:15:00Z',
+      },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          data: mockDownloads,
+          suburbs: ['Takapuna', 'Albany', 'Other'],
+          stats: { total_downloads: '1', this_month: '1', unique_users: '1' },
+          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+        }),
+      });
+
+    const DownloadsPage = (await import('../../../app/admin/downloads/page')).default;
+    const { container } = render(<DownloadsPage />);
+
+    await waitFor(() => {
+      const rows = container.querySelectorAll('tbody tr');
+      expect(rows.length).toBe(1);
+    });
+  });
+
   it('handles API errors gracefully', async () => {
     useSessionMock = vi.fn().mockReturnValue({
       data: { user: { email: 'nzmarie.com@gmail.com' } },

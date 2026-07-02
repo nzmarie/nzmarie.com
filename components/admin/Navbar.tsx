@@ -12,6 +12,7 @@ export function AdminNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const isSuperAdmin = session?.user?.email === 'nzlouis.com@gmail.com';
+  const isMarie = session?.user?.email === 'nzmarie.com@gmail.com';
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
   const roleName = isSuperAdmin ? 'Super Admin' : 'Admin';
@@ -59,7 +60,7 @@ export function AdminNavbar() {
           {/* Center: Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
             {navLinks.map(link => {
-              if (!link.alwaysShow && !isSuperAdmin) return null;
+              if (!link.alwaysShow && !isSuperAdmin && !isMarie) return null;
               
               return (
                 <NavLink key={link.href} href={link.href}>
@@ -180,7 +181,7 @@ export function AdminNavbar() {
               {/* Navigation Links */}
               <div className="flex-1 overflow-y-auto py-4">
                 {navLinks.map(link => {
-                  if (!link.alwaysShow && !isSuperAdmin) return null;
+                  if (!link.alwaysShow && !isSuperAdmin && !isMarie) return null;
                   
                   const isActive = pathname === link.href;
                   

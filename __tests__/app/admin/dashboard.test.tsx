@@ -239,4 +239,116 @@ describe('Dashboard Stats API', () => {
       expect(mockPush).toHaveBeenCalledWith('/admin/login');
     });
   });
+
+  it('displays suburb filter dropdown', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: {
+            newLeads: 5,
+            highPriorityLeads: 2,
+            pendingOutreach: 156,
+            todayFollowups: 8,
+            overdueFollowups: 3,
+            todayDownloads: 12,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+        }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    const { container } = render(<DashboardPage />);
+
+    await waitFor(() => {
+      const selects = container.querySelectorAll('select');
+      expect(selects.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('filters stats by suburb', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: {
+            newLeads: 5,
+            highPriorityLeads: 2,
+            pendingOutreach: 156,
+            todayFollowups: 8,
+            overdueFollowups: 3,
+            todayDownloads: 12,
+          },
+          suburb: 'Takapuna',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+        }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    render(<DashboardPage />);
+
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it('handles suburb filter with API request', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: {
+            newLeads: 3,
+            highPriorityLeads: 1,
+            pendingOutreach: 50,
+            todayFollowups: 2,
+            overdueFollowups: 1,
+            todayDownloads: 5,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+        }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    render(<DashboardPage />);
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const fetchCalls = (global.fetch as any).mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+  });
 });

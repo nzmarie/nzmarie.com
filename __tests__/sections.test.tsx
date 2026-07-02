@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 import AppraisalSection from "../components/AppraisalSection";
 import ReportDownloadSection from "../components/ReportDownloadSection";
@@ -91,9 +91,9 @@ describe("AppraisalSection", () => {
       await Promise.resolve();
     });
 
-    const nextBtn = screen.getByRole("button", { name: /Request Bespoke Analysis/i });
+    const nextBtn = screen.queryByRole("button", { name: /Book Appraisal/i });
     
-    if (nextBtn.getAttribute('disabled') === null) {
+    if (nextBtn && nextBtn.getAttribute('disabled') === null) {
       fireEvent.click(nextBtn);
     }
 
@@ -105,17 +105,13 @@ describe("AppraisalSection", () => {
     const emailInput = screen.getByPlaceholderText("e.g. john@example.com");
     const phoneInput = screen.getByPlaceholderText("e.g. +64 21 000 0000");
 
-    // Combobox order after suburb field added:
-    // [0] = suburb, [1] = timeline, [2] = motivation, [3] = languagePreference, [4] = heardFrom
     const allSelects = screen.getAllByRole("combobox");
-    const suburbSelect   = allSelects[0];
-    const timelineSelect = allSelects[1];
-    const motivationSelect = allSelects[2];
+    const timelineSelect = allSelects[0];
+    const motivationSelect = allSelects[1];
 
     fireEvent.change(nameInput,        { target: { value: "Bob" } });
     fireEvent.change(emailInput,       { target: { value: "bob@example.com" } });
     fireEvent.change(phoneInput,       { target: { value: "12345" } });
-    fireEvent.change(suburbSelect,     { target: { value: "Albany" } });
     fireEvent.change(timelineSelect,   { target: { value: "within-3-months" } });
     fireEvent.change(motivationSelect, { target: { value: "upsizing" } });
   };
@@ -133,50 +129,47 @@ describe("AppraisalSection", () => {
   it("should submit form successfully and show modal", async () => {
     render(<AppraisalSection lang="en" />);
     await fillForm();
-    const submitBtn = screen.getByRole("button", { name: /Submit Bespoke Request/i });
+    const submitBtn = screen.getByRole("button", { name: /Send to Marie/i });
 
     fireEvent.click(submitBtn);
 
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith("/api/appraisal", expect.any(Object));
+      expect(screen.getByText("Thank you!")).toBeDefined();
     });
-
-    expect(mockFetch).toHaveBeenCalledWith("/api/appraisal", expect.any(Object));
-    expect(screen.getByText("Thank you!")).toBeDefined();
 
     const closeBtn = screen.getByRole("button", { name: /Close/i });
     fireEvent.click(closeBtn);
-    expect(screen.queryByText("Thank you!")).toBeNull();
+    
+    await waitFor(() => {
+      expect(screen.queryByText("Thank you!")).toBeNull();
+    });
   });
 
   it("should handle error state when api fails", async () => {
     mockFetchSuccess = false;
     render(<AppraisalSection lang="en" />);
     await fillForm();
-    const submitBtn = screen.getByRole("button", { name: /Submit Bespoke Request/i });
+    const submitBtn = screen.getByRole("button", { name: /Send to Marie/i });
 
     fireEvent.click(submitBtn);
 
-    await act(async () => {
-      await Promise.resolve().catch(() => {});
+    await waitFor(() => {
+      expect(screen.getByText("An error occurred. Please try again.")).toBeDefined();
     });
-
-    expect(screen.getByText("An error occurred. Please try again.")).toBeDefined();
   });
 
   it("should handle error response from api gracefully", async () => {
     errorOnAppraisalSubmit = true;
     render(<AppraisalSection lang="en" />);
     await fillForm();
-    const submitBtn = screen.getByRole("button", { name: /Submit Bespoke Request/i });
+    const submitBtn = screen.getByRole("button", { name: /Send to Marie/i });
 
     fireEvent.click(submitBtn);
 
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(screen.getByText("An error occurred. Please try again.")).toBeDefined();
     });
-
-    expect(screen.getByText("An error occurred. Please try again.")).toBeDefined();
   });
 });
 

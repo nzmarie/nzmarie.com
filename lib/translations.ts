@@ -168,7 +168,7 @@ export const translations = {
                 facebook: "Facebook / Instagram",
                 other: "Other"
             },
-            submit: "Submit Bespoke Request",
+            submit: "Send to Marie",
             successTitle: "Thank you!",
             successMessage: "Your request has been received. Marie will analyze the local REINZ data and contact you within 3 working days to present your report.",
             close: "Close",
@@ -357,7 +357,7 @@ export const translations = {
                 facebook: "Facebook / Instagram",
                 other: "其他"
             },
-            submit: "提交专属定制申请",
+            submit: "发送给 Marie",
             successTitle: "谢谢您！",
             successMessage: "我们已收到您的申请。Marie 将分析当地的 REINZ 数据，并在 3 个工作日内与您联系以呈递您的评估报告。",
             close: "关闭",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { marieDB } from "@/lib/db";
+import { findLocationBySuburb } from "@/lib/geo-data";
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -23,6 +24,8 @@ export async function POST(request: Request) {
       message,
       source,
       utmSource,
+      region,
+      city,
     } = body as Record<string, string | undefined>;
 
     const propertyAddress =
@@ -39,6 +42,17 @@ export async function POST(request: Request) {
         : "website";
     const suburbValue =
       typeof suburb === "string" && suburb.trim() ? suburb.trim() : "Unknown";
+
+    let resolvedRegion = typeof region === "string" && region.trim() ? region.trim() : null;
+    let resolvedCity = typeof city === "string" && city.trim() ? city.trim() : null;
+
+    if (!resolvedRegion || !resolvedCity) {
+      const location = findLocationBySuburb(suburbValue);
+      if (location) {
+        resolvedRegion = resolvedRegion || location.region;
+        resolvedCity = resolvedCity || location.city;
+      }
+    }
 
     // Validation
     if (!name || !email || !propertyAddress) {
@@ -63,8 +77,8 @@ export async function POST(request: Request) {
     // Insert into appraisal_leads table
     const result = await marieDB.query(
       `INSERT INTO appraisal_leads 
-       (name, email, phone, property_address, suburb, message, source, contact_status, priority)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', 'medium')
+       (name, email, phone, property_address, suburb, region, city, message, source, contact_status, priority)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'new', 'medium')
        RETURNING *`,
       [
         name.trim(),
@@ -72,6 +86,8 @@ export async function POST(request: Request) {
         phone?.trim() || null,
         propertyAddress,
         suburbValue,
+        resolvedRegion,
+        resolvedCity,
         typeof message === "string" ? message.trim() : null,
         sourceValue,
       ]

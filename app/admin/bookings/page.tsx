@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonBookings } from '@/components/admin/Skeleton';
+import { REGIONS, getCitiesByRegion, getSuburbsByCity, type Region } from '@/lib/geo-data';
 
 type BookingStatus = 'new' | 'contacted' | 'scheduled' | 'appraised' | 'converted' | 'lost';
 type BookingPriority = 'high' | 'medium' | 'low';
@@ -14,9 +15,13 @@ interface Booking {
   email: string;
   phone?: string;
   property_address: string;
+  region?: string;
+  city?: string;
   suburb: string;
   timeline?: string;
   motivation?: string;
+  languagePreference?: string;
+  heardFrom?: string;
   contact_status: BookingStatus;
   priority: BookingPriority;
   created_at: string;
@@ -24,6 +29,13 @@ interface Booking {
   agent_notes?: string;
   has_downloaded?: boolean;
   download_count?: number;
+}
+
+interface LocationStat {
+  region: string;
+  city: string;
+  suburb: string;
+  count: number;
 }
 
 interface PaginationMeta {
@@ -48,54 +60,57 @@ const PRIORITY_STYLES: Record<BookingPriority, string> = {
   low: 'bg-green-100 text-green-700',
 };
 
-const SUBURBS = [
-  'Albany', 'Bayview', 'Beach Haven', 'Birkenhead', 'Browns Bay', 'Campbells Bay',
-  'Castor Bay', 'Devonport', 'Fairview Heights', 'Hauraki', 'Hillcrest', 'Long Bay',
-  'Narrow Neck', 'Northcross', 'Okura', 'Oteha', 'Schnapper Rock', 'Takapuna',
-  'Totara Vale', 'Waiake', 'Wairau Valley',
-];
-
 const STATUS_LABELS: Record<BookingStatus, string> = {
-  new: 'New',
-  contacted: 'Contacted',
-  scheduled: 'Scheduled',
-  appraised: 'Appraised',
-  converted: 'Converted',
-  lost: 'Lost',
+  new: 'New', contacted: 'Contacted', scheduled: 'Scheduled',
+  appraised: 'Appraised', converted: 'Converted', lost: 'Lost',
 };
 
 const PRIORITY_LABELS: Record<BookingPriority, string> = {
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
+  high: 'High', medium: 'Medium', low: 'Low',
 };
 
-function formatStatusLabel(value: BookingStatus) {
-  return STATUS_LABELS[value] ?? value;
-}
-
-function formatPriorityLabel(value: BookingPriority) {
-  return PRIORITY_LABELS[value] ?? value;
-}
+function fmtStatus(v: BookingStatus) { return STATUS_LABELS[v] ?? v; }
+function fmtPriority(v: BookingPriority) { return PRIORITY_LABELS[v] ?? v; }
 
 export default function BookingsPage() {
   const { status } = useSession();
   const router = useRouter();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [locationStats, setLocationStats] = useState<LocationStat[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [regionFilter, setRegionFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkStatus, setBulkStatus] = useState('');
+  const availableCities = regionFilter ? getCitiesByRegion(regionFilter as Region) : [];
+  const availableSuburbs = cityFilter ? getSuburbsByCity(cityFilter) : [];
+
+  const handleRegionChange = (value: string) => {
+    setRegionFilter(value);
+    setCityFilter('');
+    setSuburbFilter('');
+    setPage(1);
+  };
+
+  const handleCityChange = (value: string) => {
+    setCityFilter(value);
+    setSuburbFilter('');
+    setPage(1);
+  };
+
+  const handleSuburbChange = (value: string) => {
+    setSuburbFilter(value);
+    setPage(1);
+  };
 
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [editStatus, setEditStatus] = useState<BookingStatus>('new');
@@ -120,6 +135,8 @@ export default function BookingsPage() {
     try {
       const params = new URLSearchParams({ page: page.toString(), limit: '50' });
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (regionFilter) params.set('region', regionFilter);
+      if (cityFilter) params.set('city', cityFilter);
       if (suburbFilter) params.set('suburb', suburbFilter);
       if (statusFilter) params.set('status', statusFilter);
       if (priorityFilter) params.set('priority', priorityFilter);
@@ -128,12 +145,13 @@ export default function BookingsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to fetch');
       setBookings(data.data ?? []);
       setPagination(data.pagination ?? null);
+      setLocationStats(data.locationStats ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bookings');
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, suburbFilter, statusFilter, priorityFilter]);
+  }, [page, debouncedSearch, regionFilter, cityFilter, suburbFilter, statusFilter, priorityFilter]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchBookings();
@@ -159,81 +177,94 @@ export default function BookingsPage() {
       const res = await fetch(`/api/admin/bookings/${detailBooking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contact_status: editStatus,
-          priority: editPriority,
-          agent_notes: editNotes,
-          follow_up_at: editFollowUp || null,
-        }),
+        body: JSON.stringify({ contact_status: editStatus, priority: editPriority, agent_notes: editNotes, follow_up_at: editFollowUp || null }),
       });
       if (!res.ok) throw new Error('Failed to save');
       showNotification('success', 'Changes saved successfully');
       setDetailBooking(null);
       fetchBookings();
-    } catch {
-      showNotification('error', 'Failed to save changes');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selected.size === bookings.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(bookings.map(b => b.id)));
-    }
-  };
-
-  const applyBulkStatus = async () => {
-    if (!bulkStatus || selected.size === 0) return;
-    try {
-      await Promise.all(
-        Array.from(selected).map(id =>
-          fetch(`/api/admin/bookings/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contact_status: bulkStatus }),
-          })
-        )
-      );
-      showNotification('success', `Updated ${selected.size} bookings`);
-      setSelected(new Set());
-      setBulkStatus('');
-      fetchBookings();
-    } catch {
-      showNotification('error', 'Bulk update failed');
-    }
+    } catch { showNotification('error', 'Failed to save changes'); }
+    finally { setSaving(false); }
   };
 
   const clearFilters = () => {
-    setSearch('');
-    setSuburbFilter('');
-    setStatusFilter('');
-    setPriorityFilter('');
-    setPage(1);
+    setSearch(''); setRegionFilter(''); setCityFilter('');
+    setSuburbFilter(''); setStatusFilter(''); setPriorityFilter(''); setPage(1);
   };
 
-  const stats = useMemo(() => ({
-    total: pagination?.total ?? bookings.length,
+  const totalBookings = pagination?.total ?? bookings.length;
+
+  const summaryStats = useMemo(() => ({
+    total: totalBookings,
     high: bookings.filter(b => b.priority === 'high').length,
     followUp: bookings.filter(b => {
       if (!b.next_follow_up_at) return false;
       return new Date(b.next_follow_up_at).toDateString() === new Date().toDateString();
     }).length,
-  }), [bookings, pagination]);
+  }), [bookings, totalBookings]);
+
+  const locationHighlights = useMemo(() => {
+    const pct = (count: number) => (totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0);
+
+    const normalize = (value: string) => value.trim().toLowerCase();
+    const countFor = (field: 'region' | 'city' | 'suburb', target: string) =>
+      locationStats.reduce((sum, stat) => {
+        const rawValue = String(stat[field] || '').trim().toLowerCase();
+        if (rawValue === normalize(target)) {
+          return sum + Number(stat.count || 0);
+        }
+        return sum;
+      }, 0);
+
+    const countForAny = (field: 'region' | 'city' | 'suburb', targets: string[]) =>
+      targets.reduce((sum, target) => sum + countFor(field, target), 0);
+
+    const aucklandCount = countForAny('region', ['Auckland']);
+    const northShoreCount = countForAny('city', ['North Shore City', 'North Shore']);
+    const northcrossCount = countForAny('suburb', ['Northcross']);
+
+    return [
+      { label: 'Auckland', count: aucklandCount, pct: pct(aucklandCount) },
+      { label: 'North Shore', count: northShoreCount, pct: pct(northShoreCount) },
+      { label: 'Northcross', count: northcrossCount, pct: pct(northcrossCount) },
+    ];
+  }, [locationStats, totalBookings]);
+
+  // Build three-tier aggregation from locationStats returned by the API
+  const geoStats = useMemo(() => {
+    if (!locationStats.length) return { regions: [], cities: [], suburbs: [] };
+
+    // Region totals
+    const regionMap = new Map<string, number>();
+    locationStats.forEach(s => {
+      const key = String(s.region || 'Unknown').trim();
+      regionMap.set(key, (regionMap.get(key) || 0) + s.count);
+    });
+    const regions = Array.from(regionMap.entries())
+      .map(([region, count]) => ({ region, count, pct: totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    // City totals
+    const cityMap = new Map<string, { region: string; count: number }>();
+    locationStats.forEach(s => {
+      const cityKey = String(s.city || 'Unknown').trim();
+      const existing = cityMap.get(cityKey);
+      if (existing) existing.count += s.count;
+      else cityMap.set(cityKey, { region: String(s.region || 'Unknown').trim(), count: s.count });
+    });
+    const cities = Array.from(cityMap.entries())
+      .map(([city, { region, count }]) => ({ city, region, count, pct: totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    // Suburb totals
+    const suburbs = locationStats
+      .map(s => ({ suburb: String(s.suburb || 'Other').trim(), city: String(s.city || 'Unknown').trim(), region: String(s.region || 'Unknown').trim(), count: s.count, pct: totalBookings > 0 ? Math.round((s.count / totalBookings) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return { regions, cities, suburbs };
+  }, [locationStats, totalBookings]);
 
   if (status === 'loading') return <SkeletonBookings />;
 
@@ -254,9 +285,9 @@ export default function BookingsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Total Leads', value: stats.total, color: 'text-slate-800' },
-          { label: 'High Priority', value: stats.high, color: 'text-red-600' },
-          { label: 'Follow Up Today', value: stats.followUp, color: 'text-amber-600' },
+          { label: 'Total Bookings', value: summaryStats.total, color: 'text-slate-800' },
+          { label: 'High Priority', value: summaryStats.high, color: 'text-red-600' },
+          { label: 'Follow Up Today', value: summaryStats.followUp, color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <p className="text-sm text-slate-500 mb-1">{s.label}</p>
@@ -265,168 +296,248 @@ export default function BookingsPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-        <div className="flex flex-wrap gap-3">
-          <input
-            id="bookings-search"
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, email, phone or address..."
-            className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm"
-          />
-          <select
-            id="bookings-suburb"
-            value={suburbFilter}
-            onChange={e => { setSuburbFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
-          >
-            <option value="">All Suburbs</option>
-            {SUBURBS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            id="bookings-status"
-            value={statusFilter}
-            onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
-          >
-            <option value="">All Status</option>
-            {(['new', 'contacted', 'scheduled', 'appraised', 'converted', 'lost'] as BookingStatus[]).map(s => (
-              <option key={s} value={s}>{formatStatusLabel(s)}</option>
-            ))}
-          </select>
-          <select
-            id="bookings-priority"
-            value={priorityFilter}
-            onChange={e => { setPriorityFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
-          >
-            <option value="">All Priority</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <button
-            onClick={clearFilters}
-            className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
-          >
-            Clear Filters
-          </button>
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">📍 Location Highlights</h2>
+            <p className="text-sm text-slate-500">Auckland, North Shore and Northcross totals with percentages</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {locationHighlights.map(item => (
+            <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-800">{item.label}</div>
+              <div className="mt-2 flex items-end justify-between">
+                <span className="text-2xl font-bold text-slate-900">{item.count}</span>
+                <span className="text-sm font-medium text-slate-500">{item.pct}%</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {selected.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-blue-800">Selected: {selected.size} leads</span>
-          <select
-            value={bulkStatus}
-            onChange={e => setBulkStatus(e.target.value)}
-            className="px-3 py-1.5 border border-blue-300 rounded-lg text-sm"
-          >
-            <option value="">Update Status...</option>
-            {(['new', 'contacted', 'scheduled', 'appraised', 'converted', 'lost'] as BookingStatus[]).map(s => (
-              <option key={s} value={s}>{formatStatusLabel(s)}</option>
-            ))}
-          </select>
-          <button
-            onClick={applyBulkStatus}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-          >
-            Apply
-          </button>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="px-3 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
-          >
-            ✕ Clear
-          </button>
+      {(geoStats.regions.length > 0 || locationStats.length === 0) && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">📍 Geographic Breakdown</h2>
+
+          {locationStats.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Location data will appear here after the database migration is run and new bookings are submitted with address selection.
+            </p>
+          ) : (
+            <>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">By Region</h3>
+                <div className="flex flex-wrap gap-3">
+                  {geoStats.regions.map(r => (
+                    <button
+                      key={r.region}
+                      onClick={() => { handleRegionChange(r.region); }}
+                      className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-4 py-2 transition-colors"
+                    >
+                      <span className="text-sm font-semibold text-blue-800">{r.region}</span>
+                      <span className="text-lg font-bold text-blue-900">{r.count}</span>
+                      <span className="text-xs text-blue-600 bg-blue-100 rounded-full px-2 py-0.5">{r.pct}%</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">By City / District</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {geoStats.cities.map(c => (
+                    <button
+                      key={c.city}
+                      onClick={() => {
+                        setRegionFilter(c.region);
+                        setCityFilter(c.city);
+                        setSuburbFilter('');
+                        setPage(1);
+                      }}
+                      className="text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-lg p-3 transition-colors"
+                    >
+                      <div className="text-xs text-slate-500 mb-1">{c.region}</div>
+                      <div className="text-sm font-semibold text-slate-800 leading-tight">{c.city}</div>
+                      <div className="flex items-baseline gap-1 mt-1">
+                        <span className="text-xl font-bold text-indigo-700">{c.count}</span>
+                        <span className="text-xs text-slate-400">bookings</span>
+                        <span className="ml-auto text-xs font-medium text-indigo-500">{c.pct}%</span>
+                      </div>
+                      <div className="mt-1.5 w-full bg-slate-200 rounded-full h-1">
+                        <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${c.pct}%` }} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">By Suburb (Top 10)</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {geoStats.suburbs.map(s => (
+                    <button
+                      key={`${s.suburb}-${s.city}`}
+                      onClick={() => {
+                        setRegionFilter(s.region);
+                        setCityFilter(s.city);
+                        setSuburbFilter(s.suburb);
+                        setPage(1);
+                      }}
+                      className="text-left bg-slate-50 hover:bg-green-50 border border-slate-200 hover:border-green-300 rounded-lg p-3 transition-colors"
+                    >
+                      <div className="text-xs text-slate-400 truncate">{s.city}</div>
+                      <div className="text-sm font-semibold text-slate-800 mt-0.5">{s.suburb}</div>
+                      <div className="flex items-baseline gap-1 mt-1">
+                        <span className="text-xl font-bold text-green-700">{s.count}</span>
+                        <span className="text-xs text-slate-400">bookings</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1.5">
+                        <div className="flex-1 bg-slate-200 rounded-full h-1 mr-2">
+                          <div className="bg-green-500 h-1 rounded-full" style={{ width: `${s.pct}%` }} />
+                        </div>
+                        <span className="text-xs font-medium text-green-600 shrink-0">{s.pct}%</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Appraisal Requests</h2>
-          {pagination && (
-            <span className="text-sm text-slate-500">
-              {pagination.total} total · Page {page} of {pagination.totalPages}
-            </span>
-          )}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">📋 Booking List</h2>
+            <p className="text-sm text-slate-500">Search by client, email, property, region, city or suburb</p>
+          </div>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-sm font-medium text-slate-600 hover:text-slate-800"
+          >
+            Clear filters
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">Search</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search client, email, property, region, city or suburb"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">Region</span>
+            <select
+              aria-label="Region"
+              value={regionFilter}
+              onChange={(e) => { handleRegionChange(e.target.value); }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">All regions</option>
+              {REGIONS.map(region => (
+                <option key={region} value={region}>{region}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">City / District</span>
+            <select
+              aria-label="City / District"
+              value={cityFilter}
+              onChange={(e) => { handleCityChange(e.target.value); }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">All cities</option>
+              {availableCities.map(city => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">Suburb</span>
+            <select
+              aria-label="Suburb"
+              value={suburbFilter}
+              onChange={(e) => { handleSuburbChange(e.target.value); }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">All suburbs</option>
+              {availableSuburbs.map(suburb => (
+                <option key={suburb} value={suburb}>{suburb}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">Status</span>
+            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+              <option value="">All statuses</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-medium text-slate-700">
+            <span className="mb-1 block">Priority</span>
+            <select value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+              <option value="">All priorities</option>
+              {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-slate-400">Loading...</div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Loading bookings…</div>
         ) : error ? (
-          <div className="p-8 text-center text-red-600">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-600">{error}</div>
         ) : bookings.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 text-gray-400 mb-4">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Bookings Found</h3>
-            <p className="text-gray-500">Appraisal requests will appear here</p>
-          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No bookings found for the current filters.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="px-4 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selected.size === bookings.length && bookings.length > 0}
-                      onChange={toggleSelectAll}
-                      className="rounded border-slate-300"
-                    />
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Address</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Suburb</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Priority</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
-                  <th className="px-4 py-3"></th>
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Client</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Region</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">City / District</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Suburb</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Status</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Priority</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Created</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {bookings.map(b => (
-                  <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(b.id)}
-                        onChange={() => toggleSelect(b.id)}
-                        className="rounded border-slate-300"
-                      />
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {bookings.map(booking => (
+                  <tr key={booking.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-800">{booking.client_name}</div>
+                      <div className="text-xs text-slate-500">{booking.email}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{b.client_name}</div>
-                      <div className="text-xs text-slate-500">{b.email}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{b.property_address}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{b.suburb}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_STYLES[b.contact_status] ?? 'bg-slate-100 text-slate-600'}`}>
-                        {formatStatusLabel(b.contact_status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${PRIORITY_STYLES[b.priority] ?? 'bg-slate-100 text-slate-600'}`}>
-                        {formatPriorityLabel(b.priority)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-500">
-                      {new Date(b.created_at).toLocaleDateString('en-NZ')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => openDetail(b)}
-                        className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
-                      >
-                        Edit
-                      </button>
+                    <td className="px-3 py-3 text-slate-700">{booking.region || 'Unknown'}</td>
+                    <td className="px-3 py-3 text-slate-700">{booking.city || 'Unknown'}</td>
+                    <td className="px-3 py-3 text-slate-700">{booking.suburb || 'Other'}</td>
+                    <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[booking.contact_status]}`}>{fmtStatus(booking.contact_status)}</span></td>
+                    <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${PRIORITY_STYLES[booking.priority]}`}>{fmtPriority(booking.priority)}</span></td>
+                    <td className="px-3 py-3 text-slate-700">{new Date(booking.created_at).toLocaleDateString()}</td>
+                    <td className="px-3 py-3">
+                      <button type="button" onClick={() => openDetail(booking)} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">View</button>
                     </td>
                   </tr>
                 ))}
@@ -436,119 +547,83 @@ export default function BookingsPage() {
         )}
 
         {pagination && pagination.totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex justify-between items-center">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-slate-500">Page {page} of {pagination.totalPages}</span>
-            <button
-              onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-              disabled={page >= pagination.totalPages}
-              className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-            >
-              Next
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
+            <button type="button" onClick={() => setPage(prev => Math.max(1, prev - 1))} disabled={page <= 1} className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-50">Previous</button>
+            <span>Page {pagination.page} of {pagination.totalPages}</span>
+            <button type="button" onClick={() => setPage(prev => prev + 1)} disabled={page >= pagination.totalPages} className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-50">Next</button>
           </div>
         )}
       </div>
 
       {detailBooking && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setDetailBooking(null)} />
-          <div className="relative ml-auto w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Booking Details</h2>
-              <button onClick={() => setDetailBooking(null)} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Booking Details</h3>
+                <p className="text-sm text-slate-500">{detailBooking.client_name}</p>
+              </div>
+              <button type="button" onClick={() => setDetailBooking(null)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700">
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase mb-3">Client Information</h3>
-                <div className="space-y-2">
-                  <div><span className="text-sm text-slate-500">Name: </span><span className="text-sm font-medium">{detailBooking.client_name}</span></div>
-                  <div><span className="text-sm text-slate-500">Email: </span><span className="text-sm">{detailBooking.email}</span></div>
-                  {detailBooking.phone && <div><span className="text-sm text-slate-500">Phone: </span><span className="text-sm">{detailBooking.phone}</span></div>}
-                  <div><span className="text-sm text-slate-500">Address: </span><span className="text-sm">{detailBooking.property_address}</span></div>
-                  <div><span className="text-sm text-slate-500">Suburb: </span><span className="text-sm">{detailBooking.suburb}</span></div>
-                  {detailBooking.timeline && <div><span className="text-sm text-slate-500">Timeline: </span><span className="text-sm">{detailBooking.timeline}</span></div>}
-                </div>
+                <div className="font-semibold text-slate-900">Contact</div>
+                <div>{detailBooking.email}</div>
+                <div>{detailBooking.phone || '—'}</div>
               </div>
-
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase mb-3">Status Management</h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm text-slate-500 mb-1">Status</label>
-                    <select
-                      value={editStatus}
-                      onChange={e => setEditStatus(e.target.value as BookingStatus)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    >
-                      {(['new', 'contacted', 'scheduled', 'appraised', 'converted', 'lost'] as BookingStatus[]).map(s => (
-                        <option key={s} value={s}>{formatStatusLabel(s)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-500 mb-1">Priority</label>
-                    <select
-                      value={editPriority}
-                      onChange={e => setEditPriority(e.target.value as BookingPriority)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    >
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-500 mb-1">Next Follow-up Date</label>
-                    <input
-                      type="date"
-                      value={editFollowUp}
-                      onChange={e => setEditFollowUp(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
+                <div className="font-semibold text-slate-900">Location</div>
+                <div>{detailBooking.region || 'Unknown'}</div>
+                <div>{detailBooking.city || 'Unknown'}</div>
+                <div>{detailBooking.suburb || 'Other'}</div>
               </div>
-
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase mb-3">Agent Notes</h3>
-                <textarea
-                  value={editNotes}
-                  onChange={e => setEditNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Add notes about this client..."
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none"
-                />
+                <div className="font-semibold text-slate-900">Sales details</div>
+                <div>{detailBooking.timeline || '—'}</div>
+                <div>{detailBooking.motivation || '—'}</div>
               </div>
-
-              {detailBooking.has_downloaded && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-700 font-medium">📄 Report Downloaded</p>
-                  <p className="text-xs text-green-600">Downloaded {detailBooking.download_count} time(s)</p>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={saveDetail}
-                  disabled={saving}
-                  className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button
-                  onClick={() => setDetailBooking(null)}
-                  className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
-                >
-                  Close
-                </button>
+            </div>
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+              <div>
+                <div className="font-semibold text-slate-900">Preferences</div>
+                <div>{detailBooking.languagePreference || '—'}</div>
+                <div>{detailBooking.heardFrom || '—'}</div>
               </div>
+              <div>
+                <div className="font-semibold text-slate-900">Other details</div>
+                <div>Downloaded report: {detailBooking.has_downloaded ? 'Yes' : 'No'}</div>
+                <div>Download count: {detailBooking.download_count ?? 0}</div>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="text-sm font-medium text-slate-700">
+                <span className="mb-1 block">Status</span>
+                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as BookingStatus)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                <span className="mb-1 block">Priority</span>
+                <select value={editPriority} onChange={(e) => setEditPriority(e.target.value as BookingPriority)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+                  {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              <span className="mb-1 block">Notes</span>
+              <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+            </label>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              <span className="mb-1 block">Next follow-up</span>
+              <input type="date" value={editFollowUp} onChange={(e) => setEditFollowUp(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setDetailBooking(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</button>
+              <button type="button" onClick={saveDetail} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Saving…' : 'Save changes'}</button>
             </div>
           </div>
         </div>

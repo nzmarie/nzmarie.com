@@ -2,15 +2,29 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { translations, Language } from "../lib/translations";
-import { extractSuburb, getSuburbOptions } from "../lib/address-parser";
+import {
+  findLocationBySuburb,
+  type Region,
+} from "../lib/geo-data";
 
 const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
+
+interface GeoapifyProperties {
+  formatted: string;
+  state?: string;
+  city?: string;
+  suburb?: string;
+  county?: string;
+  district?: string;
+}
 
 export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].appraisal;
   const [formData, setFormData] = useState({
     name: "",
     address: "",
+    region: "Auckland" as Region,
+    city: "North Shore City",
     suburb: "",
     email: "",
     phone: "",
@@ -62,10 +76,24 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
           `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(value)}&filter=countrycode:nz&limit=6&apiKey=${GEOAPIFY_KEY}`
         );
         const data = await res.json();
-        const results: string[] = (data.features ?? []).map(
-          (f: { properties: { formatted: string } }) => f.properties.formatted
-        );
-        setSuggestions(results);
+        const features = data.features ?? [];
+        
+        // Store both formatted address and properties for later extraction
+        const results: { formatted: string; properties: GeoapifyProperties }[] = features.map((f: { properties: GeoapifyProperties }) => ({
+          formatted: f.properties.formatted,
+          properties: f.properties,
+        }));
+
+        const trimmedValue = value.trim();
+        if (
+          results.length === 1 &&
+          results[0].formatted.trim().toLowerCase() === trimmedValue.toLowerCase()
+        ) {
+          handleSelectSuggestion(results[0].formatted);
+          return;
+        }
+        
+        setSuggestions(results.map((r) => r.formatted));
         setShowSuggestions(results.length > 0);
         setNoResults(results.length === 0);
       } catch {
@@ -78,17 +106,41 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   };
 
   const handleSelectSuggestion = (address: string) => {
-    const detectedSuburb = extractSuburb(address);
+    // Try to extract suburb from address and find matching location data
+    const addressParts = address.split(',').map(s => s.trim());
+    let detectedSuburb = "";
+    let detectedCity = formData.city;
+    let detectedRegion = formData.region;
+    
+    // Try to find suburb in address parts
+    for (const part of addressParts) {
+      const location = findLocationBySuburb(part);
+      if (location) {
+        detectedSuburb = location.suburb;
+        detectedCity = location.city;
+        detectedRegion = location.region;
+        break;
+      }
+    }
+    
     setFormData((prev) => ({ 
       ...prev, 
       address,
-      suburb: detectedSuburb || prev.suburb
+      suburb: detectedSuburb || prev.suburb,
+      city: detectedCity,
+      region: detectedRegion,
     }));
     setIsAddressSelected(true);
     setSuggestions([]);
     setShowSuggestions(false);
     setNoResults(false);
   };
+
+  useEffect(() => {
+    if (isAddressSelected) {
+      setStep(2);
+    }
+  }, [isAddressSelected]);
 
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +181,19 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
       });
       if (res.ok) {
         setStatus("success");
-        setFormData({ name: "", address: "", suburb: "", email: "", phone: "", timeline: "", motivation: "", languagePreference: "", heardFrom: "" });
+        setFormData({ 
+          name: "", 
+          address: "", 
+          region: "Auckland" as Region,
+          city: "North Shore City",
+          suburb: "", 
+          email: "", 
+          phone: "", 
+          timeline: "", 
+          motivation: "", 
+          languagePreference: "", 
+          heardFrom: "" 
+        });
         setIsAddressSelected(false);
         setStep(1);
       } else {
@@ -226,7 +290,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
                   >
-                    {lang === "en" ? "Request Bespoke Analysis" : "申请高定分析"}
+                    {lang === "en" ? "Book Appraisal" : "预约评估"}
                   </button>
                 </div>
                 <p className={`text-xs text-left pl-1 transition-colors ${
@@ -259,8 +323,8 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
 
                 <p className="text-slate-700 font-medium mb-4">
                   {lang === "en"
-                    ? "Great address! Where should Marie send your tailored report?"
-                    : "太棒了！Marie 应该把定制报告发送到哪里？"}
+                    ? "Great address! Help Marie fine-tune your free appraisal by sharing a few details."
+                    : "太棒了！请填写以下信息，帮助 Marie 优化您的免费评估。"}
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -290,30 +354,6 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                       placeholder="e.g. john@example.com"
                     />
                   </div>
-                </div>
-
-                <div className="flex flex-col">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Suburb <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.suburb}
-                    onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
-                  >
-                    <option value="">Select suburb...</option>
-                    {getSuburbOptions().map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {formData.suburb && (
-                    <p className="text-xs text-green-600 mt-1">
-                      ✓ Auto-detected from address
-                    </p>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -408,7 +448,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                   disabled={status === "loading"}
                   className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-center"
                 >
-                  {status === "loading" ? "..." : t.submit}
+                  {status === "loading" ? "..." : (lang === "en" ? "Send to Marie" : "发送给 Marie")}
                 </button>
 
                 {status === "error" && (

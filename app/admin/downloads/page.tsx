@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonDownloads } from '@/components/admin/Skeleton';
+import { SuburbFilter } from '@/components/admin/SuburbFilter';
 
 const SUPER_ADMIN = 'nzlouis.com@gmail.com';
 const MARIE_EMAIL = 'nzmarie.com@gmail.com';
@@ -42,7 +43,6 @@ export default function DownloadsPage() {
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [suburbs, setSuburbs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -83,7 +83,6 @@ export default function DownloadsPage() {
       setDownloads(data.data || []);
       setPagination(data.pagination || null);
       setStats(data.stats || null);
-      setSuburbs(data.suburbs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load downloads');
     } finally {
@@ -153,15 +152,14 @@ export default function DownloadsPage() {
             placeholder="Search by email, name, or tracking code..."
             className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <select
-            id="downloads-suburb"
-            value={suburbFilter}
-            onChange={(e) => { setSuburbFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Suburbs</option>
-            {suburbs.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <div className="flex items-center">
+            <SuburbFilter
+              value={suburbFilter}
+              onChange={(value) => { setSuburbFilter(value); setPage(1); }}
+              showLabel={false}
+              allLabel="All Suburbs"
+            />
+          </div>
           <select
             id="downloads-source"
             value={sourceFilter}
