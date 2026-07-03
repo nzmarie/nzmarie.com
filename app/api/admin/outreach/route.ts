@@ -20,7 +20,9 @@ export async function GET(request: Request) {
   const region = searchParams.get('region');
   const city = searchParams.get('city');
   const suburb = searchParams.get('suburb');
+  const street = searchParams.get('street');
   const search = searchParams.get('search');
+  const sortOrder = searchParams.get('sortOrder') || 'asc'; // 'asc' or 'desc'
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '100');
   const offset = (page - 1) * limit;
@@ -51,12 +53,25 @@ export async function GET(request: Request) {
       query += ` AND suburb = $${idx++}`;
       params.push(suburb);
     }
+    if (street) {
+      query += ` AND street = $${idx++}`;
+      params.push(street);
+    }
     if (search) {
       query += ` AND property_address ILIKE $${idx++}`;
       params.push(`%${search}%`);
     }
 
-    query += ` ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
+    // 智能排序：suburb → street → 录入日期 → 门牌号
+    const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
+    query += ` 
+      ORDER BY 
+        suburb ASC,
+        street ASC NULLS LAST,
+        created_at ${orderDirection},
+        NULLIF(REGEXP_REPLACE(property_address, '\\D', '', 'g'), '')::INTEGER ASC NULLS LAST
+      LIMIT $${idx++} OFFSET $${idx++}
+    `;
     params.push(limit, offset);
 
     const result = await marieDB.query(query, params);
@@ -71,6 +86,7 @@ export async function GET(request: Request) {
     if (region) { countQuery += ` AND region = $${ci++}`; countParams.push(region); }
     if (city) { countQuery += ` AND city = $${ci++}`; countParams.push(city); }
     if (suburb) { countQuery += ` AND suburb = $${ci++}`; countParams.push(suburb); }
+    if (street) { countQuery += ` AND street = $${ci++}`; countParams.push(street); }
     if (search) { countQuery += ` AND property_address ILIKE $${ci++}`; countParams.push(`%${search}%`); }
 
     const countResult = await marieDB.query(countQuery, countParams);

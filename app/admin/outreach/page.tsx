@@ -13,6 +13,7 @@ interface OutreachProperty {
   suburb: string;
   city: string;
   region: string;
+  street?: string;
   owner_name?: string;
   property_type?: string;
   campaign: string;
@@ -57,12 +58,15 @@ export default function OutreachPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
+  const [streetFilter, setStreetFilter] = useState('');
   const [campaignFilter, setCampaignFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   
   const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [availableStreets, setAvailableStreets] = useState<string[]>([]);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -80,8 +84,10 @@ export default function OutreachPage() {
         status: activeTab,
         page: page.toString(),
         limit: '200',
+        sortOrder,
       });
       if (suburbFilter) params.set('suburb', suburbFilter);
+      if (streetFilter) params.set('street', streetFilter);
       if (campaignFilter) params.set('campaign', campaignFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
 
@@ -96,11 +102,20 @@ export default function OutreachPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, suburbFilter, campaignFilter, debouncedSearch]);
+  }, [activeTab, page, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
   }, [status, fetchItems]);
+
+  // 获取当前过滤条件下的可用街道
+  useEffect(() => {
+    const streets = new Set<string>();
+    items.forEach(item => {
+      if (item.street) streets.add(item.street);
+    });
+    setAvailableStreets(Array.from(streets).sort());
+  }, [items]);
 
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
@@ -175,16 +190,63 @@ export default function OutreachPage() {
     }
   };
 
-  // Group by suburb
+  // Extract house number helper
+  function extractHouseNumber(address: string): number {
+    const match = address.match(/^(\d+)/);
+    return match ? parseInt(match[1], 10) : 999999;
+  }
+
+  // Group by suburb and street with smart sorting
   const groupedBySuburb = useMemo(() => {
-    const groups = new Map<string, OutreachProperty[]>();
+    const groups = new Map<string, Map<string, OutreachProperty[]>>();
+    
     items.forEach((item) => {
       const suburb = item.suburb || 'Unknown';
-      if (!groups.has(suburb)) groups.set(suburb, []);
-      groups.get(suburb)!.push(item);
+      const street = item.street || 'Unknown Street';
+      
+      if (!groups.has(suburb)) {
+        groups.set(suburb, new Map());
+      }
+      const streetMap = groups.get(suburb)!;
+      
+      if (!streetMap.has(street)) {
+        streetMap.set(street, []);
+      }
+      streetMap.get(street)!.push(item);
     });
-    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [items]);
+    
+    // Convert to array and sort
+    return Array.from(groups.entries())
+      .map(([suburb, streetMap]) => {
+        const streets = Array.from(streetMap.entries())
+          .map(([street, properties]) => ({
+            street,
+            properties: properties.sort((a, b) => {
+              // Within same street: sort by created_at then house number
+              const dateCompare = sortOrder === 'asc' 
+                ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              
+              // If dates are the same, sort by house number
+              if (Math.abs(dateCompare) < 1000) { // within 1 second, consider same batch
+                return extractHouseNumber(a.property_address) - 
+                       extractHouseNumber(b.property_address);
+              }
+              
+              return dateCompare;
+            }),
+            totalCount: properties.length,
+          }))
+          .sort((a, b) => a.street.localeCompare(b.street));
+        
+        return {
+          suburb,
+          streets,
+          totalCount: streets.reduce((sum, s) => sum + s.totalCount, 0),
+        };
+      })
+      .sort((a, b) => b.totalCount - a.totalCount);
+  }, [items, sortOrder]);
 
   const stats = useMemo(() => {
     const totalPending = items.filter((i) => i.status === 'pending').length;
@@ -267,25 +329,96 @@ export default function OutreachPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="🔍 Search by address..."
-            className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          
           <select
             value={suburbFilter}
-            onChange={(e) => { setSuburbFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            onChange={(e) => { 
+              setSuburbFilter(e.target.value); 
+              setStreetFilter(''); // 重置街道过滤
+              setPage(1); 
+            }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Suburbs</option>
             {allSuburbs.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+
+          <select
+            value={streetFilter}
+            onChange={(e) => { 
+              setStreetFilter(e.target.value); 
+              setPage(1); 
+            }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={availableStreets.length === 0}
+          >
+            <option value="">All Streets</option>
+            {availableStreets.map((street) => (
+              <option key={street} value={street}>{street}</option>
+            ))}
+          </select>
+
+          <select
+            value={sortOrder}
+            onChange={(e) => { 
+              setSortOrder(e.target.value as 'asc' | 'desc'); 
+              setPage(1); 
+            }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="asc">📅 Time: Oldest First</option>
+            <option value="desc">📅 Time: Newest First</option>
+          </select>
+          
           <button
-            onClick={() => { setSearch(''); setSuburbFilter(''); setCampaignFilter(''); }}
+            onClick={() => { 
+              setSearch(''); 
+              setSuburbFilter(''); 
+              setStreetFilter('');
+              setCampaignFilter(''); 
+              setSortOrder('asc');
+              setPage(1);
+            }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
-            Clear
+            ✕ Clear All
           </button>
         </div>
+
+        {/* Active Filters Display */}
+        {(suburbFilter || streetFilter || search || sortOrder === 'desc') && (
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
+            <span className="text-xs text-slate-500 font-medium">Active Filters:</span>
+            {suburbFilter && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                Suburb: {suburbFilter}
+                <button onClick={() => setSuburbFilter('')} className="hover:text-blue-900">✕</button>
+              </span>
+            )}
+            {streetFilter && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
+                Street: {streetFilter}
+                <button onClick={() => setStreetFilter('')} className="hover:text-purple-900">✕</button>
+              </span>
+            )}
+            {search && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                Search: {search}
+                <button onClick={() => setSearch('')} className="hover:text-green-900">✕</button>
+              </span>
+            )}
+            {sortOrder === 'desc' && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
+                Newest First
+                <button onClick={() => setSortOrder('asc')} className="hover:text-orange-900">✕</button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bulk Actions */}
@@ -354,7 +487,7 @@ export default function OutreachPage() {
           </div>
         ) : (
           <div className="p-4 space-y-3">
-            {groupedBySuburb.map(([suburb, properties]) => {
+            {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
               const isExpanded = expandedSuburbs.has(suburb);
               return (
                 <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
@@ -367,13 +500,13 @@ export default function OutreachPage() {
                       <div className="text-left">
                         <div className="font-semibold text-slate-800">{suburb}</div>
                         <div className="text-xs text-slate-500">
-                          {properties[0]?.city}, {properties[0]?.region}
+                          {streets.length} {streets.length === 1 ? 'street' : 'streets'}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-medium text-slate-600">
-                        {properties.length} {properties.length === 1 ? 'address' : 'addresses'}
+                        {totalCount} {totalCount === 1 ? 'address' : 'addresses'}
                       </span>
                       <span className="text-slate-400">{isExpanded ? '▼' : '▶'}</span>
                     </div>
@@ -381,37 +514,61 @@ export default function OutreachPage() {
 
                   {isExpanded && (
                     <div className="divide-y divide-slate-100">
-                      {properties.map((prop) => (
-                        <div
-                          key={prop.id}
-                          className="px-4 py-3 hover:bg-slate-50 transition-colors flex items-center gap-4"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected.has(prop.id)}
-                            onChange={() => toggleSelect(prop.id)}
-                            className="rounded border-slate-300"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-slate-800 truncate">
-                              {prop.property_address}
-                            </div>
-                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                              {prop.property_type && (
-                                <span className="px-2 py-0.5 bg-slate-100 rounded">
-                                  {prop.property_type}
-                                </span>
-                              )}
-                              <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
+                      {streets.map(({ street, properties, totalCount: streetTotal }) => (
+                        <div key={street} className="bg-white">
+                          <div className="px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">📍</span>
+                                <span className="font-medium text-slate-700">{street}</span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-medium">
+                                {streetTotal} {streetTotal === 1 ? 'address' : 'addresses'}
+                              </span>
                             </div>
                           </div>
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                              STATUS_COLORS[prop.status]
-                            }`}
-                          >
-                            {STATUS_LABELS[prop.status]}
-                          </span>
+                          
+                          <div className="divide-y divide-slate-50">
+                            {properties.map((prop) => (
+                              <div
+                                key={prop.id}
+                                className="px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-4"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected.has(prop.id)}
+                                  onChange={() => toggleSelect(prop.id)}
+                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-800 truncate">
+                                    {prop.property_address}
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                    {prop.property_type && (
+                                      <span className="px-2 py-0.5 bg-slate-100 rounded">
+                                        {prop.property_type}
+                                      </span>
+                                    )}
+                                    <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
+                                    <span className="text-slate-400">
+                                      {new Date(prop.created_at).toLocaleTimeString('en-NZ', { 
+                                        hour: '2-digit', 
+                                        minute: '2-digit' 
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                                    STATUS_COLORS[prop.status]
+                                  }`}
+                                >
+                                  {STATUS_LABELS[prop.status]}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>

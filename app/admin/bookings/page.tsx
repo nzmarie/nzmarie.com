@@ -514,8 +514,7 @@ export default function BookingsPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-3 py-3 text-left font-semibold text-slate-600">Client</th>
-                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Region</th>
-                  <th className="px-3 py-3 text-left font-semibold text-slate-600">City / District</th>
+                  <th className="px-3 py-3 text-left font-semibold text-slate-600">Address</th>
                   <th className="px-3 py-3 text-left font-semibold text-slate-600">Suburb</th>
                   <th className="px-3 py-3 text-left font-semibold text-slate-600">Status</th>
                   <th className="px-3 py-3 text-left font-semibold text-slate-600">Priority</th>
@@ -530,8 +529,7 @@ export default function BookingsPage() {
                       <div className="font-semibold text-slate-800">{booking.client_name}</div>
                       <div className="text-xs text-slate-500">{booking.email}</div>
                     </td>
-                    <td className="px-3 py-3 text-slate-700">{booking.region || 'Unknown'}</td>
-                    <td className="px-3 py-3 text-slate-700">{booking.city || 'Unknown'}</td>
+                    <td className="px-3 py-3 text-slate-700">{booking.property_address || '—'}</td>
                     <td className="px-3 py-3 text-slate-700">{booking.suburb || 'Other'}</td>
                     <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[booking.contact_status]}`}>{fmtStatus(booking.contact_status)}</span></td>
                     <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${PRIORITY_STYLES[booking.priority]}`}>{fmtPriority(booking.priority)}</span></td>
@@ -556,74 +554,216 @@ export default function BookingsPage() {
       </div>
 
       {detailBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
+          <div className="w-full max-w-3xl rounded-xl bg-white p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Booking Details</h3>
-                <p className="text-sm text-slate-500">{detailBooking.client_name}</p>
+                <h3 className="text-xl font-bold text-slate-900">📋 Booking Details</h3>
+                <p className="text-sm text-slate-500 mt-1">{detailBooking.client_name}</p>
               </div>
-              <button type="button" onClick={() => setDetailBooking(null)} className="text-slate-500 hover:text-slate-700">✕</button>
+              <button 
+                type="button" 
+                onClick={() => setDetailBooking(null)} 
+                className="text-slate-400 hover:text-slate-600 text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100"
+              >
+                ✕
+              </button>
             </div>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700">
-              <div>
-                <div className="font-semibold text-slate-900">Contact</div>
-                <div>{detailBooking.email}</div>
-                <div>{detailBooking.phone || '—'}</div>
+
+            {/* All Fields Display */}
+            <div className="space-y-6">
+              {/* Client Information */}
+              <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Client Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="font-semibold text-slate-600">Name:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.client_name}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Email:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.email}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Phone:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.phone || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Created:</span>
+                    <span className="ml-2 text-slate-800">
+                      {new Date(detailBooking.created_at).toLocaleDateString('en-NZ', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="font-semibold text-slate-900">Location</div>
-                <div>{detailBooking.region || 'Unknown'}</div>
-                <div>{detailBooking.city || 'Unknown'}</div>
-                <div>{detailBooking.suburb || 'Other'}</div>
+
+              {/* Property Information */}
+              <div className="bg-blue-50 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-3">Property Information</h4>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="font-semibold text-slate-600">Address:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.property_address || '—'}</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <span className="font-semibold text-slate-600">Suburb:</span>
+                      <span className="ml-2 text-slate-800">{detailBooking.suburb || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-600">City:</span>
+                      <span className="ml-2 text-slate-800">{detailBooking.city || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-600">Region:</span>
+                      <span className="ml-2 text-slate-800">{detailBooking.region || '—'}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="font-semibold text-slate-900">Sales details</div>
-                <div>{detailBooking.timeline || '—'}</div>
-                <div>{detailBooking.motivation || '—'}</div>
+
+              {/* Sales Information */}
+              <div className="bg-green-50 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-bold text-green-700 uppercase tracking-wide mb-3">Sales Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="font-semibold text-slate-600">Timeline:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.timeline || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Motivation:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.motivation || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Language Preference:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.languagePreference || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Heard From:</span>
+                    <span className="ml-2 text-slate-800">{detailBooking.heardFrom || '—'}</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Status & Tracking */}
+              <div className="bg-purple-50 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-3">Status & Tracking</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="font-semibold text-slate-600">Status:</span>
+                    <span className={`ml-2 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[detailBooking.contact_status]}`}>
+                      {fmtStatus(detailBooking.contact_status)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Priority:</span>
+                    <span className={`ml-2 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${PRIORITY_STYLES[detailBooking.priority]}`}>
+                      {fmtPriority(detailBooking.priority)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Next Follow-up:</span>
+                    <span className="ml-2 text-slate-800">
+                      {detailBooking.next_follow_up_at 
+                        ? new Date(detailBooking.next_follow_up_at).toLocaleDateString('en-NZ')
+                        : '—'
+                      }
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-600">Downloaded Report:</span>
+                    <span className="ml-2 text-slate-800">
+                      {detailBooking.has_downloaded ? '✓ Yes' : '✗ No'}
+                      {detailBooking.download_count ? ` (${detailBooking.download_count} times)` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agent Notes */}
+              {detailBooking.agent_notes && (
+                <div className="bg-amber-50 rounded-lg p-4">
+                  <h4 className="text-sm font-bold text-amber-700 uppercase tracking-wide mb-2">Agent Notes</h4>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{detailBooking.agent_notes}</p>
+                </div>
+              )}
             </div>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
-              <div>
-                <div className="font-semibold text-slate-900">Preferences</div>
-                <div>{detailBooking.languagePreference || '—'}</div>
-                <div>{detailBooking.heardFrom || '—'}</div>
+
+            {/* Edit Section */}
+            <div className="mt-6 pt-6 border-t border-slate-200 space-y-4">
+              <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Update Booking</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="text-sm font-medium text-slate-700">
+                  <span className="mb-1 block">Status</span>
+                  <select 
+                    value={editStatus} 
+                    onChange={(e) => setEditStatus(e.target.value as BookingStatus)} 
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  >
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  <span className="mb-1 block">Priority</span>
+                  <select 
+                    value={editPriority} 
+                    onChange={(e) => setEditPriority(e.target.value as BookingPriority)} 
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  >
+                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
-              <div>
-                <div className="font-semibold text-slate-900">Other details</div>
-                <div>Downloaded report: {detailBooking.has_downloaded ? 'Yes' : 'No'}</div>
-                <div>Download count: {detailBooking.download_count ?? 0}</div>
-              </div>
-            </div>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="text-sm font-medium text-slate-700">
-                <span className="mb-1 block">Status</span>
-                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as BookingStatus)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+
+              <label className="block text-sm font-medium text-slate-700">
+                <span className="mb-1 block">Agent Notes</span>
+                <textarea 
+                  value={editNotes} 
+                  onChange={(e) => setEditNotes(e.target.value)} 
+                  rows={4} 
+                  placeholder="Add notes about this client..."
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" 
+                />
               </label>
-              <label className="text-sm font-medium text-slate-700">
-                <span className="mb-1 block">Priority</span>
-                <select value={editPriority} onChange={(e) => setEditPriority(e.target.value as BookingPriority)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-                  {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+
+              <label className="block text-sm font-medium text-slate-700">
+                <span className="mb-1 block">Next Follow-up Date</span>
+                <input 
+                  type="date" 
+                  value={editFollowUp} 
+                  onChange={(e) => setEditFollowUp(e.target.value)} 
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" 
+                />
               </label>
-            </div>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              <span className="mb-1 block">Notes</span>
-              <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-            </label>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              <span className="mb-1 block">Next follow-up</span>
-              <input type="date" value={editFollowUp} onChange={(e) => setEditFollowUp(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-            </label>
-            <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setDetailBooking(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</button>
-              <button type="button" onClick={saveDetail} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Saving…' : 'Save changes'}</button>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button 
+                  type="button" 
+                  onClick={() => setDetailBooking(null)} 
+                  className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={saveDetail} 
+                  disabled={saving}
+                  className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

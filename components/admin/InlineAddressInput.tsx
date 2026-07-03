@@ -167,6 +167,17 @@ export default function InlineAddressInput({
     }
   };
 
+  // Extract street name from address
+  const extractStreetName = (fullAddress: string): string => {
+    // Remove leading number and optional unit (e.g., "5 ", "15A ", "123/456 ")
+    let street = fullAddress.replace(/^\d+[A-Za-z]?(?:\/\d+)?\s+/, '');
+    
+    // Take everything before the first comma (to remove suburb, city, etc.)
+    street = street.split(',')[0].trim();
+    
+    return street || '';
+  };
+
   // Submit new address
   const handleSubmit = async () => {
     if (!selectedAddress || duplicateInfo?.exists || isSubmitting) return;
@@ -200,6 +211,9 @@ export default function InlineAddressInput({
         }
       }
 
+      // Extract street name
+      const street = extractStreetName(selectedAddress);
+
       const res = await fetch('/api/admin/outreach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,6 +222,7 @@ export default function InlineAddressInput({
           suburb: suburb || 'Unknown',
           city: city || 'Auckland City',
           region: region || 'Auckland',
+          street: street || null,
           campaign,
         }),
       });
