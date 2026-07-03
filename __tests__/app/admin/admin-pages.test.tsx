@@ -139,6 +139,10 @@ describe('Admin pages', () => {
 
     render(<OutreachPage />);
 
+    const suburbGroup = await screen.findByRole('button', { name: /Takapuna/i });
+    fireEvent.click(suburbGroup);
+    fireEvent.click(screen.getByRole('checkbox'));
+
     await waitFor(() => {
       expect(screen.getByText('Mark as Sent')).toBeTruthy();
     });

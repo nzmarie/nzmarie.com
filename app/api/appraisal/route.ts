@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query } from "../../../lib/db";
+import { query, marieDB } from "../../../lib/db";
 import { hashEmail, isValidEmail } from "../../../lib/hash";
 import { sendAppraisalNotification } from "../../../lib/email";
 import { updateAppraisalTracking } from "../../../lib/tracking";
@@ -26,6 +26,7 @@ async function checkLocationColumns(): Promise<boolean> {
 
 export async function POST(req: Request) {
   try {
+    await (marieDB as any).ensureOutreachTablesExist?.();
     const body = await req.json();
     const {
       name,
@@ -141,6 +142,44 @@ export async function POST(req: Request) {
     await updateAppraisalTracking(address.trim(), suburb.trim()).catch(err => {
       console.error("Failed to update appraisal tracking:", err);
     });
+
+    // Update outreach status from 'interacted' to 'converted'
+    try {
+      const outreachResult = await marieDB.query(
+        `SELECT id, status FROM outreach_properties 
+         WHERE property_address ILIKE $1 
+         AND suburb ILIKE $2 
+         AND status IN ('sent', 'interacted')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [`%${address.trim()}%`, suburb.trim()]
+      );
+
+      if (outreachResult.rows.length > 0) {
+        const outreachProperty = outreachResult.rows[0];
+        if (outreachProperty.status === 'interacted') {
+          await marieDB.query(
+            `UPDATE outreach_properties 
+             SET status = 'converted', 
+                 converted_at = NOW() 
+             WHERE id = $1`,
+            [outreachProperty.id]
+          );
+          console.log(`✅ Updated outreach property ${outreachProperty.id} to 'converted' status (appraisal booked)`);
+        } else if (outreachProperty.status === 'sent') {
+          await marieDB.query(
+            `UPDATE outreach_properties 
+             SET status = 'interacted', 
+                 interacted_at = NOW() 
+             WHERE id = $1`,
+            [outreachProperty.id]
+          );
+          console.log(`✅ Updated outreach property ${outreachProperty.id} to 'interacted' status (direct to appraisal)`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update outreach status:', err);
+    }
 
     sendAppraisalNotification({
       name: name.trim(),

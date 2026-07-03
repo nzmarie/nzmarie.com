@@ -95,7 +95,43 @@ export async function POST(request: Request) {
 
     const lead = result.rows[0];
 
-    // Trigger will automatically update direct_mail_addresses if applicable
+    // Update outreach status from 'interacted' to 'converted'
+    try {
+      const outreachResult = await marieDB.query(
+        `SELECT id, status FROM outreach_properties 
+         WHERE property_address ILIKE $1 
+         AND suburb ILIKE $2 
+         AND status IN ('sent', 'interacted')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [`%${propertyAddress}%`, suburbValue]
+      );
+
+      if (outreachResult.rows.length > 0) {
+        const outreachProperty = outreachResult.rows[0];
+        if (outreachProperty.status === 'interacted') {
+          await marieDB.query(
+            `UPDATE outreach_properties 
+             SET status = 'converted', 
+                 converted_at = NOW() 
+             WHERE id = $1`,
+            [outreachProperty.id]
+          );
+          console.log(`✅ Updated outreach property ${outreachProperty.id} to 'converted' status (appraisal booked)`);
+        } else if (outreachProperty.status === 'sent') {
+          await marieDB.query(
+            `UPDATE outreach_properties 
+             SET status = 'interacted', 
+                 interacted_at = NOW() 
+             WHERE id = $1`,
+            [outreachProperty.id]
+          );
+          console.log(`✅ Updated outreach property ${outreachProperty.id} to 'interacted' status (direct to appraisal)`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update outreach status:', err);
+    }
 
     return NextResponse.json({
       success: true,

@@ -6,6 +6,23 @@ import { useRouter } from 'next/navigation';
 import { SkeletonAnalytics } from '@/components/admin/Skeleton';
 
 const SUPER_ADMIN = 'nzlouis.com@gmail.com';
+const CARD_BADGE_STYLES = {
+  blue: 'bg-blue-100 text-blue-700',
+  green: 'bg-green-100 text-green-700',
+  purple: 'bg-purple-100 text-purple-700',
+  yellow: 'bg-yellow-100 text-yellow-700',
+} as const;
+
+type LocationRow = {
+  region: string;
+  city: string;
+  count: number;
+};
+
+type RegionRow = {
+  region: string;
+  count: number;
+};
 
 export default function AnalyticsPage() {
   const { data: session, status } = useSession();
@@ -20,11 +37,9 @@ export default function AnalyticsPage() {
     totalConversions: 0,
   });
 
-  const [locationStats, setLocationStats] = useState<{
-    region: string;
-    city: string;
-    count: number;
-  }[]>([]);
+  const [locationStats, setLocationStats] = useState<LocationRow[]>([]);
+  const [regionStats, setRegionStats] = useState<RegionRow[]>([]);
+  const [locationTotal, setLocationTotal] = useState(0);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [migrationMessage, setMigrationMessage] = useState('');
@@ -60,6 +75,8 @@ export default function AnalyticsPage() {
         .then((data) => {
           if (data && data.locations) {
             setLocationStats(data.locations);
+            setRegionStats(data.regions ?? []);
+            setLocationTotal(data.total ?? 0);
           }
         })
         .catch(() => undefined);
@@ -147,15 +164,15 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Total Campaigns', value: stats.totalMailed.toString(), icon: '📬', color: 'blue' },
-          { label: 'Download Rate', value: `${stats.totalMailed > 0 ? ((stats.totalDownloads / stats.totalMailed) * 100).toFixed(0) : 0}%`, icon: '📥', color: 'green' },
-          { label: 'Conversion Rate', value: `${stats.totalAppraisals > 0 ? ((stats.totalConversions / stats.totalAppraisals) * 100).toFixed(0) : 0}%`, icon: '✅', color: 'purple' },
-          { label: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString('en-NZ')}`, icon: '💰', color: 'yellow' },
+          { label: 'Total Campaigns', value: stats.totalMailed.toString(), icon: '📬', color: 'blue' as const },
+          { label: 'Download Rate', value: `${stats.totalMailed > 0 ? ((stats.totalDownloads / stats.totalMailed) * 100).toFixed(0) : 0}%`, icon: '📥', color: 'green' as const },
+          { label: 'Conversion Rate', value: `${stats.totalAppraisals > 0 ? ((stats.totalConversions / stats.totalAppraisals) * 100).toFixed(0) : 0}%`, icon: '✅', color: 'purple' as const },
+          { label: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString('en-NZ')}`, icon: '💰', color: 'yellow' as const },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <span className="text-2xl">{stat.icon}</span>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full bg-${stat.color}-100 text-${stat.color}-700`}>
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${CARD_BADGE_STYLES[stat.color]}`}>
                 This Month
               </span>
             </div>
@@ -191,30 +208,53 @@ export default function AnalyticsPage() {
       {locationStats.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">📍 Geographic Distribution</h3>
-          <p className="text-sm text-gray-500 mb-4">Appraisal requests by region and city</p>
+          <p className="text-sm text-gray-500 mb-4">Appraisal requests grouped by region and city with share of total leads</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {regionStats.map((region) => {
+              const percent = locationTotal > 0 ? Math.round((region.count / locationTotal) * 100) : 0;
+              return (
+                <div key={region.region} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Region</div>
+                      <div className="text-sm font-semibold text-slate-900">{region.region}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-600">{region.count}</div>
+                      <div className="text-xs text-slate-400">{percent}%</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 rounded-full bg-slate-200">
+                    <div className="h-2 rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locationStats.slice(0, 9).map((loc, idx) => (
-              <div key={idx} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-slate-800">{loc.region}</div>
-                    <div className="text-xs text-slate-500">{loc.city}</div>
+            {locationStats.slice(0, 9).map((loc) => {
+              const percent = locationTotal > 0 ? Math.round((loc.count / locationTotal) * 100) : 0;
+              return (
+                <div key={`${loc.region}-${loc.city}`} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-slate-800">{loc.region}</div>
+                      <div className="text-xs text-slate-500">{loc.city}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-600">{loc.count}</div>
+                      <div className="text-xs text-slate-400">{percent}%</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-blue-600">{loc.count}</div>
-                    <div className="text-xs text-slate-400">leads</div>
+                  <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${percent}%` }}
+                    />
                   </div>
                 </div>
-                <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
-                  <div
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, (loc.count / Math.max(...locationStats.map(l => l.count))) * 100)}%`
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

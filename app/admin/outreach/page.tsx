@@ -2,25 +2,25 @@
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonOutreach } from '@/components/admin/Skeleton';
+import InlineAddressInput from '@/components/admin/InlineAddressInput';
+import { getAllSuburbs } from '@/lib/geo-data';
 
-interface OutreachItem {
+interface OutreachProperty {
   id: string;
-  louis_property_id: string;
   property_address: string;
   suburb: string;
-  street?: string;
-  city?: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  rv_value?: number;
-  status: 'PENDING' | 'SENT' | 'COMPLETED';
-  tracking_code?: string;
-  selected_by: string;
-  selected_at: string;
-  sent_by?: string;
+  city: string;
+  region: string;
+  owner_name?: string;
+  property_type?: string;
+  campaign: string;
+  status: 'pending' | 'sent' | 'interacted' | 'converted';
   sent_at?: string;
+  interacted_at?: string;
+  converted_at?: string;
+  created_at: string;
   notes?: string;
 }
 
@@ -31,36 +31,38 @@ interface PaginationMeta {
   totalPages: number;
 }
 
-function formatRelativeTime(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return '1 day ago';
-  return `${days} days ago`;
-}
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  sent: 'Sent',
+  interacted: 'Interacted',
+  converted: 'Converted',
+};
 
-function formatCurrency(val?: number) {
-  if (!val) return 'N/A';
-  return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(val);
-}
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-blue-50 text-blue-600 border-blue-200',
+  sent: 'bg-purple-50 text-purple-600 border-purple-200',
+  interacted: 'bg-orange-50 text-orange-600 border-orange-200',
+  converted: 'bg-green-50 text-green-600 border-green-200',
+};
 
 export default function OutreachPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'PENDING' | 'SENT'>('PENDING');
-  const [items, setItems] = useState<OutreachItem[]>([]);
+
+  const [activeTab, setActiveTab] = useState<'pending' | 'sent'>('pending');
+  const [items, setItems] = useState<OutreachProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [suburbs, setSuburbs] = useState<string[]>([]);
-  const [suburbFilter, setSuburbFilter] = useState('');
+  
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [suburbFilter, setSuburbFilter] = useState('');
+  const [campaignFilter, setCampaignFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [sentCount, setSentCount] = useState(0);
+  
+  const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
-  const isSuperAdmin = session?.user?.email === 'nzlouis.com@gmail.com';
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -71,238 +73,353 @@ export default function OutreachPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const [p, s] = await Promise.all([
-        fetch('/api/admin/outreach?status=PENDING&limit=1').then(r => r.json()),
-        fetch('/api/admin/outreach?status=SENT&limit=1').then(r => r.json()),
-      ]);
-      if (p.pagination) setPendingCount(p.pagination.total);
-      if (s.pagination) setSentCount(s.pagination.total);
-    } catch {
-      // non-critical
-    }
-  }, []);
-
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ status: activeTab, page: page.toString(), limit: '50' });
+      const params = new URLSearchParams({
+        status: activeTab,
+        page: page.toString(),
+        limit: '200',
+      });
       if (suburbFilter) params.set('suburb', suburbFilter);
+      if (campaignFilter) params.set('campaign', campaignFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
+
       const res = await fetch(`/api/admin/outreach?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      
       setItems(data.data ?? []);
       setPagination(data.pagination ?? null);
-      if (data.suburbs) setSuburbs(data.suburbs);
     } catch (error) {
       console.error('Error fetching outreach:', error);
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, suburbFilter, debouncedSearch]);
+  }, [activeTab, page, suburbFilter, campaignFilter, debouncedSearch]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      fetchItems();
-      fetchCounts();
-    }
-  }, [status, fetchItems, fetchCounts]);
+    if (status === 'authenticated') fetchItems();
+  }, [status, fetchItems]);
 
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const markAsSent = async (id: string) => {
-    try {
-      const res = await fetch(`/api/admin/outreach/${id}/mark-sent`, { method: 'PATCH' });
-      if (!res.ok) throw new Error('Failed');
-      showNotification('success', 'Marked as sent');
-      fetchItems();
-      fetchCounts();
-    } catch {
-      showNotification('error', 'Failed to mark as sent');
+  const handleAddSuccess = (newProperty: unknown) => {
+    showNotification('success', 'Address added successfully');
+    const prop = newProperty as OutreachProperty;
+    setItems((prev) => [prop, ...prev]);
+    if (pagination) {
+      setPagination({ ...pagination, total: pagination.total + 1 });
     }
   };
+
+  const toggleSuburb = (suburb: string) => {
+    setExpandedSuburbs((prev) => {
+      const next = new Set(prev);
+      if (next.has(suburb)) next.delete(suburb);
+      else next.add(suburb);
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const markAsSent = async () => {
+    if (selected.size === 0) return;
+    try {
+      await Promise.all(
+        Array.from(selected).map((id) =>
+          fetch(`/api/admin/outreach/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString() }),
+          })
+        )
+      );
+      showNotification('success', `Marked ${selected.size} address${selected.size === 1 ? '' : 'es'} as sent`);
+      setSelected(new Set());
+      fetchItems();
+    } catch {
+      showNotification('error', 'Bulk update failed');
+    }
+  };
+
+  const startNewCampaign = async () => {
+    if (selected.size === 0) return;
+    const name = window.prompt('New campaign name (e.g. 2027_Calendar)');
+    if (!name) return;
+    try {
+      const res = await fetch('/api/admin/outreach/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ property_ids: Array.from(selected), new_campaign: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to copy');
+      showNotification('success', `Copied ${data.added || 0} address(es) to ${name}`);
+      setSelected(new Set());
+      fetchItems();
+    } catch (err) {
+      console.error('Start new campaign failed:', err);
+      showNotification('error', 'Failed to start new campaign');
+    }
+  };
+
+  // Group by suburb
+  const groupedBySuburb = useMemo(() => {
+    const groups = new Map<string, OutreachProperty[]>();
+    items.forEach((item) => {
+      const suburb = item.suburb || 'Unknown';
+      if (!groups.has(suburb)) groups.set(suburb, []);
+      groups.get(suburb)!.push(item);
+    });
+    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length);
+  }, [items]);
+
+  const stats = useMemo(() => {
+    const totalPending = items.filter((i) => i.status === 'pending').length;
+    const totalSent = items.filter((i) => i.status === 'sent').length;
+    const totalInteracted = items.filter((i) => i.status === 'interacted').length;
+    return { totalPending, totalSent, totalInteracted, total: pagination?.total ?? items.length };
+  }, [items, pagination]);
+
+  const allSuburbs = getAllSuburbs();
 
   if (status === 'loading') return <SkeletonOutreach />;
 
   return (
     <div className="space-y-6">
       {notification && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
-          notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        }`}>
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
+            notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+          }`}
+        >
           {notification.msg}
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">📬 Outreach</h1>
-          <p className="text-gray-600 mt-1">Manage direct mail campaigns and track delivery status</p>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">📬 Outreach</h1>
+        <p className="text-gray-600 mt-1">Direct Mail Campaign Management</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-200">
+        <button
+          onClick={() => { setActiveTab('pending'); setPage(1); }}
+          className={`px-6 py-3 font-semibold transition-colors relative ${
+            activeTab === 'pending'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-slate-600 hover:text-blue-600'
+          }`}
+        >
+          Pending
+          {stats.totalPending > 0 && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+              {stats.totalPending}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => { setActiveTab('sent'); setPage(1); }}
+          className={`px-6 py-3 font-semibold transition-colors relative ${
+            activeTab === 'sent'
+              ? 'text-purple-600 border-b-2 border-purple-600'
+              : 'text-slate-600 hover:text-purple-600'
+          }`}
+        >
+          Sent
+          {stats.totalSent > 0 && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
+              {stats.totalSent}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Smart Inline Input */}
+      {activeTab === 'pending' && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
+            <span>📍</span>
+            <span>Quick Add to Current Campaign (2026 Q3 Report)</span>
+          </h3>
+          <InlineAddressInput campaign="2026_Q3_Report" onAddSuccess={handleAddSuccess} />
         </div>
-        <a
-          href="/admin/properties"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-sm"
-        >
-          + Add from Properties
-        </a>
-      </div>
+      )}
 
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {([['PENDING', pendingCount], ['SENT', sentCount]] as const).map(([tab, count]) => (
-            <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setPage(1); }}
-              className={`${
-                activeTab === tab
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              {tab === 'PENDING' ? 'Pending' : 'Sent'}
-              <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
-                activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {count}
-              </span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <input
-          id="outreach-search"
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by address or tracking code"
-          className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm"
-        />
-        <select
-          id="outreach-suburb"
-          value={suburbFilter}
-          onChange={e => { setSuburbFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
-        >
-          <option value="">All Suburbs</option>
-          {suburbs.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {(search || suburbFilter) && (
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 Search by address..."
+            className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm"
+          />
+          <select
+            value={suburbFilter}
+            onChange={(e) => { setSuburbFilter(e.target.value); setPage(1); }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+          >
+            <option value="">All Suburbs</option>
+            {allSuburbs.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
           <button
-            onClick={() => { setSearch(''); setSuburbFilter(''); setPage(1); }}
-            className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200"
+            onClick={() => { setSearch(''); setSuburbFilter(''); setCampaignFilter(''); }}
+            className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
             Clear
           </button>
-        )}
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {/* Bulk Actions */}
+      {activeTab === 'pending' && selected.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+          <span className="text-sm font-medium text-blue-800">
+            {selected.size} address{selected.size === 1 ? '' : 'es'} selected
+          </span>
+          <button
+            onClick={markAsSent}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+          >
+            Mark as Sent
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'sent' && selected.size > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-3">
+          <span className="text-sm font-medium text-purple-800">
+            {selected.size} address{selected.size === 1 ? '' : 'es'} selected
+          </span>
+          <button
+            onClick={startNewCampaign}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
+          >
+            ⟳ Start New Campaign
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {activeTab === 'pending' ? 'Pending' : 'Sent'} Addresses
+          </h2>
+          {pagination && (
+            <span className="text-sm text-slate-500">{pagination.total} total</span>
+          )}
+        </div>
+
         {loading ? (
-          <div className="p-8 text-center text-slate-400">Loading...</div>
+          <div className="p-12 text-center text-slate-400">Loading...</div>
         ) : items.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 text-gray-400 mb-4">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {activeTab === 'PENDING' ? 'No Properties Selected' : 'No Properties Sent Yet'}
-            </h3>
-            <p className="text-gray-500 mb-6">
-              {activeTab === 'PENDING'
-                ? 'Go to Properties page to add some'
-                : 'Mark pending properties as sent'}
+            <div className="text-6xl mb-4">📭</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
+            <p className="text-gray-500">
+              {activeTab === 'pending'
+                ? 'Use the input above to add addresses'
+                : 'Mark properties as sent to see them here'}
             </p>
-            {activeTab === 'PENDING' && (
-              <a href="/admin/properties" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                Browse Properties
-              </a>
-            )}
           </div>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Address</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Suburb</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
-                      {activeTab === 'PENDING' ? 'Added' : 'Sent'}
-                    </th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">RV</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Beds</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Tracking</th>
-                    {isSuperAdmin && activeTab === 'PENDING' && (
-                      <th className="px-4 py-3"></th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map(item => (
-                    <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800 text-sm">{item.property_address}</div>
-                        {item.city && <div className="text-xs text-slate-400">{item.city}</div>}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{item.suburb}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500">
-                        {formatRelativeTime(activeTab === 'PENDING' ? item.selected_at : (item.sent_at ?? item.selected_at))}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatCurrency(item.rv_value)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{item.bedrooms ?? '-'}</td>
-                      <td className="px-4 py-3">
-                        {item.tracking_code ? (
-                          <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{item.tracking_code}</span>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                      {isSuperAdmin && activeTab === 'PENDING' && (
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => markAsSent(item.id)}
-                            className="text-xs px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                          >
-                            Mark as Sent
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="p-4 space-y-3">
+            {groupedBySuburb.map(([suburb, properties]) => {
+              const isExpanded = expandedSuburbs.has(suburb);
+              return (
+                <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleSuburb(suburb)}
+                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">📂</span>
+                      <div className="text-left">
+                        <div className="font-semibold text-slate-800">{suburb}</div>
+                        <div className="text-xs text-slate-500">
+                          {properties[0]?.city}, {properties[0]?.region}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-slate-600">
+                        {properties.length} {properties.length === 1 ? 'address' : 'addresses'}
+                      </span>
+                      <span className="text-slate-400">{isExpanded ? '▼' : '▶'}</span>
+                    </div>
+                  </button>
 
-            {pagination && pagination.totalPages > 1 && (
-              <div className="p-4 border-t border-slate-100 flex justify-between items-center">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-slate-500">Page {page} of {pagination.totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                  disabled={page >= pagination.totalPages}
-                  className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </>
+                  {isExpanded && (
+                    <div className="divide-y divide-slate-100">
+                      {properties.map((prop) => (
+                        <div
+                          key={prop.id}
+                          className="px-4 py-3 hover:bg-slate-50 transition-colors flex items-center gap-4"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected.has(prop.id)}
+                            onChange={() => toggleSelect(prop.id)}
+                            className="rounded border-slate-300"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-800 truncate">
+                              {prop.property_address}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                              {prop.property_type && (
+                                <span className="px-2 py-0.5 bg-slate-100 rounded">
+                                  {prop.property_type}
+                                </span>
+                              )}
+                              <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
+                            </div>
+                          </div>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                              STATUS_COLORS[prop.status]
+                            }`}
+                          >
+                            {STATUS_LABELS[prop.status]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

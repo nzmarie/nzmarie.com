@@ -47,6 +47,70 @@ export async function POST() {
       });
     }
 
+    // --- Migration 012: Create outreach tables ---
+    try {
+      // Create outreach_properties table
+      await marieDB.query(`
+        CREATE TABLE IF NOT EXISTS outreach_properties (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          louis_property_id VARCHAR(100),
+          property_address TEXT NOT NULL,
+          suburb VARCHAR(100) NOT NULL,
+          city VARCHAR(100) NOT NULL,
+          region VARCHAR(100) NOT NULL,
+          street VARCHAR(200),
+          owner_name VARCHAR(200),
+          property_type VARCHAR(50),
+          campaign VARCHAR(100) NOT NULL DEFAULT '2026_Q3_Report',
+          status VARCHAR(50) NOT NULL DEFAULT 'pending',
+          sent_at TIMESTAMP,
+          interacted_at TIMESTAMP,
+          converted_at TIMESTAMP,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW(),
+          CONSTRAINT unique_address_per_campaign UNIQUE(property_address, campaign)
+        )
+      `);
+
+      // Create indexes for outreach_properties
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach_properties(status)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_suburb ON outreach_properties(suburb)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_city ON outreach_properties(city)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_region ON outreach_properties(region)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_campaign ON outreach_properties(campaign)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_outreach_address ON outreach_properties(property_address)`);
+
+      // Create outreach_qr_tokens table
+      await marieDB.query(`
+        CREATE TABLE IF NOT EXISTS outreach_qr_tokens (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          token VARCHAR(100) UNIQUE NOT NULL,
+          outreach_property_id UUID REFERENCES outreach_properties(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          scanned_at TIMESTAMP,
+          scan_count INT DEFAULT 0,
+          last_scan_ip VARCHAR(50),
+          last_scan_user_agent TEXT
+        )
+      `);
+
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_qr_token ON outreach_qr_tokens(token)`);
+      await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_qr_property_id ON outreach_qr_tokens(outreach_property_id)`);
+
+      results.push({
+        migration: '012_create_outreach_tables',
+        status: 'success',
+        message: 'Created outreach_properties and outreach_qr_tokens tables with indexes',
+      });
+    } catch (err) {
+      results.push({
+        migration: '012_create_outreach_tables',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+
     return NextResponse.json({
       success: true,
       results,

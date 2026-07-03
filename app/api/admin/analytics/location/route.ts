@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
+import { findLocationBySuburb } from '@/lib/geo-data';
 import { isSuperAdmin } from '@/lib/permissions';
 
 export async function GET() {
@@ -38,25 +39,37 @@ export async function GET() {
         COALESCE(suburb, 'Unknown') as suburb,
         COUNT(*) as count
       FROM appraisal_leads
-      WHERE region IS NOT NULL AND city IS NOT NULL
       GROUP BY region, city, suburb
       ORDER BY count DESC, region, city
       LIMIT 50
     `);
 
-    // Aggregate by region+city (combining suburbs)
+    const suburbRows = result.rows.map((row) => {
+      const fallback = findLocationBySuburb(String(row.suburb || '').trim());
+      const region = row.region !== 'Unknown' ? row.region : fallback?.region || 'Unknown';
+      const city = row.city !== 'Unknown' ? row.city : fallback?.city || 'Unknown';
+      const suburb = row.suburb || fallback?.suburb || 'Unknown';
+
+      return {
+        region,
+        city,
+        suburb,
+        count: parseInt(row.count),
+      };
+    });
+
     const cityMap = new Map<string, { region: string; city: string; count: number }>();
 
-    result.rows.forEach((row) => {
+    suburbRows.forEach((row) => {
       const key = `${row.region}|${row.city}`;
       const existing = cityMap.get(key);
       if (existing) {
-        existing.count += parseInt(row.count);
+        existing.count += row.count;
       } else {
         cityMap.set(key, {
           region: row.region,
           city: row.city,
-          count: parseInt(row.count),
+          count: row.count,
         });
       }
     });
@@ -79,7 +92,7 @@ export async function GET() {
       success: true,
       locations,
       regions,
-      total: locations.reduce((sum, loc) => sum + loc.count, 0),
+      total: suburbRows.reduce((sum, row) => sum + row.count, 0),
     });
   } catch (error) {
     console.error('Error fetching location analytics:', error);

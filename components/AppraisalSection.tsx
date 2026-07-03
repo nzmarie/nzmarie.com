@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { translations, Language } from "../lib/translations";
 import {
   findLocationBySuburb,
+  getCitiesByRegion,
+  getSuburbsByCity,
   type Region,
 } from "../lib/geo-data";
 
@@ -18,13 +20,29 @@ interface GeoapifyProperties {
   district?: string;
 }
 
+interface AppraisalFormData {
+  name: string;
+  address: string;
+  region: Region;
+  city: string;
+  suburb: string;
+  email: string;
+  phone: string;
+  timeline: string;
+  motivation: string;
+  languagePreference: string;
+  heardFrom: string;
+}
+
 export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].appraisal;
-  const [formData, setFormData] = useState({
+  const defaultRegion: Region = "Auckland";
+  const defaultCity = getCitiesByRegion(defaultRegion)[0] ?? "";
+  const [formData, setFormData] = useState<AppraisalFormData>({
     name: "",
     address: "",
-    region: "Auckland" as Region,
-    city: "North Shore City",
+    region: defaultRegion,
+    city: defaultCity,
     suburb: "",
     email: "",
     phone: "",
@@ -43,6 +61,27 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const availableCities = getCitiesByRegion(formData.region);
+  const availableSuburbs = getSuburbsByCity(formData.city);
+
+  useEffect(() => {
+    if (!availableCities.includes(formData.city)) {
+      setFormData((prev) => ({
+        ...prev,
+        city: availableCities[0] ?? "",
+        suburb: "",
+      }));
+    }
+  }, [availableCities, formData.city]);
+
+  useEffect(() => {
+    if (formData.suburb && !availableSuburbs.includes(formData.suburb)) {
+      setFormData((prev) => ({
+        ...prev,
+        suburb: "",
+      }));
+    }
+  }, [availableSuburbs, formData.suburb]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -106,13 +145,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   };
 
   const handleSelectSuggestion = (address: string) => {
-    // Try to extract suburb from address and find matching location data
-    const addressParts = address.split(',').map(s => s.trim());
+    const addressParts = address.split(",").map((s) => s.trim());
     let detectedSuburb = "";
     let detectedCity = formData.city;
     let detectedRegion = formData.region;
-    
-    // Try to find suburb in address parts
+
     for (const part of addressParts) {
       const location = findLocationBySuburb(part);
       if (location) {
@@ -126,7 +163,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
     setFormData((prev) => ({ 
       ...prev, 
       address,
-      suburb: detectedSuburb || prev.suburb,
+      suburb: detectedSuburb,
       city: detectedCity,
       region: detectedRegion,
     }));
@@ -184,8 +221,8 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
         setFormData({ 
           name: "", 
           address: "", 
-          region: "Auckland" as Region,
-          city: "North Shore City",
+          region: defaultRegion,
+          city: defaultCity,
           suburb: "", 
           email: "", 
           phone: "", 
@@ -327,12 +364,85 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                     : "太棒了！请填写以下信息，帮助 Marie 优化您的免费评估。"}
                 </p>
 
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-sm font-medium text-slate-600 mb-4">{t.reviewLocation}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex flex-col">
+                      <label htmlFor="appraisal-region" className="block text-sm font-semibold text-gray-700 mb-2">
+                        {t.region} <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="appraisal-region"
+                        required
+                        value={formData.region}
+                        onChange={(e) => {
+                          const nextRegion = e.target.value as Region;
+                          const nextCities = getCitiesByRegion(nextRegion);
+                          setFormData((prev) => ({
+                            ...prev,
+                            region: nextRegion,
+                            city: nextCities[0] ?? "",
+                            suburb: "",
+                          }));
+                        }}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
+                      >
+                        <option value="" disabled>{t.regionPlaceholder}</option>
+                        {["Auckland", "Wellington"].map((region) => (
+                          <option key={region} value={region}>{region}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col">
+                      <label htmlFor="appraisal-city" className="block text-sm font-semibold text-gray-700 mb-2">
+                        {t.city} <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="appraisal-city"
+                        required
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            city: e.target.value,
+                            suburb: "",
+                          }))
+                        }
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
+                      >
+                        <option value="" disabled>{t.cityPlaceholder}</option>
+                        {availableCities.map((city) => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col">
+                      <label htmlFor="appraisal-suburb" className="block text-sm font-semibold text-gray-700 mb-2">
+                        {t.suburb} <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="appraisal-suburb"
+                        required
+                        value={formData.suburb}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, suburb: e.target.value }))}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
+                      >
+                        <option value="">{t.suburbPlaceholder}</option>
+                        {availableSuburbs.map((suburb) => (
+                          <option key={suburb} value={suburb}>{suburb}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-name" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.fullName} <span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="appraisal-name"
                       type="text"
                       required
                       value={formData.name}
@@ -342,10 +452,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                     />
                   </div>
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-email" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.email} <span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="appraisal-email"
                       type="email"
                       required
                       value={formData.email}
@@ -358,10 +469,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-phone" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.phone} <span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="appraisal-phone"
                       type="tel"
                       required
                       value={formData.phone}
@@ -371,10 +483,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                     />
                   </div>
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-timeline" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.timeline} <span className="text-red-500">*</span>
                     </label>
                     <select
+                      id="appraisal-timeline"
                       required
                       value={formData.timeline}
                       onChange={(e) => setFormData({ ...formData, timeline: e.target.value })}
@@ -391,10 +504,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-motivation" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.motivation} <span className="text-red-500">*</span>
                     </label>
                     <select
+                      id="appraisal-motivation"
                       required
                       value={formData.motivation}
                       onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
@@ -410,10 +524,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                     </select>
                   </div>
                   <div className="flex flex-col">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="appraisal-language-preference" className="block text-sm font-semibold text-gray-700 mb-2">
                       {t.languagePreference}
                     </label>
                     <select
+                      id="appraisal-language-preference"
                       value={formData.languagePreference}
                       onChange={(e) => setFormData({ ...formData, languagePreference: e.target.value })}
                       className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
@@ -426,10 +541,11 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="appraisal-heard-from" className="block text-sm font-semibold text-gray-700 mb-2">
                     {t.heardFrom}
                   </label>
                   <select
+                    id="appraisal-heard-from"
                     value={formData.heardFrom}
                     onChange={(e) => setFormData({ ...formData, heardFrom: e.target.value })}
                     className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition duration-200"
@@ -445,10 +561,10 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
 
                 <button
                   type="submit"
-                  disabled={status === "loading"}
+                  disabled={status === "loading" || !formData.suburb}
                   className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-center"
                 >
-                  {status === "loading" ? "..." : (lang === "en" ? "Send to Marie" : "发送给 Marie")}
+                  {status === "loading" ? "..." : t.submit}
                 </button>
 
                 {status === "error" && (

@@ -8,9 +8,7 @@ let mockFetchSuccess = true;
 let errorOnAppraisalSubmit = false;
 
 const mockFetch = vi.fn().mockImplementation((url, options) => {
-  // Handle Geoapify API calls for address suggestions
   if (typeof url === 'string' && (url.includes("geoapify") || url.includes("geocode/autocomplete"))) {
-    console.log("Geoapify API called:", url);
     return Promise.resolve({
       ok: true,
       json: () => Promise.resolve({
@@ -25,7 +23,6 @@ const mockFetch = vi.fn().mockImplementation((url, options) => {
     });
   }
   
-  // Handle appraisal API calls
   if (typeof url === 'string' && url.includes("/api/appraisal")) {
     if (errorOnAppraisalSubmit) {
       return Promise.resolve({
@@ -42,7 +39,6 @@ const mockFetch = vi.fn().mockImplementation((url, options) => {
     });
   }
   
-  // Handle other API calls
   if (!mockFetchSuccess) {
     return Promise.reject(new Error("API Error"));
   }
@@ -68,12 +64,10 @@ describe("AppraisalSection", () => {
     const addressInput = screen.getByPlaceholderText("Start typing your NZ address...");
     fireEvent.change(addressInput, { target: { value: "1 Queen Street, Auckland Central, Auckland, 1010, New Zealand" } });
 
-    // Wait for suggestions to appear
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 500));
     });
 
-    // Try to select address from suggestions
     try {
       const suggestionItems = screen.queryAllByText(/Queen Street/i) || [];
       
@@ -86,7 +80,6 @@ describe("AppraisalSection", () => {
       fireEvent.change(addressInput, { target: { value: "1 Queen Street, Auckland Central, Auckland, 1010, New Zealand" } });
     }
 
-    // Wait for state to update
     await act(async () => {
       await Promise.resolve();
     });
@@ -101,17 +94,21 @@ describe("AppraisalSection", () => {
       await Promise.resolve();
     });
 
+    const regionSelect = screen.getByLabelText(/Region/i) as HTMLSelectElement;
+    const citySelect = screen.getByLabelText(/City \/ District/i) as HTMLSelectElement;
+    const suburbSelect = screen.getByLabelText(/Suburb/i) as HTMLSelectElement;
     const nameInput = screen.getByPlaceholderText("e.g. John Doe");
     const emailInput = screen.getByPlaceholderText("e.g. john@example.com");
     const phoneInput = screen.getByPlaceholderText("e.g. +64 21 000 0000");
-
-    const allSelects = screen.getAllByRole("combobox");
-    const timelineSelect = allSelects[0];
-    const motivationSelect = allSelects[1];
+    const timelineSelect = screen.getByLabelText(/When are you looking to sell/i) as HTMLSelectElement;
+    const motivationSelect = screen.getByLabelText(/Main reason for selling/i) as HTMLSelectElement;
 
     fireEvent.change(nameInput,        { target: { value: "Bob" } });
     fireEvent.change(emailInput,       { target: { value: "bob@example.com" } });
     fireEvent.change(phoneInput,       { target: { value: "12345" } });
+    expect(regionSelect.value).toBe("Auckland");
+    expect(citySelect.value).toBe("Auckland City");
+    expect(suburbSelect.value).toBe("Auckland Central");
     fireEvent.change(timelineSelect,   { target: { value: "within-3-months" } });
     fireEvent.change(motivationSelect, { target: { value: "upsizing" } });
   };
@@ -144,6 +141,22 @@ describe("AppraisalSection", () => {
     await waitFor(() => {
       expect(screen.queryByText("Thank you!")).toBeNull();
     });
+  });
+
+  it("should update city and suburb options when the region changes", async () => {
+    render(<AppraisalSection lang="en" />);
+    await fillForm();
+
+    const regionSelect = screen.getByLabelText(/Region/i);
+    const citySelect = screen.getByLabelText(/City \/ District/i) as HTMLSelectElement;
+    const suburbSelect = screen.getByLabelText(/Suburb/i) as HTMLSelectElement;
+
+    fireEvent.change(regionSelect, { target: { value: "Wellington" } });
+
+    expect(screen.getByRole("option", { name: "Wellington City" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "North Shore City" })).toBeNull();
+    expect(citySelect.value).toBe("Wellington City");
+    expect(suburbSelect.value).toBe("");
   });
 
   it("should handle error state when api fails", async () => {

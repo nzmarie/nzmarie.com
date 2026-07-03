@@ -22,32 +22,67 @@ export async function POST(request: Request) {
   }
 
   try {
+    await (marieDB as any).ensureOutreachTablesExist?.();
     const { properties } = await request.json() as { properties: PropertyInput[] };
 
     if (!properties || properties.length === 0) {
       return NextResponse.json({ error: 'No properties provided' }, { status: 400 });
     }
 
+    // Insert into the unified outreach_properties table. Use ON CONFLICT
+    // to skip duplicates by (property_address, campaign).
     const insertPromises = properties.map((property: PropertyInput) => {
-      const trackingCode = `DM-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      // Default values for city/region if not provided
+      const city = property.city ?? 'Auckland City';
+      const region = 'Auckland';
+      // First check by louis_property_id to avoid duplicates
+      if (property.louis_property_id) {
+        return (async () => {
+          const dup = await marieDB.query(
+            `SELECT id FROM outreach_properties WHERE louis_property_id = $1 LIMIT 1`,
+            [property.louis_property_id]
+          );
+          if (dup.rows.length > 0) return { rows: [] };
+          return marieDB.query(
+            `INSERT INTO outreach_properties
+             (louis_property_id, property_address, suburb, street, city, region,
+              owner_name, property_type, campaign, status, selected_by, selected_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, NOW())
+             ON CONFLICT (property_address, campaign) DO NOTHING
+             RETURNING id`,
+            [
+              property.louis_property_id || null,
+              property.property_address,
+              property.suburb,
+              property.street ?? null,
+              city,
+              region,
+              null,
+              null,
+              null,
+              session.user.email,
+            ]
+          );
+        })();
+      }
       return marieDB.query(
-        `INSERT INTO outreach_selected_properties
-         (louis_property_id, property_address, suburb, street, city,
-          bedrooms, bathrooms, rv_value, selected_by, tracking_code)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (louis_property_id, selected_by) DO NOTHING
+        `INSERT INTO outreach_properties
+         (louis_property_id, property_address, suburb, street, city, region,
+          owner_name, property_type, campaign, status, selected_by, selected_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, NOW())
+         ON CONFLICT (property_address, campaign) DO NOTHING
          RETURNING id`,
         [
-          property.louis_property_id,
+          property.louis_property_id || null,
           property.property_address,
           property.suburb,
           property.street ?? null,
-          property.city ?? null,
-          property.bedrooms ?? null,
-          property.bathrooms ?? null,
-          property.rv_value ?? null,
+          city,
+          region,
+          null,
+          null,
+          null,
           session.user.email,
-          trackingCode,
         ]
       );
     });

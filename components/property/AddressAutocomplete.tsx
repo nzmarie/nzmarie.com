@@ -8,6 +8,16 @@ interface AddressSuggestion {
   city: string;
 }
 
+interface GeoapifyFeature {
+  properties: {
+    formatted: string;
+    suburb?: string;
+    district?: string;
+    city?: string;
+    county?: string;
+  };
+}
+
 interface AddressAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
@@ -70,7 +80,7 @@ export default function AddressAutocomplete({
           );
           const data = await response.json();
           const features = data.features ?? [];
-          const results = features.map((f: any, index: number) => ({
+          const results = features.map((f: GeoapifyFeature, index: number) => ({
             id: `geo-${index}`,
             address: f.properties.formatted,
             suburb: f.properties.suburb || f.properties.district || '',
@@ -244,7 +254,7 @@ export default function AddressAutocomplete({
         }}>
           <li style={{ padding: '14px 16px', fontSize: '14px', color: '#6b7280' }}>
             <span style={{ marginRight: '8px' }}>💡</span>
-            No addresses found. Try including the street name, e.g. "12 Queen Street, Albany"
+            No addresses found. Try including the street name, for example 12 Queen Street, Albany.
           </li>
         </ul>
       )}

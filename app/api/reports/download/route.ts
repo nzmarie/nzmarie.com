@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query } from "../../../../lib/db";
+import { query, marieDB } from "../../../../lib/db";
 import { hashEmail, hashIP } from "../../../../lib/hash";
 import { getSignedDownloadUrl } from "../../../../lib/r2-storage";
 import { updateDownloadTracking } from "../../../../lib/tracking";
@@ -129,6 +129,7 @@ export async function POST(req: Request) {
 
     const trackingCodeFromUrl = new URL(req.url).searchParams.get('tc');
     try {
+      await (marieDB as any).ensureOutreachTablesExist?.();
       const result = await query(
         `INSERT INTO report_downloads 
          (email, name, phone, suburb, report_type, downloaded_at, source, tracking_code, user_agent, ip_address)
@@ -174,8 +175,63 @@ export async function POST(req: Request) {
     if (trackingCodeFromUrl) {
       await updateDownloadTracking(normalizedEmail, suburb, trackingCodeFromUrl).catch(err => {
         console.error('Failed to update download tracking:', err);
-        // Don't fail the request if tracking fails
       });
+    }
+
+    try {
+      const trackingCodeFromUrl = new URL(req.url).searchParams.get('tc');
+
+      if (trackingCodeFromUrl) {
+        // If a tracking code (QR token) is present, use it to find the exact outreach property
+        const tokenResult = await marieDB.query(
+          `SELECT oqt.outreach_property_id, op.status
+           FROM outreach_qr_tokens oqt
+           JOIN outreach_properties op ON op.id = oqt.outreach_property_id
+           WHERE oqt.token = $1
+           LIMIT 1`,
+          [trackingCodeFromUrl]
+        );
+
+        if (tokenResult.rows.length > 0) {
+          const { outreach_property_id, status } = tokenResult.rows[0];
+          if (status === 'sent') {
+            await marieDB.query(
+              `UPDATE outreach_properties 
+               SET status = 'interacted', interacted_at = NOW() 
+               WHERE id = $1 AND status = 'sent'`,
+              [outreach_property_id]
+            );
+            console.log(`✅ Updated outreach property ${outreach_property_id} to 'interacted' via tracking code`);
+          }
+        }
+      } else {
+        // Fallback: best-effort match by suburb/address fragment (when no tracking code available)
+        const outreachResult = await marieDB.query(
+          `SELECT id, status FROM outreach_properties 
+           WHERE property_address ILIKE $1 
+             AND suburb = $2 
+             AND status IN ('sent', 'pending')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [`%${suburb}%`, suburb]
+        );
+
+        if (outreachResult.rows.length > 0) {
+          const outreachProperty = outreachResult.rows[0];
+          if (outreachProperty.status === 'sent') {
+            await marieDB.query(
+              `UPDATE outreach_properties 
+               SET status = 'interacted', 
+                   interacted_at = NOW() 
+               WHERE id = $1`,
+              [outreachProperty.id]
+            );
+            console.log(`✅ Updated outreach property ${outreachProperty.id} to 'interacted' status`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update outreach status:', err);
     }
 
     return NextResponse.json({ success: true, action: "download", downloadUrl });
