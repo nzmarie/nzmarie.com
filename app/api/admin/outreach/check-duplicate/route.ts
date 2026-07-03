@@ -16,8 +16,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
-    const body = await request.json();
+    await marieDB.ensureOutreachTablesExist?.();
+    const body = await request.json() as { address?: string; campaign?: string; louis_property_id?: string };
     const { address, campaign, louis_property_id } = body;
 
     if (!address || typeof address !== 'string') {

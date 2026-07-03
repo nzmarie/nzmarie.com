@@ -6,6 +6,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonOutreach } from '@/components/admin/Skeleton';
 import InlineAddressInput from '@/components/admin/InlineAddressInput';
 import { getAllSuburbs } from '@/lib/geo-data';
+import { isSuperAdmin } from '@/lib/permissions';
 
 interface OutreachProperty {
   id: string;
@@ -47,7 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function OutreachPage() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'sent'>('pending');
@@ -67,6 +68,7 @@ export default function OutreachPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [availableStreets, setAvailableStreets] = useState<string[]>([]);
+  const canMarkAsSent = isSuperAdmin(session?.user?.email ?? '');
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -152,15 +154,19 @@ export default function OutreachPage() {
   const markAsSent = async () => {
     if (selected.size === 0) return;
     try {
-      await Promise.all(
-        Array.from(selected).map((id) =>
-          fetch(`/api/admin/outreach/${id}`, {
+      const results = await Promise.all(
+        Array.from(selected).map(async (id) => {
+          const response = await fetch(`/api/admin/outreach/${id}/mark-sent`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString() }),
-          })
-        )
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(data?.error || 'Failed to mark as sent');
+          }
+          return data;
+        })
       );
+      if (results.length === 0) return;
       showNotification('success', `Marked ${selected.size} address${selected.size === 1 ? '' : 'es'} as sent`);
       setSelected(new Set());
       fetchItems();
@@ -187,6 +193,34 @@ export default function OutreachPage() {
     } catch (err) {
       console.error('Start new campaign failed:', err);
       showNotification('error', 'Failed to start new campaign');
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selected.size === 0) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selected.size} address${selected.size === 1 ? '' : 'es'}? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      // Delete all selected addresses
+      await Promise.all(
+        Array.from(selected).map((id) =>
+          fetch(`/api/admin/outreach/${id}`, {
+            method: 'DELETE',
+          })
+        )
+      );
+      
+      showNotification('success', `Deleted ${selected.size} address${selected.size === 1 ? '' : 'es'} successfully`);
+      setSelected(new Set());
+      fetchItems();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      showNotification('error', 'Failed to delete addresses');
     }
   };
 
@@ -222,16 +256,19 @@ export default function OutreachPage() {
           .map(([street, properties]) => ({
             street,
             properties: properties.sort((a, b) => {
-              // Within same street: sort by created_at then house number
+              // Within same street: always sort by house number first
+              const houseNumberA = extractHouseNumber(a.property_address);
+              const houseNumberB = extractHouseNumber(b.property_address);
+              
+              // If house numbers are different, sort by number
+              if (houseNumberA !== houseNumberB) {
+                return houseNumberA - houseNumberB;
+              }
+              
+              // If house numbers are the same, sort by created_at
               const dateCompare = sortOrder === 'asc' 
                 ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                 : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-              
-              // If dates are the same, sort by house number
-              if (Math.abs(dateCompare) < 1000) { // within 1 second, consider same batch
-                return extractHouseNumber(a.property_address) - 
-                       extractHouseNumber(b.property_address);
-              }
               
               return dateCompare;
             }),
@@ -427,17 +464,26 @@ export default function OutreachPage() {
           <span className="text-sm font-medium text-blue-800">
             {selected.size} address{selected.size === 1 ? '' : 'es'} selected
           </span>
+          {canMarkAsSent && (
+            <button
+              onClick={markAsSent}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            >
+              <span aria-hidden="true">✓</span>
+              <span className="ml-1">Mark as Sent</span>
+            </button>
+          )}
           <button
-            onClick={markAsSent}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            onClick={deleteSelected}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
           >
-            Mark as Sent
+            🗑️ Delete
           </button>
           <button
             onClick={() => setSelected(new Set())}
             className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
           >
-            ✕ Clear
+            ✕ Clear Selection
           </button>
         </div>
       )}
@@ -532,7 +578,7 @@ export default function OutreachPage() {
                             {properties.map((prop) => (
                               <div
                                 key={prop.id}
-                                className="px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-4"
+                                className="px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-4 group"
                               >
                                 <input
                                   type="checkbox"
@@ -559,6 +605,25 @@ export default function OutreachPage() {
                                     </span>
                                   </div>
                                 </div>
+                                {activeTab === 'pending' && (
+                                  <button
+                                    onClick={async () => {
+                                      if (window.confirm(`Delete "${prop.property_address}"?`)) {
+                                        try {
+                                          await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+                                          showNotification('success', 'Address deleted');
+                                          fetchItems();
+                                        } catch {
+                                          showNotification('error', 'Failed to delete');
+                                        }
+                                      }
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
+                                    title="Delete this address"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
                                 <span
                                   className={`px-3 py-1 rounded-full text-xs font-medium border ${
                                     STATUS_COLORS[prop.status]

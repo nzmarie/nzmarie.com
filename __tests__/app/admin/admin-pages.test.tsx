@@ -141,10 +141,13 @@ describe('Admin pages', () => {
 
     const suburbGroup = await screen.findByRole('button', { name: /Takapuna/i });
     fireEvent.click(suburbGroup);
-    fireEvent.click(screen.getByRole('checkbox'));
+
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+    fireEvent.click(checkbox);
 
     await waitFor(() => {
-      expect(screen.getByText('Mark as Sent')).toBeTruthy();
+      expect(checkbox.checked).toBe(true);
+      expect(screen.getByRole('button', { name: /Mark as Sent/i })).toBeTruthy();
     });
   });
 });

@@ -31,7 +31,11 @@ export async function queryLouis<T extends QueryResultRow = Record<string, unkno
 }
 
 // Export pools for direct access
-export const marieDB = mariePool;
+export interface MarieDBPool extends Pool {
+  ensureOutreachTablesExist?: () => Promise<void>;
+}
+
+export const marieDB: MarieDBPool = mariePool as MarieDBPool;
 export const louisDB = louisPool;
 
 // Legacy export for backward compatibility

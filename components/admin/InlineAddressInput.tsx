@@ -2,17 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { findLocationBySuburb } from '@/lib/geo-data';
-
-const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
-
-interface GeoapifyProperties {
-  formatted: string;
-  state?: string;
-  city?: string;
-  suburb?: string;
-  county?: string;
-  district?: string;
-}
+import { useGooglePlacesAutocomplete } from '@/hooks/useGooglePlacesAutocomplete';
+import { getStreetNameOnly } from '@/lib/google-maps';
 
 interface DuplicateInfo {
   exists: boolean;
@@ -40,17 +31,27 @@ export default function InlineAddressInput({
   autoFocus = true,
 }: InlineAddressInputProps) {
   const [input, setInput] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [isSearching, setIsSearching] = useState(false);
   const [duplicateInfo, setDuplicateInfo] = useState<DuplicateInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState('');
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string>('');
   
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Use Google Places Autocomplete hook
+  const {
+    suggestions: googleSuggestions,
+    isLoading: isSearching,
+    selectSuggestion,
+    clearSuggestions,
+  } = useGooglePlacesAutocomplete(input);
+
+  // Convert Google predictions to string array for display
+  const suggestions = googleSuggestions.map((pred) => pred.description);
+  // Only show suggestions if address not selected and there are suggestions
+  const showSuggestions = !selectedAddress && suggestions.length > 0;
 
   // Auto-focus on mount
   useEffect(() => {
@@ -63,40 +64,12 @@ export default function InlineAddressInput({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
+        clearSuggestions();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Address autocomplete search
-  const searchAddresses = useCallback(async (value: string) => {
-    if (!value || value.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const res = await fetch(
-        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-          value
-        )}&filter=countrycode:nz&limit=8&apiKey=${GEOAPIFY_KEY}`
-      );
-      const data = await res.json();
-      const results = (data.features ?? []).map(
-        (f: { properties: GeoapifyProperties }) => f.properties.formatted
-      );
-      setSuggestions(results);
-      setShowSuggestions(results.length > 0);
-    } catch (error) {
-      console.error('Address search failed:', error);
-      setSuggestions([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
+  }, [clearSuggestions]);
 
   // Check for duplicates
   const checkDuplicate = useCallback(
@@ -121,23 +94,28 @@ export default function InlineAddressInput({
   const handleInputChange = (value: string) => {
     setInput(value);
     setSelectedAddress('');
+    setSelectedPlaceId('');
     setDuplicateInfo(null);
     setSelectedIndex(-1);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => searchAddresses(value), 300);
   };
 
   // Handle address selection
   const handleSelectAddress = useCallback(
-    (address: string) => {
+    async (index: number) => {
+      const prediction = googleSuggestions[index];
+      if (!prediction) return;
+
+      const address = prediction.description;
+      const placeId = prediction.place_id;
+
       setInput(address);
       setSelectedAddress(address);
-      setShowSuggestions(false);
+      setSelectedPlaceId(placeId);
       setSelectedIndex(-1);
+      clearSuggestions();
       checkDuplicate(address);
     },
-    [checkDuplicate]
+    [googleSuggestions, clearSuggestions, checkDuplicate]
   );
 
   // Handle keyboard navigation
@@ -153,7 +131,7 @@ export default function InlineAddressInput({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-        handleSelectAddress(suggestions[selectedIndex]);
+        handleSelectAddress(selectedIndex);
       } else if (selectedAddress && !duplicateInfo?.exists) {
         handleSubmit();
       } else if (duplicateInfo?.exists) {
@@ -162,67 +140,64 @@ export default function InlineAddressInput({
         setTimeout(() => inputRef.current?.classList.remove('animate-shake'), 400);
       }
     } else if (e.key === 'Escape') {
-      setShowSuggestions(false);
+      clearSuggestions();
       setSelectedIndex(-1);
     }
   };
 
-  // Extract street name from address
-  const extractStreetName = (fullAddress: string): string => {
-    // Remove leading number and optional unit (e.g., "5 ", "15A ", "123/456 ")
-    let street = fullAddress.replace(/^\d+[A-Za-z]?(?:\/\d+)?\s+/, '');
-    
-    // Take everything before the first comma (to remove suburb, city, etc.)
-    street = street.split(',')[0].trim();
-    
-    return street || '';
-  };
-
   // Submit new address
   const handleSubmit = async () => {
-    if (!selectedAddress || duplicateInfo?.exists || isSubmitting) return;
+    if (!selectedAddress || !selectedPlaceId || duplicateInfo?.exists || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      // Extract location info
-      const addressParts = selectedAddress.split(',').map((s) => s.trim());
-      let suburb = '';
-      let city = '';
-      let region = '';
-
-      // Try to find suburb in address
-      for (const part of addressParts) {
-        const location = findLocationBySuburb(part);
-        if (location) {
-          suburb = location.suburb;
-          city = location.city;
-          region = location.region;
-          break;
-        }
+      // Get full place details from Google
+      const parsedAddress = await selectSuggestion(selectedPlaceId);
+      
+      if (!parsedAddress) {
+        throw new Error('Failed to get address details');
       }
 
-      // If not found, try the second-to-last part
-      if (!suburb && addressParts.length >= 2) {
-        suburb = addressParts[addressParts.length - 2];
+      // Use parsed Google data first, fallback to local geo-data
+      let suburb = parsedAddress.suburb;
+      let city = parsedAddress.city;
+      let region = '';
+      // Extract street name only (without house number) for grouping
+      const streetNameOnly = getStreetNameOnly(parsedAddress);
+
+      // Try to find region from local data if suburb is known
+      if (suburb) {
         const location = findLocationBySuburb(suburb);
         if (location) {
-          city = location.city;
           region = location.region;
+          // Override with local data if available for consistency
+          city = location.city;
         }
       }
 
-      // Extract street name
-      const street = extractStreetName(selectedAddress);
+      // Fallback: try to extract from address parts
+      if (!suburb || !city) {
+        const addressParts = parsedAddress.fullAddress.split(',').map((s) => s.trim());
+        for (const part of addressParts) {
+          const location = findLocationBySuburb(part);
+          if (location) {
+            suburb = suburb || location.suburb;
+            city = city || location.city;
+            region = region || location.region;
+            break;
+          }
+        }
+      }
 
       const res = await fetch('/api/admin/outreach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          property_address: selectedAddress,
+          property_address: parsedAddress.fullAddress,
           suburb: suburb || 'Unknown',
           city: city || 'Auckland City',
           region: region || 'Auckland',
-          street: street || null,
+          street: streetNameOnly || null,
           campaign,
         }),
       });
@@ -234,8 +209,9 @@ export default function InlineAddressInput({
       // Success: clear and refocus
       setInput('');
       setSelectedAddress('');
+      setSelectedPlaceId('');
       setDuplicateInfo(null);
-      setSuggestions([]);
+      clearSuggestions();
       inputRef.current?.focus();
       
       // Notify parent
@@ -267,7 +243,6 @@ export default function InlineAddressInput({
           value={input}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
           placeholder="Enter North Shore address (e.g., 5 Cottam Grove, Northcross...)"
           className={`w-full pl-12 pr-4 py-3 rounded-lg border-2 transition-all duration-200 text-base ${getBorderColor()}`}
           disabled={isSubmitting}
@@ -307,7 +282,7 @@ export default function InlineAddressInput({
           {suggestions.map((s, i) => (
             <li
               key={i}
-              onMouseDown={() => handleSelectAddress(s)}
+              onMouseDown={() => handleSelectAddress(i)}
               onMouseEnter={() => setSelectedIndex(i)}
               className={`px-4 py-3 text-sm cursor-pointer border-b border-slate-100 last:border-0 transition-colors ${
                 selectedIndex === i

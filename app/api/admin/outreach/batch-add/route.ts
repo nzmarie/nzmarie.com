@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { marieDB } from '@/lib/db';
+import { marieDB, ensureOutreachTablesExist } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
 interface PropertyInput {
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
+    await ensureOutreachTablesExist();
     const { properties } = await request.json() as { properties: PropertyInput[] };
 
     if (!properties || properties.length === 0) {

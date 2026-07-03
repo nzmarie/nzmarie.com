@@ -1,21 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_ENDPOINTS } from '@/lib/api/config';
+import { useGooglePlacesAutocomplete } from '@/hooks/useGooglePlacesAutocomplete';
 
 interface AddressSuggestion {
   id: string;
   address: string;
   suburb: string;
   city: string;
-}
-
-interface GeoapifyFeature {
-  properties: {
-    formatted: string;
-    suburb?: string;
-    district?: string;
-    city?: string;
-    county?: string;
-  };
 }
 
 interface AddressAutocompleteProps {
@@ -25,7 +16,7 @@ interface AddressAutocompleteProps {
   city?: string;
   placeholder?: string;
   apiEndpoint?: string;
-  useGeoapify?: boolean;
+  useGoogleMaps?: boolean; // Use Google Maps instead of internal API
 }
 
 export default function AddressAutocomplete({
@@ -35,15 +26,35 @@ export default function AddressAutocomplete({
   city,
   placeholder = 'Search by address...',
   apiEndpoint = API_ENDPOINTS.propertyAutocomplete,
-  useGeoapify = false
+  useGoogleMaps = false
 }: AddressAutocompleteProps) {
-  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  // Google Maps autocomplete hook
+  const {
+    suggestions: googleSuggestions,
+    isLoading: googleLoading,
+    selectSuggestion: selectGoogleSuggestion,
+  } = useGooglePlacesAutocomplete(value);
+
+  // Internal API suggestions
+  const [internalSuggestions, setInternalSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingInternal, setIsLoadingInternal] = useState(false);
   const [noResults, setNoResults] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const isSelectingRef = useRef(false);
+
+  // Determine which suggestions and loading state to use
+  const suggestions = useGoogleMaps
+    ? googleSuggestions.map((pred) => ({
+        id: pred.place_id,
+        address: pred.description,
+        suburb: pred.structured_formatting.secondary_text?.split(',')[0] || '',
+        city: pred.structured_formatting.secondary_text?.split(',')[1]?.trim() || '',
+      }))
+    : internalSuggestions;
+
+  const isLoading = useGoogleMaps ? googleLoading : isLoadingInternal;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -57,7 +68,10 @@ export default function AddressAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch suggestions from internal API (when not using Google Maps)
   useEffect(() => {
+    if (useGoogleMaps) return; // Skip internal API when using Google Maps
+
     const fetchSuggestions = async () => {
       if (isSelectingRef.current) {
         isSelectingRef.current = false;
@@ -65,63 +79,69 @@ export default function AddressAutocomplete({
       }
 
       if (value.length < 2) {
-        setSuggestions([]);
+        setInternalSuggestions([]);
         setShowSuggestions(false);
         setNoResults(false);
         return;
       }
 
-      setIsLoading(true);
+      setIsLoadingInternal(true);
       try {
-        if (useGeoapify) {
-          const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_KEY || '';
-          const response = await fetch(
-            `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(value)}&filter=countrycode:nz&limit=6&apiKey=${geoapifyKey}`
-          );
-          const data = await response.json();
-          const features = data.features ?? [];
-          const results = features.map((f: GeoapifyFeature, index: number) => ({
-            id: `geo-${index}`,
-            address: f.properties.formatted,
-            suburb: f.properties.suburb || f.properties.district || '',
-            city: f.properties.city || f.properties.county || '',
-          }));
-          setSuggestions(results);
-          setShowSuggestions(results.length > 0);
-          setNoResults(results.length === 0);
-        } else {
-          const params = new URLSearchParams({ q: value });
-          if (city && city !== 'all-cities') {
-            params.append('city', city);
-          }
-
-          const response = await fetch(`${apiEndpoint}?${params}`);
-          const data = await response.json();
-          setSuggestions(data);
-          setShowSuggestions(data.length > 0);
-          setNoResults(data.length === 0);
+        const params = new URLSearchParams({ q: value });
+        if (city && city !== 'all-cities') {
+          params.append('city', city);
         }
+
+        const response = await fetch(`${apiEndpoint}?${params}`);
+        const data = await response.json();
+        setInternalSuggestions(data);
+        setShowSuggestions(data.length > 0);
+        setNoResults(data.length === 0);
       } catch (error) {
         console.error('Error fetching suggestions:', error);
-        setSuggestions([]);
+        setInternalSuggestions([]);
         setNoResults(false);
       } finally {
-        setIsLoading(false);
+        setIsLoadingInternal(false);
       }
     };
 
     setIsSelected(false);
     const debounceTimer = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(debounceTimer);
-  }, [value, city, apiEndpoint, useGeoapify]);
+  }, [value, city, apiEndpoint, useGoogleMaps]);
 
-  const handleSelect = (suggestion: AddressSuggestion) => {
+  // Update suggestions visibility for Google Maps
+  useEffect(() => {
+    if (useGoogleMaps) {
+      setShowSuggestions(googleSuggestions.length > 0);
+      setNoResults(value.length >= 3 && !googleLoading && googleSuggestions.length === 0);
+    }
+  }, [useGoogleMaps, googleSuggestions, googleLoading, value]);
+
+  const handleSelect = async (suggestion: AddressSuggestion) => {
     isSelectingRef.current = true;
     setIsSelected(true);
-    onChange(suggestion.address);
     setShowSuggestions(false);
     setNoResults(false);
-    onSelect?.(suggestion);
+
+    if (useGoogleMaps) {
+      // Get full place details from Google
+      const parsedAddress = await selectGoogleSuggestion(suggestion.id);
+      if (parsedAddress) {
+        onChange(parsedAddress.fullAddress);
+        onSelect?.({
+          id: suggestion.id,
+          address: parsedAddress.fullAddress,
+          suburb: parsedAddress.suburb,
+          city: parsedAddress.city,
+        });
+      }
+    } else {
+      // Internal API - use as-is
+      onChange(suggestion.address);
+      onSelect?.(suggestion);
+    }
   };
 
   return (

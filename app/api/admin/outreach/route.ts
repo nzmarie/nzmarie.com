@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * limit;
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
+    await marieDB.ensureOutreachTablesExist?.();
     let query = `SELECT * FROM outreach_properties WHERE 1=1`;
     const params: unknown[] = [];
     let idx = 1;
@@ -123,7 +123,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json() as {
+      property_address?: string;
+      suburb?: string;
+      city?: string;
+      region?: string;
+      street?: string;
+      owner_name?: string;
+      property_type?: string;
+      campaign?: string;
+      notes?: string;
+      louis_property_id?: string;
+    };
     const {
       property_address,
       suburb,

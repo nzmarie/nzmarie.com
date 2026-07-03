@@ -7,7 +7,7 @@ import { isAdmin } from '@/lib/permissions';
  * POST /api/admin/migrate-streets
  * Extract and populate street names from existing addresses
  */
-export async function POST(request: Request) {
+export async function POST() {
   const session = await auth();
 
   if (!session?.user?.email || !isAdmin(session.user.email)) {

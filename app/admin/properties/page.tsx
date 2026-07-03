@@ -670,7 +670,7 @@ export default function PropertiesPage() {
           <AddressAutocomplete
             value={addressInput}
             city={filters.city}
-            useGeoapify={true}
+            useGoogleMaps={true}
             onChange={(val) => {
               setAddressInput(val);
             }}

@@ -4,25 +4,71 @@ import React from "react";
 import AppraisalSection from "../components/AppraisalSection";
 import ReportDownloadSection from "../components/ReportDownloadSection";
 
+// Mock Google Maps API
+const mockGoogleMaps = {
+  places: {
+    AutocompleteService: vi.fn().mockImplementation(() => ({
+      getPlacePredictions: vi.fn((request, callback) => {
+        const predictions = [
+          {
+            place_id: "mock-place-id-1",
+            description: "1 Queen Street, Auckland Central, Auckland 1010, New Zealand",
+            structured_formatting: {
+              main_text: "1 Queen Street",
+              secondary_text: "Auckland Central, Auckland",
+            },
+          },
+        ];
+        callback(predictions, "OK");
+      }),
+    })),
+    PlacesService: vi.fn().mockImplementation(() => ({
+      getDetails: vi.fn((request, callback) => {
+        const placeResult = {
+          formatted_address: "1 Queen Street, Auckland Central, Auckland 1010, New Zealand",
+          address_components: [
+            { long_name: "1", types: ["street_number"] },
+            { long_name: "Queen Street", types: ["route"] },
+            { long_name: "Auckland Central", types: ["sublocality_level_1", "sublocality", "political"] },
+            { long_name: "Auckland", types: ["locality", "political"] },
+            { long_name: "1010", types: ["postal_code"] },
+          ],
+          geometry: {},
+        };
+        callback(placeResult, "OK");
+      }),
+    })),
+    AutocompleteSessionToken: vi.fn().mockImplementation(() => ({})),
+    PlacesServiceStatus: {
+      OK: "OK",
+      ZERO_RESULTS: "ZERO_RESULTS",
+    },
+  },
+};
+
+// @ts-ignore - Mock global google object
+global.google = mockGoogleMaps as any;
+
+// Mock document.createElement for script injection
+const originalCreateElement = document.createElement.bind(document);
+document.createElement = vi.fn((tagName: string) => {
+  const element = originalCreateElement(tagName);
+  if (tagName === 'script') {
+    // Immediately trigger onload for Google Maps script
+    setTimeout(() => {
+      if (element.onload) {
+        element.onload(new Event('load'));
+      }
+    }, 0);
+  }
+  return element;
+}) as any;
+
 let mockFetchSuccess = true;
 let errorOnAppraisalSubmit = false;
 
 const mockFetch = vi.fn().mockImplementation((url, options) => {
-  if (typeof url === 'string' && (url.includes("geoapify") || url.includes("geocode/autocomplete"))) {
-    return Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({
-        features: [
-          {
-            properties: {
-              formatted: "1 Queen Street, Auckland Central, Auckland, 1010, New Zealand"
-            }
-          }
-        ]
-      }),
-    });
-  }
-  
+  // API endpoints (not Google Maps)
   if (typeof url === 'string' && url.includes("/api/appraisal")) {
     if (errorOnAppraisalSubmit) {
       return Promise.resolve({

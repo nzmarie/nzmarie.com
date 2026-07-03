@@ -12,8 +12,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
-    const body = await request.json();
+    await marieDB.ensureOutreachTablesExist?.();
+    const body = await request.json() as { property_ids?: string[] };
     const { property_ids } = body;
 
     if (!property_ids || !Array.isArray(property_ids) || property_ids.length === 0) {

@@ -15,7 +15,7 @@ export async function POST(
   }
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
+    await marieDB.ensureOutreachTablesExist?.();
     const { id } = await params;
     const token = await getOrCreateQRToken(id);
     const url = buildQRUrl(token);

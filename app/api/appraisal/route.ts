@@ -26,8 +26,21 @@ async function checkLocationColumns(): Promise<boolean> {
 
 export async function POST(req: Request) {
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
-    const body = await req.json();
+    await marieDB.ensureOutreachTablesExist?.();
+    const body = await req.json() as {
+      name?: string;
+      address?: string;
+      region?: string;
+      city?: string;
+      suburb?: string;
+      email?: string;
+      phone?: string;
+      timeline?: string;
+      motivation?: string;
+      language?: string;
+      heard_from?: string;
+      priority?: string;
+    };
     const {
       name,
       address,
@@ -38,8 +51,8 @@ export async function POST(req: Request) {
       phone,
       timeline,
       motivation,
-      languagePreference,
-      heardFrom,
+      language,
+      heard_from,
     } = body;
 
     // --- Validation ---
@@ -110,8 +123,8 @@ export async function POST(req: Request) {
           phone.trim(),
           timeline || null,
           motivation || null,
-          languagePreference || null,
-          heardFrom || null,
+          language || null,
+          heard_from || null,
         ]
       );
     } else {
@@ -130,8 +143,8 @@ export async function POST(req: Request) {
           phone.trim(),
           timeline || null,
           motivation || null,
-          languagePreference || null,
-          heardFrom || null,
+          language || null,
+          heard_from || null,
         ]
       );
       // Reset cache so next request re-checks (in case migration runs soon)
@@ -180,6 +193,9 @@ export async function POST(req: Request) {
     } catch (err) {
       console.error('Failed to update outreach status:', err);
     }
+
+    const languagePreference = language?.trim() || undefined;
+    const heardFrom = heard_from?.trim() || undefined;
 
     sendAppraisalNotification({
       name: name.trim(),

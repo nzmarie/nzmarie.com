@@ -18,7 +18,7 @@ export async function PATCH(
   }
 
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
+    await marieDB.ensureOutreachTablesExist?.();
     const body = await request.json();
     const { id } = await params;
 

@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    await (marieDB as any).ensureOutreachTablesExist?.();
+    await marieDB.ensureOutreachTablesExist?.();
     const { token } = await params;
 
     const result = await marieDB.query(

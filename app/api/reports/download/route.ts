@@ -14,7 +14,13 @@ function isAllowedSuburb(value: unknown): value is string {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = await req.json() as {
+      firstName?: string;
+      email?: string;
+      phone?: string;
+      suburb?: string;
+      subscribe?: boolean;
+    };
     const { firstName, email, phone, suburb, subscribe } = body;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -129,7 +135,7 @@ export async function POST(req: Request) {
 
     const trackingCodeFromUrl = new URL(req.url).searchParams.get('tc');
     try {
-      await (marieDB as any).ensureOutreachTablesExist?.();
+      await marieDB.ensureOutreachTablesExist?.();
       const result = await query(
         `INSERT INTO report_downloads 
          (email, name, phone, suburb, report_type, downloaded_at, source, tracking_code, user_agent, ip_address)

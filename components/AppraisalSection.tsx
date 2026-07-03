@@ -8,16 +8,22 @@ import {
   getSuburbsByCity,
   type Region,
 } from "../lib/geo-data";
+import { useGooglePlacesAutocomplete } from "@/hooks/useGooglePlacesAutocomplete";
 
-const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
+function detectLocationFromAddress(address: string) {
+  const segments = address
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
 
-interface GeoapifyProperties {
-  formatted: string;
-  state?: string;
-  city?: string;
-  suburb?: string;
-  county?: string;
-  district?: string;
+  for (const segment of segments) {
+    const location = findLocationBySuburb(segment);
+    if (location) {
+      return location;
+    }
+  }
+
+  return null;
 }
 
 interface AppraisalFormData {
@@ -53,16 +59,24 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [step, setStep] = useState<1 | 2>(1);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [noResults, setNoResults] = useState(false);
   const [isAddressSelected, setIsAddressSelected] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const availableCities = getCitiesByRegion(formData.region);
   const availableSuburbs = getSuburbsByCity(formData.city);
+
+  // Use Google Places Autocomplete hook
+  const {
+    suggestions: googleSuggestions,
+    isLoading: isSearching,
+    selectSuggestion,
+    clearSuggestions,
+  } = useGooglePlacesAutocomplete(formData.address);
+
+  // Convert Google predictions to string array for display
+  const suggestions = googleSuggestions.map((pred) => pred.description);
+  const showSuggestions = suggestions.length > 0;
+  const noResults = formData.address.length >= 3 && !isSearching && suggestions.length === 0;
 
   useEffect(() => {
     if (!availableCities.includes(formData.city)) {
@@ -86,91 +100,70 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-        setNoResults(false);
+        clearSuggestions();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [clearSuggestions]);
 
   const handleAddressChange = (value: string) => {
     setFormData((prev) => ({ ...prev, address: value }));
     setIsAddressSelected(false);
-    setShowSuggestions(false);
-    setNoResults(false);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+  };
 
-    const hasLetter = /[a-zA-Z]/.test(value);
-    if (value.length < 3 || !hasLetter) {
-      setSuggestions([]);
-      setIsSearching(false);
+  const handleSelectSuggestion = async (index: number) => {
+    const prediction = googleSuggestions[index];
+    if (!prediction) return;
+
+    const placeId = prediction.place_id;
+
+    // Get full place details from Google
+    const parsedAddress = await selectSuggestion(placeId);
+    
+    if (!parsedAddress) {
+      console.error('Failed to get place details');
       return;
     }
 
-    setIsSearching(true);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(value)}&filter=countrycode:nz&limit=6&apiKey=${GEOAPIFY_KEY}`
-        );
-        const data = await res.json();
-        const features = data.features ?? [];
-        
-        // Store both formatted address and properties for later extraction
-        const results: { formatted: string; properties: GeoapifyProperties }[] = features.map((f: { properties: GeoapifyProperties }) => ({
-          formatted: f.properties.formatted,
-          properties: f.properties,
-        }));
-
-        const trimmedValue = value.trim();
-        if (
-          results.length === 1 &&
-          results[0].formatted.trim().toLowerCase() === trimmedValue.toLowerCase()
-        ) {
-          handleSelectSuggestion(results[0].formatted);
-          return;
-        }
-        
-        setSuggestions(results.map((r) => r.formatted));
-        setShowSuggestions(results.length > 0);
-        setNoResults(results.length === 0);
-      } catch {
-        setSuggestions([]);
-        setNoResults(false);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-  };
-
-  const handleSelectSuggestion = (address: string) => {
-    const addressParts = address.split(",").map((s) => s.trim());
-    let detectedSuburb = "";
-    let detectedCity = formData.city;
+    // Use parsed Google data first, fallback to local geo-data
+    let detectedSuburb = parsedAddress.suburb;
+    let detectedCity = parsedAddress.city;
     let detectedRegion = formData.region;
 
-    for (const part of addressParts) {
-      const location = findLocationBySuburb(part);
+    // Try to find region from local data if suburb is known
+    if (detectedSuburb) {
+      const location = findLocationBySuburb(detectedSuburb);
       if (location) {
-        detectedSuburb = location.suburb;
-        detectedCity = location.city;
         detectedRegion = location.region;
-        break;
+        // Override with local data if available for consistency
+        detectedCity = location.city;
+      }
+    }
+
+    // Fallback: try to extract from address parts
+    if (!detectedSuburb || !detectedCity) {
+      const addressParts = parsedAddress.fullAddress.split(",").map((s) => s.trim());
+      for (const part of addressParts) {
+        const location = findLocationBySuburb(part);
+        if (location) {
+          detectedSuburb = detectedSuburb || location.suburb;
+          detectedCity = detectedCity || location.city;
+          detectedRegion = detectedRegion || location.region;
+          break;
+        }
       }
     }
     
     setFormData((prev) => ({ 
       ...prev, 
-      address,
+      address: parsedAddress.fullAddress,
       suburb: detectedSuburb,
       city: detectedCity,
       region: detectedRegion,
     }));
     setIsAddressSelected(true);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setNoResults(false);
+    clearSuggestions();
   };
 
   useEffect(() => {
@@ -179,9 +172,26 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
     }
   }, [isAddressSelected]);
 
+  const canProceedToStep2 = isAddressSelected || Boolean(detectLocationFromAddress(formData.address));
+
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isAddressSelected && formData.address.trim()) {
+    if (!formData.address.trim()) return;
+
+    if (isAddressSelected) {
+      setStep(2);
+      return;
+    }
+
+    const detectedLocation = detectLocationFromAddress(formData.address);
+    if (detectedLocation) {
+      setFormData((prev) => ({
+        ...prev,
+        region: detectedLocation.region,
+        city: detectedLocation.city,
+        suburb: detectedLocation.suburb,
+      }));
+      setIsAddressSelected(true);
       setStep(2);
     }
   };
@@ -191,18 +201,12 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
     e.stopPropagation();
     setStep(1);
     setIsAddressSelected(false);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setNoResults(false);
+    clearSuggestions();
     setTimeout(() => {
       const inputElement = addressInputRef.current;
       if (inputElement) {
         inputElement.focus();
         inputElement.select();
-        const current = formData.address;
-        if (current.length >= 3) {
-          handleAddressChange(current);
-        }
       }
     }, 50);
   };
@@ -268,7 +272,6 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                       autoComplete="off"
                       value={formData.address}
                       onChange={(e) => handleAddressChange(e.target.value)}
-                      onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                       className={`w-full pl-12 pr-10 py-4 rounded-xl border focus:outline-none focus:ring-2 focus:border-transparent transition duration-200 text-lg shadow-inner bg-slate-50 ${
                         isAddressSelected 
                           ? "border-green-300 focus:ring-2 focus:ring-green-500"
@@ -299,7 +302,7 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                         {suggestions.map((s, i) => (
                           <li
                             key={i}
-                            onMouseDown={() => handleSelectSuggestion(s)}
+                            onMouseDown={() => handleSelectSuggestion(i)}
                             className="px-5 py-3 text-sm text-slate-700 hover:bg-blue-100 cursor-pointer border-b border-slate-100 last:border-0 transition-colors duration-150 font-medium"
                           >
                             <span className="mr-2 text-blue-500">📍</span>{s}
@@ -320,9 +323,9 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
                   </div>
                   <button
                     type="submit"
-                    disabled={!isAddressSelected}
+                    disabled={!canProceedToStep2}
                     className={`w-full md:w-auto px-8 py-4 font-bold rounded-xl transition-all duration-300 whitespace-nowrap text-lg ${
-                      isAddressSelected
+                      canProceedToStep2
                         ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl cursor-pointer"
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
