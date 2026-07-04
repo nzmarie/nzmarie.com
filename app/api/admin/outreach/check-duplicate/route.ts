@@ -27,6 +27,8 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log(`[check-duplicate] Checking address: "${address}" in campaign: "${campaign}"`);
+
     // Prefer matching by louis_property_id when available (more reliable)
     let result;
     if (louis_property_id) {
@@ -36,7 +38,13 @@ export async function POST(request: Request) {
         [louis_property_id.trim()]
       );
     } else {
-      // Check for existing address in the specified campaign (or all campaigns if not specified)
+      const normalizedAddress = address
+        .toLowerCase()
+        .replace(/,\s*new\s*zealand/g, '')
+        .replace(/new\s*zealand/g, '')
+        .replace(/\b\d{4}\b/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
       let query = `
         SELECT 
           id,
@@ -51,9 +59,21 @@ export async function POST(request: Request) {
           converted_at,
           created_at
         FROM outreach_properties
-        WHERE property_address ILIKE $1
+        WHERE LOWER(
+          REGEXP_REPLACE(
+            REGEXP_REPLACE(
+              REGEXP_REPLACE(property_address, ',\\s*New\\s*Zealand', '', 'gi'),
+              '\\b\\d{4}\\b',
+              '',
+              'g'
+            ),
+            '[^a-zA-Z0-9]',
+            '',
+            'g'
+          )
+        ) = $1
       `;
-      const params: unknown[] = [address.trim()];
+      const params: unknown[] = [normalizedAddress];
 
       if (campaign) {
         query += ` AND campaign = $2`;
@@ -67,6 +87,7 @@ export async function POST(request: Request) {
 
     if (result.rows.length > 0) {
       const existing = result.rows[0];
+      console.log(`[check-duplicate] Found duplicate: ${existing.property_address}`);
       return NextResponse.json({
         exists: true,
         duplicate: {
@@ -85,6 +106,7 @@ export async function POST(request: Request) {
       });
     }
 
+    console.log(`[check-duplicate] No duplicate found`);
     return NextResponse.json({
       exists: false,
       message: 'Address is available',

@@ -163,10 +163,29 @@ export async function POST(request: Request) {
         [louis_property_id.trim(), campaign]
       );
     } else {
+      const normalizedAddress = property_address
+        .toLowerCase()
+        .replace(/,\s*new\s*zealand/g, '')
+        .replace(/new\s*zealand/g, '')
+        .replace(/\b\d{4}\b/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
       duplicate = await marieDB.query(
         `SELECT id FROM outreach_properties 
-         WHERE property_address ILIKE $1 AND campaign = $2 LIMIT 1`,
-        [property_address.trim(), campaign]
+         WHERE LOWER(
+           REGEXP_REPLACE(
+             REGEXP_REPLACE(
+               REGEXP_REPLACE(property_address, ',\\s*New\\s*Zealand', '', 'gi'),
+               '\\b\\d{4}\\b',
+               '',
+               'g'
+             ),
+             '[^a-zA-Z0-9]',
+             '',
+             'g'
+           )
+         ) = $1 AND campaign = $2 LIMIT 1`,
+        [normalizedAddress, campaign]
       );
     }
 

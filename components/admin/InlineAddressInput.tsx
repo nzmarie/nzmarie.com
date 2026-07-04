@@ -36,6 +36,7 @@ export default function InlineAddressInput({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState('');
   const [selectedPlaceId, setSelectedPlaceId] = useState<string>('');
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -74,6 +75,7 @@ export default function InlineAddressInput({
   // Check for duplicates
   const checkDuplicate = useCallback(
     async (address: string) => {
+      setIsCheckingDuplicate(true);
       try {
         const res = await fetch('/api/admin/outreach/check-duplicate', {
           method: 'POST',
@@ -85,6 +87,8 @@ export default function InlineAddressInput({
       } catch (error) {
         console.error('Duplicate check failed:', error);
         setDuplicateInfo(null);
+      } finally {
+        setIsCheckingDuplicate(false);
       }
     },
     [campaign]
@@ -132,10 +136,10 @@ export default function InlineAddressInput({
       e.preventDefault();
       if (selectedIndex >= 0 && suggestions[selectedIndex]) {
         handleSelectAddress(selectedIndex);
-      } else if (selectedAddress && !duplicateInfo?.exists) {
+      } else if (selectedAddress && !duplicateInfo?.exists && !isCheckingDuplicate) {
         handleSubmit();
-      } else if (duplicateInfo?.exists) {
-        // Shake animation on duplicate
+      } else if (duplicateInfo?.exists || isCheckingDuplicate) {
+        // Shake animation on duplicate or while checking
         inputRef.current?.classList.add('animate-shake');
         setTimeout(() => inputRef.current?.classList.remove('animate-shake'), 400);
       }
@@ -147,7 +151,7 @@ export default function InlineAddressInput({
 
   // Submit new address
   const handleSubmit = async () => {
-    if (!selectedAddress || !selectedPlaceId || duplicateInfo?.exists || isSubmitting) return;
+    if (!selectedAddress || !selectedPlaceId || duplicateInfo?.exists || isSubmitting || isCheckingDuplicate) return;
 
     setIsSubmitting(true);
     try {
@@ -299,7 +303,34 @@ export default function InlineAddressInput({
 
       {/* Status message */}
       <div className="mt-2 min-h-[24px]">
-        {duplicateInfo?.exists && (
+        {isCheckingDuplicate && (
+          <p className="text-sm text-blue-600 font-medium flex items-center gap-2">
+            <span className="inline-block h-4 w-4">
+              <svg
+                className="animate-spin"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8H4z"
+                />
+              </svg>
+            </span>
+            <span>Checking if address already exists...</span>
+          </p>
+        )}
+        {!isCheckingDuplicate && duplicateInfo?.exists && (
           <p className="text-sm text-yellow-700 font-medium flex items-center gap-2">
             <span>⚠️</span>
             <span>
@@ -308,13 +339,13 @@ export default function InlineAddressInput({
             </span>
           </p>
         )}
-        {selectedAddress && !duplicateInfo?.exists && (
+        {!isCheckingDuplicate && selectedAddress && !duplicateInfo?.exists && (
           <p className="text-sm text-green-600 font-medium flex items-center gap-2">
             <span>✓</span>
             <span>Valid address, press Enter to add</span>
           </p>
         )}
-        {!selectedAddress && input.length >= 3 && !isSearching && (
+        {!selectedAddress && input.length >= 3 && !isSearching && !isCheckingDuplicate && (
           <p className="text-sm text-slate-400">
             ↑↓ to select, Enter to confirm
           </p>
