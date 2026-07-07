@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "../../app/api/reports/download/route";
 
-vi.mock("../../lib/db", () => ({
-  query: vi.fn(),
-}));
+vi.mock("../../lib/db", async (importOriginal) => {
+  const mockQuery = vi.fn();
+  return {
+    query: mockQuery,
+    marieDB: {
+      query: mockQuery,
+    },
+  };
+});
 
 vi.mock("../../lib/r2-storage", () => ({
   getSignedDownloadUrl: vi.fn().mockResolvedValue("https://r2.example.com/signed-url?token=abc"),

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
-import { isSuperAdmin } from '@/lib/permissions';
+import { isAdmin } from '@/lib/permissions';
 
 export async function PATCH(
   _request: Request,
@@ -10,14 +10,15 @@ export async function PATCH(
   const params = await props.params;
   const session = await auth();
 
-  if (!session?.user?.email || !isSuperAdmin(session.user.email)) {
+  if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
+    await marieDB.ensureOutreachTablesExist?.();
     const result = await marieDB.query(
-      `UPDATE outreach_selected_properties
-       SET status = 'SENT',
+      `UPDATE outreach_properties
+       SET status = 'sent',
            sent_at = NOW(),
            sent_by = $1
        WHERE id = $2

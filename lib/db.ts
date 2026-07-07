@@ -61,6 +61,7 @@ export async function ensureOutreachTablesExist(): Promise<void> {
       campaign VARCHAR(100) NOT NULL DEFAULT '2026_Q3_Report',
       status VARCHAR(50) NOT NULL DEFAULT 'pending',
       sent_at TIMESTAMP,
+      sent_by VARCHAR(255),
       interacted_at TIMESTAMP,
       converted_at TIMESTAMP,
       notes TEXT,
@@ -69,6 +70,8 @@ export async function ensureOutreachTablesExist(): Promise<void> {
       selected_by VARCHAR(255),
       selected_at TIMESTAMPTZ
     );
+
+    ALTER TABLE outreach_properties ADD COLUMN IF NOT EXISTS sent_by VARCHAR(255);
 
     CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach_properties(status);
     CREATE INDEX IF NOT EXISTS idx_outreach_suburb ON outreach_properties(suburb);

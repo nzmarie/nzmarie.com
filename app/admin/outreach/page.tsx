@@ -6,7 +6,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonOutreach } from '@/components/admin/Skeleton';
 import InlineAddressInput from '@/components/admin/InlineAddressInput';
 import { getAllSuburbs } from '@/lib/geo-data';
-import { isSuperAdmin } from '@/lib/permissions';
+import { isAdmin } from '@/lib/permissions';
 
 interface OutreachProperty {
   id: string;
@@ -63,12 +63,12 @@ export default function OutreachPage() {
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
-  
+
   const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [availableStreets, setAvailableStreets] = useState<string[]>([]);
-  const canMarkAsSent = isSuperAdmin(session?.user?.email ?? '');
+  const canMarkAsSent = isAdmin(session?.user?.email ?? '');
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -97,7 +97,10 @@ export default function OutreachPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      setItems(data.data ?? []);
+      setItems((data.data ?? []).map((item: OutreachProperty) => ({
+        ...item,
+        status: normalizeStatus(item.status),
+      })));
       setPagination(data.pagination ?? null);
     } catch (error) {
       console.error('Error fetching outreach:', error);
@@ -110,7 +113,6 @@ export default function OutreachPage() {
     if (status === 'authenticated') fetchItems();
   }, [status, fetchItems]);
 
-  // 获取当前过滤条件下的可用街道
   useEffect(() => {
     const streets = new Set<string>();
     items.forEach(item => {
@@ -124,12 +126,37 @@ export default function OutreachPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  const normalizeStatus = (status?: unknown) => {
+    const value = String(status ?? '').toLowerCase();
+    if (value === 'pending' || value === 'sent' || value === 'interacted' || value === 'converted') {
+      return value as OutreachProperty['status'];
+    }
+    return 'pending';
+  };
+
   const handleAddSuccess = (newProperty: unknown) => {
     showNotification('success', 'Address added successfully');
     const prop = newProperty as OutreachProperty;
+    prop.status = normalizeStatus(prop.status);
     setItems((prev) => [prop, ...prev]);
     if (pagination) {
       setPagination({ ...pagination, total: pagination.total + 1 });
+    }
+  };
+
+  const handleMarkAsSentSuccess = (updatedProperties: OutreachProperty[]) => {
+    setItems((prev) => {
+      if (activeTab === 'pending') {
+        return prev.filter((item) => !updatedProperties.some((updated) => updated.id === item.id));
+      }
+      if (activeTab === 'sent') {
+        return [...updatedProperties, ...prev];
+      }
+      return prev;
+    });
+
+    if (pagination) {
+      setPagination((prev) => prev ? { ...prev, total: Math.max(0, prev.total - updatedProperties.length) } : prev);
     }
   };
 
@@ -163,13 +190,13 @@ export default function OutreachPage() {
           if (!response.ok) {
             throw new Error(data?.error || 'Failed to mark as sent');
           }
-          return data;
+          return data.data as OutreachProperty;
         })
       );
       if (results.length === 0) return;
       showNotification('success', `Marked ${selected.size} address${selected.size === 1 ? '' : 'es'} as sent`);
       setSelected(new Set());
-      fetchItems();
+      handleMarkAsSentSuccess(results);
     } catch {
       showNotification('error', 'Bulk update failed');
     }
@@ -373,7 +400,7 @@ export default function OutreachPage() {
             value={suburbFilter}
             onChange={(e) => { 
               setSuburbFilter(e.target.value); 
-              setStreetFilter(''); // 重置街道过滤
+              setStreetFilter('');
               setPage(1); 
             }}
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -605,8 +632,32 @@ export default function OutreachPage() {
                                     </span>
                                   </div>
                                 </div>
+                                {activeTab === 'pending' && canMarkAsSent && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
+                                      try {
+                                        const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, {
+                                          method: 'PATCH',
+                                        });
+                                        if (!res.ok) throw new Error('Failed to mark as sent');
+                                        const data = await res.json();
+                                        showNotification('success', 'Marked as sent');
+                                        handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                      } catch {
+                                        showNotification('error', 'Failed to mark as sent');
+                                      }
+                                    }}
+                                    className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
+                                    title="Mark this address as sent"
+                                  >
+                                    ✓ Sent
+                                  </button>
+                                )}
                                 {activeTab === 'pending' && (
                                   <button
+                                    type="button"
                                     onClick={async () => {
                                       if (window.confirm(`Delete "${prop.property_address}"?`)) {
                                         try {
@@ -618,7 +669,7 @@ export default function OutreachPage() {
                                         }
                                       }
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
+                                    className="transition-colors px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
                                     title="Delete this address"
                                   >
                                     🗑️

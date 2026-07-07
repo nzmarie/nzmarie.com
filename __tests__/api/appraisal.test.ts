@@ -1,17 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "../../app/api/appraisal/route";
 
-vi.mock("../../lib/db", () => ({
-  query: vi.fn(),
-  marieDB: { query: vi.fn() },
-  louisDB: { query: vi.fn() },
-}));
+vi.mock("../../lib/db", () => {
+  const mockQuery = vi.fn();
+  return {
+    query: mockQuery,
+    marieDB: { query: mockQuery },
+    louisDB: { query: vi.fn() },
+    queryLouis: vi.fn(),
+    ensureOutreachTablesExist: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/email", () => ({
   sendAppraisalNotification: vi.fn().mockResolvedValue({ id: "mock-email-id" }),
 }));
 
 import { query } from "../../lib/db";
+
+const db = { query };
 
 describe("POST /api/appraisal (refactored)", () => {
   beforeEach(() => {
