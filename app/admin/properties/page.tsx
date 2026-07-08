@@ -33,6 +33,7 @@ interface Property {
   floor_area: string | null;
   image_url: string;
   property_url: string;
+  realestate_url?: string | null;
 }
 
 interface Filters {
@@ -140,7 +141,7 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
               onError={() => setImageError(true)}
               width={400}
               height={220}
-              style={{ objectFit: "cover" }}
+              style={{ objectFit: "cover", width: "100%", height: "220px" }}
             />
           ) : (
             <div style={{
@@ -172,7 +173,7 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
           )}
         </a>
 
-        {property.region && (
+        {property.suburb && (
           <div style={{
             position: "absolute",
             bottom: "16px",
@@ -186,9 +187,55 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
             textTransform: "capitalize",
           }}>
-            {property.region}
+            {property.suburb}
           </div>
         )}
+        
+        {/* Built Year Badge */}
+        {property.build_year && (
+          <div style={{
+            position: "absolute",
+            top: "16px",
+            right: "16px",
+            backgroundColor: "rgba(59, 130, 246, 0.9)",
+            color: "white",
+            padding: "4px 10px",
+            borderRadius: "12px",
+            fontSize: "0.75rem",
+            fontWeight: "600",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+            Built {property.build_year}
+          </div>
+        )}
+        
+        {/* Years Since Last Sold Badge */}
+        {property.last_sold_date && (() => {
+          const soldDate = new Date(property.last_sold_date);
+          if (!Number.isNaN(soldDate.getTime())) {
+            const today = new Date();
+            const years = today.getFullYear() - soldDate.getFullYear();
+            if (years > 0) {
+              return (
+                <div style={{
+                  position: "absolute",
+                  bottom: "16px",
+                  right: "16px",
+                  backgroundColor: "rgba(249, 115, 22, 0.9)",
+                  color: "white",
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                }}>
+                  Sold {years}yr{years > 1 ? 's' : ''} ago
+                </div>
+              );
+            }
+          }
+          return null;
+        })()}
       </div>
 
       <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column" }}>
@@ -206,12 +253,38 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
         <div style={{
           display: "flex",
           alignItems: "center",
-          marginBottom: "18px",
+          marginBottom: "12px",
           color: "#718096",
           fontSize: "0.95rem",
         }}>
           <FaMapMarkerAlt style={{ marginRight: "8px", fontSize: "1rem" }} />
           <span>{property.suburb}, {property.city}</span>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "18px" }}>
+          {property.realestate_url && (
+            <a
+              href={property.realestate_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: "0.75rem",
+                color: "#16a34a",
+                backgroundColor: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                fontWeight: "600",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s",
+              }}
+            >
+              🏠 RealEstate
+            </a>
+          )}
         </div>
 
         <div style={{
@@ -223,22 +296,54 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
         }}>
           <div>
             <div style={{ fontSize: "0.75rem", color: "#718096", marginBottom: "4px" }}>
+              Last Sold
+            </div>
+            <div style={{ fontWeight: "700", color: "#2D3748", fontSize: "1.1rem", marginBottom: "4px" }}>
+              {formatDate(property.last_sold_date)}
+            </div>
+            <div style={{ fontWeight: "600", color: "#4a5568", fontSize: "1rem" }}>
+              {formatCurrency(property.last_sold_price)}
+            </div>
+            
+            {/* Price Growth Indicator */}
+            {property.last_sold_price && property.rv && property.last_sold_price > 0 && property.rv > 0 && (() => {
+              const growth = ((property.rv - property.last_sold_price) / property.last_sold_price) * 100;
+              const isPositive = growth > 0;
+              return (
+                <div style={{
+                  marginTop: "6px",
+                  fontSize: "0.75rem",
+                  color: isPositive ? "#16a34a" : "#dc2626",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}>
+                  <span>{isPositive ? "↗" : "↘"}</span>
+                  <span>{isPositive ? "+" : ""}{growth.toFixed(1)}% since sold</span>
+                </div>
+              );
+            })()}
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "0.75rem", color: "#718096", marginBottom: "4px" }}>
               RV (Rating Value)
             </div>
             <div style={{ fontWeight: "700", color: "#2D3748", fontSize: "1.2rem" }}>
               {formatCurrency(property.rv)}
             </div>
-          </div>
-          <div>
-            <div style={{ fontSize: "0.75rem", color: "#718096", marginBottom: "4px" }}>
-              Last Sold
-            </div>
-            <div style={{ fontWeight: "600", color: "#4a5568", fontSize: "1rem" }}>
-              {formatCurrency(property.last_sold_price)}
-            </div>
-            <div style={{ fontSize: "0.75rem", color: "#718096" }}>
-              {formatDate(property.last_sold_date)}
-            </div>
+            
+            {/* Build Year under RV */}
+            {property.build_year && (
+              <div style={{
+                marginTop: "8px",
+                fontSize: "0.75rem",
+                color: "#718096",
+                fontWeight: "500",
+              }}>
+                Built in {property.build_year}
+              </div>
+            )}
           </div>
         </div>
 
@@ -282,7 +387,14 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
               <FaRulerCombined style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
               <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
-                {property.land_area && property.land_area !== "0" && property.land_area !== 0 ? property.land_area : "-"}
+                {(() => {
+                  // 优先显示 floor_area（室内面积），如果没有则显示 land_area（土地面积）
+                  const area = property.floor_area || property.land_area;
+                  if (area && area !== "0" && area !== 0 && area !== "-") {
+                    return area;
+                  }
+                  return "-";
+                })()}
               </span>
             </div>
             <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>m²</div>
@@ -684,6 +796,83 @@ export default function PropertiesPage() {
             }}
             placeholder={`Search by address in ${filters.city}...`}
           />
+        </div>
+
+        {/* Quick Suburb Filter Buttons */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
+            Quick Filter by Suburb
+          </label>
+          <div style={{ 
+            display: "flex", 
+            flexWrap: "wrap", 
+            gap: "10px",
+            alignItems: "center"
+          }}>
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany'].map((suburb) => (
+              <button
+                key={suburb}
+                onClick={() => {
+                  setFilters(prev => ({
+                    ...prev,
+                    suburb: prev.suburb === suburb ? '' : suburb,
+                  }));
+                }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: filters.suburb === suburb ? '#3b82f6' : 'white',
+                  color: filters.suburb === suburb ? 'white' : '#4a5568',
+                  border: filters.suburb === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: filters.suburb === suburb ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: filters.suburb === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (filters.suburb !== suburb) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (filters.suburb !== suburb) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {suburb}
+              </button>
+            ))}
+            {filters.suburb && (
+              <button
+                onClick={() => setFilters(prev => ({ ...prev, suburb: '' }))}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: '#fef2f2',
+                  color: '#dc2626',
+                  border: '2px solid #fecaca',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                  e.currentTarget.style.borderColor = '#fca5a5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fef2f2';
+                  e.currentTarget.style.borderColor = '#fecaca';
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
