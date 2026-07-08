@@ -29,36 +29,46 @@ export async function GET(request: Request) {
 
   try {
     await marieDB.ensureOutreachTablesExist?.();
-    let query = `SELECT * FROM outreach_properties WHERE 1=1`;
+    let query = `
+      SELECT 
+        op.*,
+        p.property_url,
+        COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
+      FROM outreach_properties op
+      LEFT JOIN properties p ON op.louis_property_id = p.id
+      LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
+      LEFT JOIN real_estate_rent rer ON p.address_fingerprint = rer.address_fingerprint
+      WHERE 1=1
+    `;
     const params: unknown[] = [];
     let idx = 1;
 
     if (status) {
-      query += ` AND status = $${idx++}`;
+      query += ` AND op.status = $${idx++}`;
       params.push(status);
     }
     if (campaign) {
-      query += ` AND campaign = $${idx++}`;
+      query += ` AND op.campaign = $${idx++}`;
       params.push(campaign);
     }
     if (region) {
-      query += ` AND region = $${idx++}`;
+      query += ` AND op.region = $${idx++}`;
       params.push(region);
     }
     if (city) {
-      query += ` AND city = $${idx++}`;
+      query += ` AND op.city = $${idx++}`;
       params.push(city);
     }
     if (suburb) {
-      query += ` AND suburb = $${idx++}`;
+      query += ` AND op.suburb = $${idx++}`;
       params.push(suburb);
     }
     if (street) {
-      query += ` AND street = $${idx++}`;
+      query += ` AND op.street = $${idx++}`;
       params.push(street);
     }
     if (search) {
-      query += ` AND property_address ILIKE $${idx++}`;
+      query += ` AND op.property_address ILIKE $${idx++}`;
       params.push(`%${search}%`);
     }
 
@@ -66,10 +76,10 @@ export async function GET(request: Request) {
     const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
     query += ` 
       ORDER BY 
-        suburb ASC,
-        street ASC NULLS LAST,
-        created_at ${orderDirection},
-        NULLIF(REGEXP_REPLACE(property_address, '\\D', '', 'g'), '')::INTEGER ASC NULLS LAST
+        op.suburb ASC,
+        op.street ASC NULLS LAST,
+        op.created_at ${orderDirection},
+        NULLIF(REGEXP_REPLACE(op.property_address, '\\D', '', 'g'), '')::INTEGER ASC NULLS LAST
       LIMIT $${idx++} OFFSET $${idx++}
     `;
     params.push(limit, offset);

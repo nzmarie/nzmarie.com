@@ -24,6 +24,8 @@ interface OutreachProperty {
   converted_at?: string;
   created_at: string;
   notes?: string;
+  property_url?: string | null;
+  realestate_url?: string | null;
 }
 
 interface PaginationMeta {
@@ -614,8 +616,34 @@ export default function OutreachPage() {
                                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-slate-800 truncate">
-                                    {prop.property_address}
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <div className="font-medium text-slate-800 truncate">
+                                      {prop.property_address}
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                      {prop.property_url && (
+                                        <a
+                                          href={prop.property_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200 font-semibold"
+                                          title="View on PropertyValue"
+                                        >
+                                          📄 PropertyValue
+                                        </a>
+                                      )}
+                                      {prop.realestate_url && (
+                                        <a
+                                          href={prop.realestate_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors border border-green-200 font-semibold"
+                                          title="View on RealEstate"
+                                        >
+                                          🏠 RealEstate
+                                        </a>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                                     {prop.property_type && (

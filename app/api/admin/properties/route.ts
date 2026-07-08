@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { queryLouis } from '@/lib/db';
+import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
 export async function GET(request: Request) {
@@ -29,27 +29,29 @@ export async function GET(request: Request) {
 
   let query = `
     SELECT 
-      id,
-      RTRIM(REGEXP_REPLACE(address, '\\d{7,}$', '')) as address,
-      suburb,
-      city,
-      region,
-      bedrooms,
-      bathrooms,
-      car_spaces as garages,
-      capital_value as rv,
-      last_sold_price,
-      last_sold_date,
-      year_built as build_year,
-      COALESCE(NULLIF(land_area_numeric::text, ''), NULLIF(land_area, '-')) as land_area,
-      NULLIF(floor_size, '-') as floor_area,
+      p.id,
+      RTRIM(REGEXP_REPLACE(p.address, '\\d{7,}$', '')) as address,
+      p.suburb,
+      p.city,
+      p.region,
+      p.bedrooms,
+      p.bathrooms,
+      p.car_spaces as garages,
+      p.capital_value as rv,
+      p.last_sold_price,
+      p.last_sold_date,
+      p.year_built as build_year,
+      COALESCE(NULLIF(p.land_area_numeric::text, ''), NULLIF(p.land_area, '-')) as land_area,
+      NULLIF(p.floor_size, '-') as floor_area,
       COALESCE(
-        NULLIF(cover_image_url, ''),
-        NULLIF(images->>0, ''),
+        NULLIF(p.cover_image_url, ''),
         'https://via.placeholder.com/400x300/e2e8f0/64748b?text=No+Image'
       ) as image_url,
-      property_url
-    FROM properties
+      p.property_url,
+      COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
+    FROM properties p
+    LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
+    LEFT JOIN real_estate_rent rer ON p.address_fingerprint = rer.address_fingerprint
     WHERE 1=1
   `;
 
@@ -61,14 +63,14 @@ export async function GET(request: Request) {
       const suburbs = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
       if (suburbs.length > 0) {
         const suburbPlaceholders = suburbs.map((_, i) => `$${paramIndex + i}`).join(', ');
-        query += ` AND LOWER(suburb) IN (${suburbPlaceholders})`;
+        query += ` AND LOWER(p.suburb) IN (${suburbPlaceholders})`;
         suburbs.forEach(suburb => params.push(suburb.toLowerCase()));
         paramIndex += suburbs.length;
       }
     }
 
     if (suburb) {
-      query += ` AND LOWER(suburb) = LOWER($${paramIndex})`;
+      query += ` AND LOWER(p.suburb) = LOWER($${paramIndex})`;
       params.push(suburb);
       paramIndex++;
     }
@@ -80,13 +82,13 @@ export async function GET(request: Request) {
 
     if (city) {
       const dbCity = CITY_TO_DB[city] || city;
-      query += ` AND city = $${paramIndex}`;
+      query += ` AND p.city = $${paramIndex}`;
       params.push(dbCity);
       paramIndex++;
     }
 
     if (region) {
-      query += ` AND LOWER(region) LIKE LOWER($${paramIndex})`;
+      query += ` AND LOWER(p.region) LIKE LOWER($${paramIndex})`;
       params.push(`%${region}%`);
       paramIndex++;
     }
@@ -94,63 +96,75 @@ export async function GET(request: Request) {
 
   if (search) {
     const cleanSearch = search.split(',')[0].trim();
-    query += ` AND (address ILIKE $${paramIndex} OR suburb ILIKE $${paramIndex})`;
+    query += ` AND (p.address ILIKE $${paramIndex} OR p.suburb ILIKE $${paramIndex})`;
     params.push(`%${cleanSearch}%`);
     paramIndex++;
   }
 
   if (lastSoldYears) {
     const years = parseInt(lastSoldYears);
-    query += ` AND last_sold_date >= NOW() - INTERVAL '${years} years'`;
+    query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
   }
 
   if (minBedrooms) {
-    query += ` AND bedrooms >= $${paramIndex}`;
+    query += ` AND p.bedrooms >= $${paramIndex}`;
     params.push(parseInt(minBedrooms));
     paramIndex++;
   }
 
   if (maxBedrooms) {
-    query += ` AND bedrooms <= $${paramIndex}`;
+    query += ` AND p.bedrooms <= $${paramIndex}`;
     params.push(parseInt(maxBedrooms));
     paramIndex++;
   }
 
   if (minBathrooms) {
-    query += ` AND bathrooms >= $${paramIndex}`;
+    query += ` AND p.bathrooms >= $${paramIndex}`;
     params.push(parseInt(minBathrooms));
     paramIndex++;
   }
 
   if (maxBathrooms) {
-    query += ` AND bathrooms <= $${paramIndex}`;
+    query += ` AND p.bathrooms <= $${paramIndex}`;
     params.push(parseInt(maxBathrooms));
     paramIndex++;
   }
 
   if (minCarSpaces) {
-    query += ` AND car_spaces >= $${paramIndex}`;
+    query += ` AND p.car_spaces >= $${paramIndex}`;
     params.push(parseInt(minCarSpaces));
     paramIndex++;
   }
 
   if (maxCarSpaces) {
-    query += ` AND car_spaces <= $${paramIndex}`;
+    query += ` AND p.car_spaces <= $${paramIndex}`;
     params.push(parseInt(maxCarSpaces));
     paramIndex++;
   }
 
   // Get total count
   const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
-  const countResult = await queryLouis<{ total: string }>(countQuery, params);
+  const countResult = await marieQuery<{ total: string }>(countQuery, params);
   const total = parseInt(countResult.rows[0]?.total || '0');
 
-  // Add pagination
-  query += ` ORDER BY suburb ASC, address ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+  // Add smart sorting: by suburb, then by street name, then by house number (numeric)
+  // For addresses like "1/2 Barker Rise", we extract the first number (1) for sorting
+  query += ` 
+    ORDER BY 
+      p.suburb ASC,
+      REGEXP_REPLACE(p.address, '^[0-9/A-Za-z]+\\s+', '') ASC,  -- Street name
+      CASE 
+        WHEN p.address ~ '^[0-9]+/' THEN CAST(REGEXP_REPLACE(p.address, '^([0-9]+)/.*', '\\1') AS INTEGER)
+        WHEN p.address ~ '^[0-9]+[A-Za-z]?' THEN CAST(REGEXP_REPLACE(p.address, '^([0-9]+).*', '\\1') AS INTEGER)
+        ELSE 999999
+      END ASC,  -- Primary house number
+      p.address ASC  -- Fallback for exact ordering
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+  `;
   params.push(limit, offset);
 
   try {
-    const result = await queryLouis<{
+    const result = await marieQuery<{
       id: string;
       address: string;
       suburb: string;
@@ -167,6 +181,7 @@ export async function GET(request: Request) {
       floor_area: string | null;
       image_url: string;
       property_url: string;
+      realestate_url: string | null;
     }>(query, params);
 
     const properties = result.rows.map(row => ({
@@ -186,6 +201,7 @@ export async function GET(request: Request) {
       floor_area: row.floor_area ?? null,
       image_url: row.image_url,
       property_url: row.property_url,
+      realestate_url: row.realestate_url,
     }));
 
     return NextResponse.json({
