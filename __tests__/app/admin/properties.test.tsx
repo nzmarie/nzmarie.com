@@ -20,6 +20,7 @@ vi.mock('@tanstack/react-query', () => ({
         address: '15 Marine Parade',
         suburb: 'Takapuna',
         city: 'North Shore City',
+        description: 'Beautiful home with sea views',
         bedrooms: 4,
         bathrooms: 2,
         garages: 2,
@@ -91,6 +92,15 @@ describe('Properties Page - Batch Selection', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it('shows a truncated description at the bottom of the property card', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const description = await screen.findByTitle('Beautiful home with sea views');
+    expect(description).toBeDefined();
+    expect(description.textContent).toContain('Beautiful…');
   });
 
   it('can toggle select mode', async () => {
@@ -342,6 +352,158 @@ describe('Properties Page - Batch Selection', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Add Properties to Outreach')).toBeNull();
+    });
+  });
+});
+
+describe('Properties Page - Edit Functionality', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders Edit button on each property card', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      const editButtons = screen.getAllByText('Edit');
+      expect(editButtons.length).toBe(2);
+    });
+  });
+
+  it('opens edit modal when Edit button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Property')).toBeDefined();
+      expect(screen.getByDisplayValue('15 Marine Parade')).toBeDefined();
+      expect(screen.getByDisplayValue('Takapuna')).toBeDefined();
+    });
+  });
+
+  it('pre-fills form fields with current property data', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('15 Marine Parade')).toBeDefined();
+      expect(screen.getByDisplayValue('Takapuna')).toBeDefined();
+    });
+  });
+
+  it('calls PATCH API with updated data when Save Changes is clicked', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Property')).toBeDefined();
+    });
+
+    const addressInput = screen.getByDisplayValue('15 Marine Parade') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '16 Marine Parade' } });
+
+    const saveButton = screen.getByText('Save Changes');
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/admin/properties/prop-1',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    const fetchCall = (global.fetch as any).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body.address).toBe('16 Marine Parade');
+    expect(body.suburb).toBe('Takapuna');
+  });
+
+  it('shows success notification after successful edit', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Property')).toBeDefined();
+    });
+
+    const saveButton = screen.getByText('Save Changes');
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Property updated successfully')).toBeDefined();
+    });
+  });
+
+  it('shows error notification on failed edit', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: 'Update failed' }),
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Property')).toBeDefined();
+    });
+
+    const saveButton = screen.getByText('Save Changes');
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Update failed')).toBeDefined();
+    });
+  });
+
+  it('closes modal when Cancel is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const editButtons = await screen.findAllByText('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Property')).toBeDefined();
+    });
+
+    const cancelButton = screen.getByText('Cancel');
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Edit Property')).toBeNull();
     });
   });
 });

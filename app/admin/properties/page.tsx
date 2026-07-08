@@ -34,6 +34,7 @@ interface Property {
   image_url: string;
   property_url: string;
   realestate_url?: string | null;
+  description?: string | null;
 }
 
 interface Filters {
@@ -78,6 +79,11 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
       day: "numeric",
     });
   };
+
+  const descriptionText = property.description?.trim() || "";
+  const truncatedDescription = descriptionText.length > 10
+    ? `${descriptionText.slice(0, 10).trimEnd()}…`
+    : descriptionText || "No description";
 
   return (
     <div
@@ -239,16 +245,42 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
       </div>
 
       <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column" }}>
-        <h3 style={{
-          margin: 0,
-          fontSize: "1.3rem",
-          fontWeight: "700",
-          color: "#2D3748",
-          marginBottom: "8px",
-          lineHeight: "1.3",
-        }}>
-          {property.address}
-        </h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+          <h3 style={{
+            margin: 0,
+            fontSize: "1.3rem",
+            fontWeight: "700",
+            color: "#2D3748",
+            lineHeight: "1.3",
+            flex: 1,
+          }}>
+            {property.address}
+          </h3>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: property }));
+            }}
+            style={{
+              marginLeft: '12px',
+              padding: '6px 14px',
+              backgroundColor: '#f0fdf4',
+              color: '#16a34a',
+              border: '1px solid #bbf7d0',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.85rem',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+          >
+            Edit
+          </button>
+        </div>
 
         <div style={{
           display: "flex",
@@ -399,6 +431,22 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
             </div>
             <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>m²</div>
           </div>
+        </div>
+
+        <div style={{
+          width: "100%",
+          marginTop: "16px",
+          paddingTop: "12px",
+          borderTop: "1px solid #e2e8f0",
+          color: "#4a5568",
+          fontSize: "0.9rem",
+          lineHeight: 1.5,
+          cursor: descriptionText ? "help" : "default",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }} title={descriptionText || undefined}>
+          {truncatedDescription}
         </div>
       </div>
     </div>
@@ -634,6 +682,71 @@ export default function PropertiesPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const prop = (e as CustomEvent).detail as Property;
+      setEditingProperty(prop);
+      setEditFormData({
+        address: prop.address || '',
+        suburb: prop.suburb || '',
+        city: prop.city || '',
+        region: prop.region || '',
+        postcode: '',
+        bedrooms: prop.bedrooms?.toString() || '',
+        bathrooms: prop.bathrooms?.toString() || '',
+        car_spaces: prop.garages?.toString() || '',
+        year_built: prop.build_year?.toString() || '',
+        floor_size: prop.floor_area || '',
+        land_area: prop.land_area?.toString() || '',
+        last_sold_price: prop.last_sold_price?.toString() || '',
+        last_sold_date: prop.last_sold_date || '',
+        capital_value: prop.rv?.toString() || '',
+        property_url: prop.property_url || '',
+        cover_image_url: prop.image_url || '',
+        description: prop.description || '',
+      });
+    };
+    window.addEventListener('open-edit-modal', handler);
+    return () => window.removeEventListener('open-edit-modal', handler);
+  }, []);
+
+  const handleEditFieldChange = (key: string, value: string) => {
+    setEditFormData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingProperty) return;
+    setSaving(true);
+    try {
+      const payload: Record<string, string | number | boolean | null> = {};
+      for (const [key, value] of Object.entries(editFormData)) {
+        if (value !== '' && value !== undefined) {
+          payload[key] = value;
+        } else {
+          payload[key] = null;
+        }
+      }
+      const response = await fetch(`/api/admin/properties/${editingProperty.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update property');
+      }
+      showNotification('success', 'Property updated successfully');
+      setEditingProperty(null);
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Failed to update property');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Show skeleton while session resolves or initial data loads — Navbar stays visible
   if (status === "loading" || (isLoading && properties.length === 0)) {
@@ -1329,6 +1442,100 @@ export default function PropertiesPage() {
             No properties found
           </h3>
           <p style={{ fontSize: "1.1rem" }}>Try adjusting your search criteria</p>
+        </div>
+      )}
+
+      {editingProperty && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          }} onClick={() => setEditingProperty(null)} />
+          <div style={{
+            position: 'relative', backgroundColor: 'white', borderRadius: '16px',
+            padding: '32px', maxWidth: '700px', width: '95%', maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2D3748', marginBottom: '24px' }}>
+              Edit Property
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {[
+                { key: 'address', label: 'Address', type: 'text' },
+                { key: 'suburb', label: 'Suburb', type: 'text' },
+                { key: 'city', label: 'City', type: 'text' },
+                { key: 'region', label: 'Region', type: 'text' },
+                { key: 'postcode', label: 'Postcode', type: 'text' },
+                { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
+                { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
+                { key: 'car_spaces', label: 'Car Spaces', type: 'number' },
+                { key: 'year_built', label: 'Year Built', type: 'number' },
+                { key: 'floor_size', label: 'Floor Size (m²)', type: 'text' },
+                { key: 'land_area', label: 'Land Area', type: 'text' },
+                { key: 'last_sold_price', label: 'Last Sold Price', type: 'number' },
+                { key: 'last_sold_date', label: 'Last Sold Date', type: 'date' },
+                { key: 'capital_value', label: 'Capital Value (RV)', type: 'number' },
+                { key: 'property_url', label: 'Property URL', type: 'text' },
+                { key: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
+              ].map(field => (
+                <div key={field.key}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                    {field.label}
+                  </label>
+                  <input
+                    type={field.type}
+                    value={editFormData[field.key]?.toString() || ''}
+                    onChange={e => handleEditFieldChange(field.key, e.target.value)}
+                    style={{
+                      width: '100%', padding: '10px 12px',
+                      border: '2px solid #e2e8f0', borderRadius: '8px',
+                      fontSize: '0.9rem', color: '#2D3748',
+                    }}
+                  />
+                </div>
+              ))}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                  Description
+                </label>
+                <textarea
+                  value={editFormData.description?.toString() || ''}
+                  onChange={e => handleEditFieldChange('description', e.target.value)}
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '10px 12px',
+                    border: '2px solid #e2e8f0', borderRadius: '8px',
+                    fontSize: '0.9rem', color: '#2D3748', resize: 'vertical',
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditingProperty(null)}
+                style={{
+                  padding: '12px 24px', backgroundColor: '#f3f4f6', color: '#4a5568',
+                  borderRadius: '10px', border: 'none', cursor: 'pointer',
+                  fontWeight: '600', fontSize: '0.95rem',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                style={{
+                  padding: '12px 24px', backgroundColor: saving ? '#9ca3af' : '#3b82f6',
+                  color: 'white', borderRadius: '10px', border: 'none',
+                  cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem',
+                }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -48,6 +48,7 @@ export async function GET(request: Request) {
         'https://via.placeholder.com/400x300/e2e8f0/64748b?text=No+Image'
       ) as image_url,
       p.property_url,
+      p.description,
       COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
     FROM properties p
     LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
@@ -181,6 +182,7 @@ export async function GET(request: Request) {
       floor_area: string | null;
       image_url: string;
       property_url: string;
+      description: string | null;
       realestate_url: string | null;
     }>(query, params);
 
@@ -201,6 +203,7 @@ export async function GET(request: Request) {
       floor_area: row.floor_area ?? null,
       image_url: row.image_url,
       property_url: row.property_url,
+      description: row.description ?? null,
       realestate_url: row.realestate_url,
     }));
 
