@@ -919,9 +919,11 @@ export default function PropertiesPage() {
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
               Last Sold Within
             </label>
-            <select
+            <input
+              list="last-sold-years"
               value={filters.last_sold_years}
               onChange={(e) => handleFilterChange("last_sold_years", e.target.value)}
+              placeholder="Any Time"
               style={{
                 width: "100%",
                 padding: "10px 14px",
@@ -930,15 +932,15 @@ export default function PropertiesPage() {
                 fontSize: "0.95rem",
                 backgroundColor: "white",
                 color: "#2D3748",
-                cursor: "pointer",
               }}
-            >
+            />
+            <datalist id="last-sold-years">
               <option value="">Any Time</option>
               <option value="1">1 year</option>
               <option value="3">3 years</option>
               <option value="5">5 years</option>
               <option value="10">10 years</option>
-            </select>
+            </datalist>
           </div>
 
           <div>
