@@ -508,7 +508,7 @@ export default function PropertiesPage() {
     search: "",
   });
   const [addressInput, setAddressInput] = useState("");
-  const [standaloneOnly, setStandaloneOnly] = useState(true);
+  const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -536,7 +536,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", filters, standaloneOnly],
+    queryKey: ["admin-properties", filters, propertyFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const pageNum = (pageParam as number) || 1;
@@ -558,7 +558,8 @@ export default function PropertiesPage() {
       if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
       if (filters.min_car_spaces) params.append("min_car_spaces", filters.min_car_spaces);
       if (filters.max_car_spaces) params.append("max_car_spaces", filters.max_car_spaces);
-      if (standaloneOnly) params.append("standalone_only", "true");
+      if (propertyFilter === 'house') params.append("standalone_only", "true");
+      if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
 
       const response = await fetch(`/api/admin/properties?${params}`);
       const result = await response.json();
@@ -874,17 +875,43 @@ export default function PropertiesPage() {
         </div>
 
         <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={standaloneOnly}
-              onChange={(e) => setStandaloneOnly(e.target.checked)}
-              style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#3b82f6" }}
-            />
-            <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "#4a5568" }}>
-              House Only (Hide Townhouse/Unit)
-            </span>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Property Type
           </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {(['house', 'all', 'townhouse'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setPropertyFilter(type)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
+                  color: propertyFilter === type ? 'white' : '#4a5568',
+                  border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: propertyFilter === type ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (propertyFilter !== type) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (propertyFilter !== type) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px", marginBottom: "16px" }}>

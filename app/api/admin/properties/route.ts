@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   const region = searchParams.get('region');
   const search = searchParams.get('search');
   const standaloneOnly = searchParams.get('standalone_only');
+  const townhouseOnly = searchParams.get('townhouse_only');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
@@ -169,6 +170,10 @@ export async function GET(request: Request) {
 
   if (standaloneOnly === 'true') {
     query += ` AND p.address NOT LIKE '%/%'`;
+  }
+
+  if (townhouseOnly === 'true') {
+    query += ` AND p.address LIKE '%/%'`;
   }
 
   // Get total count

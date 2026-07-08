@@ -157,40 +157,38 @@ describe('Properties Page', () => {
     expect(noDesc).toBeDefined();
   });
 
-  it('renders standalone only checkbox checked by default', async () => {
+  it('renders House type button selected by default', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
-    expect(checkbox).toBeDefined();
-    expect(checkbox.checked).toBe(true);
+    const houseBtn = screen.getByText('House');
+    const allBtn = screen.getByText('All');
+    const townhouseBtn = screen.getByText('Townhouse/Unit');
+    expect(houseBtn).toBeDefined();
+    expect(allBtn).toBeDefined();
+    expect(townhouseBtn).toBeDefined();
+    expect(houseBtn.parentElement).toBeDefined();
   });
 
-  it('toggles standaloneOnly filter when checkbox is clicked', async () => {
+  it('changes property filter when a different type button is clicked', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    const houseBtn = screen.getByText('House');
+    const allBtn = screen.getByText('All');
+    const townhouseBtn = screen.getByText('Townhouse/Unit');
 
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
+    fireEvent.click(allBtn);
+    fireEvent.click(townhouseBtn);
+    fireEvent.click(houseBtn);
   });
 
-  it('renders all properties when House Only is toggled (server-side filtering)', async () => {
+  it('displays all properties regardless of selected property type (server-side filtering)', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
     expect(screen.getByText('15 Marine Parade')).toBeDefined();
     expect(screen.getByText('2/910 East Coast Road')).toBeDefined();
-
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
   });
 
 });
