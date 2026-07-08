@@ -14,37 +14,55 @@ vi.mock('next-auth/react', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useInfiniteQuery: () => ({
-    data: { pages: [[
-      {
-        id: 'prop-1',
-        address: '15 Marine Parade',
-        suburb: 'Takapuna',
-        city: 'North Shore City',
-        description: 'Beautiful home with sea views',
-        bedrooms: 4,
-        bathrooms: 2,
-        garages: 2,
-        rv: 1200000,
-        last_sold_price: 1150000,
-        last_sold_date: '2023-01-15',
-        image_url: 'https://example.com/image.jpg',
-        property_url: 'https://example.com/prop1',
-      },
-      {
-        id: 'prop-2',
-        address: '28 Sunset Road',
-        suburb: 'Albany',
-        city: 'North Shore City',
-        bedrooms: 3,
-        bathrooms: 2,
-        garages: 1,
-        rv: 950000,
-        last_sold_price: 920000,
-        last_sold_date: '2022-11-20',
-        image_url: 'https://example.com/image2.jpg',
-        property_url: 'https://example.com/prop2',
-      }
-    ]] },
+    data: { pages: [{
+      properties: [
+        {
+          id: 'prop-1',
+          address: '15 Marine Parade',
+          suburb: 'Takapuna',
+          city: 'North Shore City',
+          region: 'Auckland',
+          description: 'Beautiful home with sea views and modern renovations throughout the entire property',
+          bedrooms: 4,
+          bathrooms: 2,
+          garages: 2,
+          rv: 1200000,
+          last_sold_price: 1150000,
+          last_sold_date: '2023-01-15',
+          build_year: 1990,
+          floor_area: '220',
+          land_area: '801',
+          image_url: 'https://example.com/image.jpg',
+          property_url: 'https://example.com/prop1',
+          postcode: '0632',
+          land_value: 1075000,
+          improvement_value: 200000,
+          estimated_value_low: 1200000,
+          estimated_value_high: 1300000,
+          property_type: 'Residential',
+          sale_status: 'unknown',
+          has_rental_history: false,
+          is_currently_rented: false,
+          latitude: -36.7061,
+          longitude: 174.7297,
+        },
+        {
+          id: 'prop-2',
+          address: '2/910 East Coast Road',
+          suburb: 'Albany',
+          city: 'North Shore City',
+          bedrooms: 3,
+          bathrooms: 2,
+          garages: 1,
+          rv: 950000,
+          last_sold_price: 920000,
+          last_sold_date: '2022-11-20',
+          image_url: 'https://example.com/image2.jpg',
+          property_url: 'https://example.com/prop2',
+        }
+      ],
+      total: 45,
+    }] },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
@@ -85,7 +103,7 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 })) as any;
 
-describe('Properties Page - Batch Selection', () => {
+describe('Properties Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -94,266 +112,87 @@ describe('Properties Page - Batch Selection', () => {
     cleanup();
   });
 
-  it('shows a truncated description at the bottom of the property card', async () => {
+  it('shows full description text with CSS truncation on the property card', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const description = await screen.findByTitle('Beautiful home with sea views');
+    const description = await screen.findByTitle('Beautiful home with sea views and modern renovations throughout the entire property');
     expect(description).toBeDefined();
-    expect(description.textContent).toContain('Beautiful…');
+    expect(description.textContent).toContain('Beautiful home with sea views and modern renovations throughout the entire property');
   });
 
-  it('can toggle select mode', async () => {
+  it('renders off-screen AI data chamber with all property fields for sidebar Gemini', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    expect(selectModeButton).toBeDefined();
+    const startMarkers = screen.getAllByText(/\[AI-DATA-START\]/);
+    expect(startMarkers.length).toBe(2);
 
-    fireEvent.click(selectModeButton);
+    const endMarkers = screen.getAllByText(/\[AI-DATA-END\]/);
+    expect(endMarkers.length).toBe(2);
 
-    await waitFor(() => {
-      expect(screen.getByText('✓ Select Mode')).toBeDefined();
-      expect(screen.getByText(/Selected: 0 properties/i)).toBeDefined();
-    });
+    expect(screen.getByText(/Address: 15 Marine Parade/)).toBeDefined();
+    expect(screen.getByText(/Bedrooms: 4/)).toBeDefined();
+    expect(screen.getByText(/Car Spaces: 2/)).toBeDefined();
+    expect(screen.getByText(/Land Value/)).toBeDefined();
+    expect(screen.getByText(/Improvement Value/)).toBeDefined();
+    expect(screen.getByText(/Property Type: Residential/)).toBeDefined();
+    expect(screen.getByText(/Sale Status: unknown/)).toBeDefined();
+    expect(screen.getByText(/Coordinates: -36\.7061/)).toBeDefined();
+
+    expect(screen.getByText(/Address: 2\/910 East Coast Road/)).toBeDefined();
+    expect(screen.getByText(/Bedrooms: 3/)).toBeDefined();
+    expect(screen.getByText(/Car Spaces: 1/)).toBeDefined();
+
+    expect(screen.getAllByText(/Capital Value \(RV\)/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Bathrooms:/).length).toBe(2);
+    expect(screen.getAllByText(/Estimated Value/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('can select individual properties', async () => {
+  it('shows No description fallback for properties without description', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-      expect(checkboxes.length).toBeGreaterThan(0);
-    });
-
-    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-    fireEvent.click(checkboxes[0]);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Selected: 1 properties/i)).toBeDefined();
-    });
+    const noDesc = screen.getByText('No description');
+    expect(noDesc).toBeDefined();
   });
 
-  it('can select all properties', async () => {
+  it('renders standalone only checkbox checked by default', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Select All')).toBeDefined();
-    });
-
-    const selectAllButton = screen.getByText('Select All');
-    fireEvent.click(selectAllButton);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Selected: 2 properties/i)).toBeDefined();
-    });
+    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
+    expect(checkbox).toBeDefined();
+    expect(checkbox.checked).toBe(true);
   });
 
-  it('can clear selection', async () => {
+  it('toggles standaloneOnly filter when checkbox is clicked', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
+    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
 
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Selected: 2 properties/i)).toBeDefined();
-    });
-
-    const clearButton = screen.getAllByText('Clear All')[0];
-    fireEvent.click(clearButton);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Selected:/i)).toBeNull();
-    });
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
   });
 
-  it('shows Add to Outreach button when properties selected', async () => {
+  it('renders all properties when House Only is toggled (server-side filtering)', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
+    const checkbox = screen.getByLabelText(/House Only/) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    expect(screen.getByText('2/910 East Coast Road')).toBeDefined();
 
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Add to Outreach')).toBeDefined();
-    });
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
   });
 
-  it('opens confirmation modal when Add to Outreach clicked', async () => {
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    const addButton = await screen.findByText('Add to Outreach');
-    fireEvent.click(addButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Add Properties to Outreach')).toBeDefined();
-      expect(screen.getByText(/You are about to add 2 properties/i)).toBeDefined();
-      expect(screen.getByText('Selected suburbs:')).toBeDefined();
-    });
-  });
-
-  it('calls API when confirming add to outreach', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        added: 2,
-        skipped: 0,
-        message: 'Added 2 properties to outreach queue',
-      }),
-    });
-
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    const addButton = await screen.findByText('Add to Outreach');
-    fireEvent.click(addButton);
-
-    await waitFor(() => {
-      const confirmButton = screen.getByText('Confirm & Add');
-      fireEvent.click(confirmButton);
-    });
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/admin/outreach/batch-add',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-      );
-    });
-  });
-
-  it('shows success notification after successful add', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        added: 2,
-        skipped: 0,
-        message: 'Added 2 properties to outreach queue',
-      }),
-    });
-
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    const addButton = await screen.findByText('Add to Outreach');
-    fireEvent.click(addButton);
-
-    await waitFor(() => {
-      const confirmButton = screen.getByText('Confirm & Add');
-      fireEvent.click(confirmButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Added 2 properties to outreach queue/i)).toBeDefined();
-    });
-  });
-
-  it('shows error notification on API failure', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({
-        error: 'Database connection failed',
-      }),
-    });
-
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    const addButton = await screen.findByText('Add to Outreach');
-    fireEvent.click(addButton);
-
-    await waitFor(() => {
-      const confirmButton = screen.getByText('Confirm & Add');
-      fireEvent.click(confirmButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Database connection failed/i)).toBeDefined();
-    });
-  });
-
-  it('can cancel modal', async () => {
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
-    const selectModeButton = await screen.findByText(/Select Mode/i);
-    fireEvent.click(selectModeButton);
-
-    await waitFor(() => {
-      const selectAllButton = screen.getByText('Select All');
-      fireEvent.click(selectAllButton);
-    });
-
-    const addButton = await screen.findByText('Add to Outreach');
-    fireEvent.click(addButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Add Properties to Outreach')).toBeDefined();
-    });
-
-    const cancelButton = screen.getByText('Cancel');
-    fireEvent.click(cancelButton);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Add Properties to Outreach')).toBeNull();
-    });
-  });
 });
 
 describe('Properties Page - Edit Functionality', () => {

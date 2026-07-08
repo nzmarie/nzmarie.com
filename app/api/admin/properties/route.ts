@@ -23,8 +23,9 @@ export async function GET(request: Request) {
   const city = searchParams.get('city');
   const region = searchParams.get('region');
   const search = searchParams.get('search');
+  const standaloneOnly = searchParams.get('standalone_only');
   const page = parseInt(searchParams.get('page') || '1');
-  const limit = parseInt(searchParams.get('limit') || '9');
+  const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
 
   let query = `
@@ -49,7 +50,30 @@ export async function GET(request: Request) {
       ) as image_url,
       p.property_url,
       p.description,
-      COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
+      COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url,
+      p.postcode,
+      p.land_value,
+      p.improvement_value,
+      p.has_rental_history,
+      p.is_currently_rented,
+      p.status,
+      p.property_history,
+      p.normalized_address,
+      p.address_fingerprint,
+      p.land_area_numeric,
+      p.property_type,
+      p.sale_status,
+      p.sale_status_source,
+      p.sale_status_updated_at,
+      p.estimated_value_low,
+      p.estimated_value_high,
+      p.suburb_median_price,
+      p.suburb_median_rent,
+      p.suburb_days_on_market,
+      p.images,
+      p.latitude,
+      p.longitude,
+      p.created_at
     FROM properties p
     LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
     LEFT JOIN real_estate_rent rer ON p.address_fingerprint = rer.address_fingerprint
@@ -143,6 +167,10 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
+  if (standaloneOnly === 'true') {
+    query += ` AND p.address NOT LIKE '%/%'`;
+  }
+
   // Get total count
   const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
   const countResult = await marieQuery<{ total: string }>(countQuery, params);
@@ -184,6 +212,29 @@ export async function GET(request: Request) {
       property_url: string;
       description: string | null;
       realestate_url: string | null;
+      postcode: string | null;
+      land_value: string | null;
+      improvement_value: string | null;
+      has_rental_history: string | null;
+      is_currently_rented: string | null;
+      status: string | null;
+      property_history: string | null;
+      normalized_address: string | null;
+      address_fingerprint: string | null;
+      land_area_numeric: string | null;
+      property_type: string | null;
+      sale_status: string | null;
+      sale_status_source: string | null;
+      sale_status_updated_at: string | null;
+      estimated_value_low: string | null;
+      estimated_value_high: string | null;
+      suburb_median_price: string | null;
+      suburb_median_rent: string | null;
+      suburb_days_on_market: string | null;
+      images: string | null;
+      latitude: string | null;
+      longitude: string | null;
+      created_at: string | null;
     }>(query, params);
 
     const properties = result.rows.map(row => ({
@@ -205,6 +256,29 @@ export async function GET(request: Request) {
       property_url: row.property_url,
       description: row.description ?? null,
       realestate_url: row.realestate_url,
+      postcode: row.postcode ?? null,
+      land_value: row.land_value !== null ? Number(row.land_value) : null,
+      improvement_value: row.improvement_value !== null ? Number(row.improvement_value) : null,
+      has_rental_history: row.has_rental_history === null ? null : row.has_rental_history === 't',
+      is_currently_rented: row.is_currently_rented === null ? null : row.is_currently_rented === 't',
+      status: row.status ?? null,
+      property_history: row.property_history ?? null,
+      normalized_address: row.normalized_address ?? null,
+      address_fingerprint: row.address_fingerprint ?? null,
+      land_area_numeric: row.land_area_numeric ?? null,
+      property_type: row.property_type ?? null,
+      sale_status: row.sale_status ?? null,
+      sale_status_source: row.sale_status_source ?? null,
+      sale_status_updated_at: row.sale_status_updated_at ?? null,
+      estimated_value_low: row.estimated_value_low !== null ? Number(row.estimated_value_low) : null,
+      estimated_value_high: row.estimated_value_high !== null ? Number(row.estimated_value_high) : null,
+      suburb_median_price: row.suburb_median_price !== null ? Number(row.suburb_median_price) : null,
+      suburb_median_rent: row.suburb_median_rent !== null ? Number(row.suburb_median_rent) : null,
+      suburb_days_on_market: row.suburb_days_on_market !== null ? Number(row.suburb_days_on_market) : null,
+      images: row.images !== null && row.images !== undefined ? row.images : null,
+      latitude: row.latitude !== null ? Number(row.latitude) : null,
+      longitude: row.longitude !== null ? Number(row.longitude) : null,
+      created_at: row.created_at ?? null,
     }));
 
     return NextResponse.json({

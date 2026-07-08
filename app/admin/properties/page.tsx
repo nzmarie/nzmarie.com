@@ -35,6 +35,29 @@ interface Property {
   property_url: string;
   realestate_url?: string | null;
   description?: string | null;
+  postcode?: string | null;
+  land_value?: number | null;
+  improvement_value?: number | null;
+  has_rental_history?: boolean | null;
+  is_currently_rented?: boolean | null;
+  status?: string | null;
+  property_history?: string | null;
+  normalized_address?: string | null;
+  address_fingerprint?: string | null;
+  land_area_numeric?: string | null;
+  property_type?: string | null;
+  sale_status?: string | null;
+  sale_status_source?: string | null;
+  sale_status_updated_at?: string | null;
+  estimated_value_low?: number | null;
+  estimated_value_high?: number | null;
+  suburb_median_price?: number | null;
+  suburb_median_rent?: number | null;
+  suburb_days_on_market?: number | null;
+  images?: string[] | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  created_at?: string | null;
 }
 
 interface Filters {
@@ -51,11 +74,8 @@ interface Filters {
   search: string;
 }
 
-const PropertyCard = ({ property, selectMode, isSelected, onToggle }: { 
+const PropertyCard = ({ property }: { 
   property: Property; 
-  selectMode: boolean;
-  isSelected: boolean;
-  onToggle: () => void;
 }) => {
   const [imageError, setImageError] = useState(false);
 
@@ -81,9 +101,38 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
   };
 
   const descriptionText = property.description?.trim() || "";
-  const truncatedDescription = descriptionText.length > 10
-    ? `${descriptionText.slice(0, 10).trimEnd()}…`
-    : descriptionText || "No description";
+  const displayDescription = descriptionText || "No description";
+
+  const aiChamberText = [
+    '[AI-DATA-START]',
+    `Address: ${property.address}`,
+    `Suburb: ${property.suburb}`,
+    property.city ? `City: ${property.city}` : null,
+    property.region ? `Region: ${property.region}` : null,
+    property.postcode ? `Postcode: ${property.postcode}` : null,
+    property.build_year ? `Year Built: ${property.build_year}` : null,
+    property.bedrooms != null ? `Bedrooms: ${property.bedrooms}` : null,
+    property.bathrooms != null ? `Bathrooms: ${property.bathrooms}` : null,
+    property.garages != null ? `Car Spaces: ${property.garages}` : null,
+    property.floor_area ? `Floor Size: ${property.floor_area}` : null,
+    property.land_area ? `Land Area: ${property.land_area}` : null,
+    property.rv != null ? `Capital Value (RV): ${formatCurrency(property.rv)}` : null,
+    property.land_value != null ? `Land Value: ${formatCurrency(property.land_value)}` : null,
+    property.improvement_value != null ? `Improvement Value: ${formatCurrency(property.improvement_value)}` : null,
+    property.estimated_value_low != null && property.estimated_value_high != null
+      ? `Estimated Value: ${formatCurrency(property.estimated_value_low)} - ${formatCurrency(property.estimated_value_high)}` : null,
+    property.last_sold_price != null ? `Last Sold Price: ${formatCurrency(property.last_sold_price)}` : null,
+    property.last_sold_date ? `Last Sold Date: ${property.last_sold_date}` : null,
+    property.property_type ? `Property Type: ${property.property_type}` : null,
+    property.sale_status ? `Sale Status: ${property.sale_status}` : null,
+    property.has_rental_history != null ? `Has Rental History: ${property.has_rental_history ? 'Yes' : 'No'}` : null,
+    property.is_currently_rented != null ? `Currently Rented: ${property.is_currently_rented ? 'Yes' : 'No'}` : null,
+    property.latitude != null && property.longitude != null
+      ? `Coordinates: ${property.latitude}, ${property.longitude}` : null,
+    property.property_url ? `Property URL: ${property.property_url}` : null,
+    property.description ? `Description: ${property.description}` : null,
+    '[AI-DATA-END]',
+  ].filter(Boolean).join('\n');
 
   return (
     <div
@@ -92,46 +141,21 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
         borderRadius: "16px",
         overflow: "hidden",
         boxShadow: "0 8px 16px rgba(0,0,0,0.08)",
-        backgroundColor: selectMode && isSelected ? '#eff6ff' : 'white',
+        backgroundColor: 'white',
         transition: "all 0.3s ease",
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        outline: selectMode && isSelected ? '3px solid #3b82f6' : 'none',
       }}
       onMouseEnter={(e) => {
-        if (!selectMode) {
-          (e.currentTarget as HTMLElement).style.transform = "translateY(-8px)";
-          (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 24px rgba(0,0,0,0.15)";
-        }
+        (e.currentTarget as HTMLElement).style.transform = "translateY(-8px)";
+        (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 24px rgba(0,0,0,0.15)";
       }}
       onMouseLeave={(e) => {
-        if (!selectMode) {
-          (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
-          (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.08)";
-        }
+        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+        (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.08)";
       }}
     >
-      {selectMode && (
-        <div style={{
-          position: 'absolute',
-          top: '16px',
-          left: '16px',
-          zIndex: 10,
-        }}>
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onToggle}
-            style={{
-              width: '24px',
-              height: '24px',
-              cursor: 'pointer',
-              accentColor: '#3b82f6',
-            }}
-          />
-        </div>
-      )}
       <div style={{ position: "relative" }}>
         <a
           href={property.property_url}
@@ -446,7 +470,19 @@ const PropertyCard = ({ property, selectMode, isSelected, onToggle }: {
           overflow: "hidden",
           textOverflow: "ellipsis",
         }} title={descriptionText || undefined}>
-          {truncatedDescription}
+          {displayDescription}
+        </div>
+
+        <div style={{
+          position: 'absolute',
+          top: '-9999px',
+          left: '-9999px',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          fontSize: '1px',
+          opacity: 0,
+        }}>
+          {aiChamberText}
         </div>
       </div>
     </div>
@@ -457,10 +493,6 @@ export default function PropertiesPage() {
   const { status } = useSession();
   const router = useRouter();
   const lastPropertyElementRef = useRef<HTMLDivElement>(null);
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
-  const [selectedPropertiesInfo, setSelectedPropertiesInfo] = useState<Property[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [filters, setFilters] = useState<Filters>({
     region: "Auckland",
@@ -476,6 +508,7 @@ export default function PropertiesPage() {
     search: "",
   });
   const [addressInput, setAddressInput] = useState("");
+  const [standaloneOnly, setStandaloneOnly] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -502,14 +535,14 @@ export default function PropertiesPage() {
     error,
     fetchNextPage,
     hasNextPage,
-  } = useInfiniteQuery<Property[], Error>({
-    queryKey: ["admin-properties", filters],
+  } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
+    queryKey: ["admin-properties", filters, standaloneOnly],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const pageNum = (pageParam as number) || 1;
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "9",
+        limit: "18",
       });
 
       if (filters.suburb) {
@@ -525,6 +558,7 @@ export default function PropertiesPage() {
       if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
       if (filters.min_car_spaces) params.append("min_car_spaces", filters.min_car_spaces);
       if (filters.max_car_spaces) params.append("max_car_spaces", filters.max_car_spaces);
+      if (standaloneOnly) params.append("standalone_only", "true");
 
       const response = await fetch(`/api/admin/properties?${params}`);
       const result = await response.json();
@@ -533,10 +567,10 @@ export default function PropertiesPage() {
         throw new Error(result.error || "Failed to fetch properties");
       }
 
-      return result.properties;
+      return { properties: result.properties, total: result.pagination.total };
     },
     getNextPageParam: (lastPage, allPages) => {
-      if (lastPage && lastPage.length === 9) {
+      if (lastPage && lastPage.properties.length === 18) {
         return allPages.length + 1;
       }
       return undefined;
@@ -547,10 +581,11 @@ export default function PropertiesPage() {
     refetchOnWindowFocus: false,
   });
 
-  const propertiesData = data as { pages: Property[][] } | undefined;
+  const propertiesData = data as { pages: { properties: Property[]; total: number }[] } | undefined;
   const properties: Property[] = propertiesData
-    ? propertiesData.pages.flatMap((page) => page)
+    ? propertiesData.pages.flatMap((page) => page.properties)
     : [];
+  const totalProperties = propertiesData?.pages[0]?.total || 0;
 
   useEffect(() => {
     const currentElement = lastPropertyElementRef.current;
@@ -612,75 +647,10 @@ export default function PropertiesPage() {
     });
   };
 
-  const toggleSelection = (property: Property) => {
-    setSelectedProperties(prev => {
-      const next = new Set(prev);
-      if (next.has(property.id)) {
-        next.delete(property.id);
-        setSelectedPropertiesInfo(curr => curr.filter(p => p.id !== property.id));
-      } else {
-        next.add(property.id);
-        setSelectedPropertiesInfo(curr => [...curr, property]);
-      }
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    setSelectedProperties(new Set(properties.map(p => p.id)));
-    setSelectedPropertiesInfo([...properties]);
-  };
-
-  const clearSelection = () => {
-    setSelectedProperties(new Set());
-    setSelectedPropertiesInfo([]);
-    setSelectMode(false);
-  };
-
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
     setTimeout(() => setNotification(null), 4000);
   };
-
-  const addToOutreach = async () => {
-    if (selectedProperties.size === 0) return;
-    
-    const selectedData = selectedPropertiesInfo.map(p => ({
-      louis_property_id: p.id,
-      property_address: p.address,
-      suburb: p.suburb,
-      street: '',
-      city: p.city,
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      rv_value: p.rv,
-    }));
-
-    try {
-      const response = await fetch('/api/admin/outreach/batch-add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ properties: selectedData }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add properties');
-      }
-
-      const result = await response.json();
-      showNotification('success', result.message || `Added ${selectedProperties.size} properties to outreach queue`);
-      clearSelection();
-      setShowAddModal(false);
-    } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Failed to add properties');
-    }
-  };
-
-  const groupedBySuburb = selectedPropertiesInfo.reduce((acc, p) => {
-    acc[p.suburb] = (acc[p.suburb] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
 
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
@@ -785,96 +755,6 @@ export default function PropertiesPage() {
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{
-            fontSize: "2.5rem",
-            fontWeight: "700",
-            color: "#2D3748",
-            background: "linear-gradient(135deg, #007bff, #00bcd4)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            marginBottom: "8px",
-          }}>
-            Properties from Louis DB
-          </h1>
-          <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            {properties.length} properties loaded • Scroll to load more
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            onClick={() => setSelectMode(!selectMode)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: selectMode ? '#3b82f6' : '#e2e8f0',
-              color: selectMode ? 'white' : '#4a5568',
-              borderRadius: '10px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '0.95rem',
-            }}
-          >
-            {selectMode ? '✓ Select Mode' : '📋 Select Mode'}
-          </button>
-          {selectMode && (
-            <>
-              <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#4a5568' }}>
-                Selected: {selectedProperties.size} properties
-              </span>
-              <button
-                onClick={selectAll}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#4a5568',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.9rem',
-                }}
-              >
-                Select All
-              </button>
-              <button
-                onClick={clearSelection}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#4a5568',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.9rem',
-                }}
-              >
-                Clear All
-              </button>
-              {selectedProperties.size > 0 && (
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: '#22c55e',
-                    color: 'white',
-                    borderRadius: '10px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  Add to Outreach
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
       {/* Filters Section */}
       <div style={{
         marginBottom: "32px",
@@ -884,9 +764,14 @@ export default function PropertiesPage() {
         boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
         border: "1px solid #e2e8f0",
       }}>
-        <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748", marginBottom: "20px" }}>
-          Search Filters
-        </h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748" }}>
+            Search Filters
+          </h2>
+          <p style={{ fontSize: "0.9rem", color: "#718096" }}>
+            Displaying {properties.length} of {totalProperties} properties • Scroll to load more
+          </p>
+        </div>
         
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
@@ -988,82 +873,18 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Region
-            </label>
-            <select
-              value={filters.region}
-              onChange={(e) => handleRegionChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              <option value="Auckland">Auckland</option>
-              <option value="Wellington">Wellington</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              City / District
-            </label>
-            <select
-              value={filters.city}
-              onChange={(e) => handleCityChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              {(REGION_CITIES[filters.region as keyof typeof REGION_CITIES] || []).map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Suburb
-            </label>
-            <select
-              value={filters.suburb}
-              onChange={(e) => handleFilterChange("suburb", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              <option value="">All suburbs</option>
-              {currentCitySuburbs.map((suburb) => (
-                <option key={suburb} value={suburb}>
-                  {suburb}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={standaloneOnly}
+              onChange={(e) => setStandaloneOnly(e.target.checked)}
+              style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#3b82f6" }}
+            />
+            <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "#4a5568" }}>
+              House Only (Hide Townhouse/Unit)
+            </span>
+          </label>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px", marginBottom: "16px" }}>
@@ -1226,6 +1047,84 @@ export default function PropertiesPage() {
           </div>
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+              Region
+            </label>
+            <select
+              value={filters.region}
+              onChange={(e) => handleRegionChange(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.95rem",
+                backgroundColor: "white",
+                color: "#2D3748",
+                cursor: "pointer",
+              }}
+            >
+              <option value="Auckland">Auckland</option>
+              <option value="Wellington">Wellington</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+              City / District
+            </label>
+            <select
+              value={filters.city}
+              onChange={(e) => handleCityChange(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.95rem",
+                backgroundColor: "white",
+                color: "#2D3748",
+                cursor: "pointer",
+              }}
+            >
+              {(REGION_CITIES[filters.region as keyof typeof REGION_CITIES] || []).map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+              Suburb
+            </label>
+            <select
+              value={filters.suburb}
+              onChange={(e) => handleFilterChange("suburb", e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.95rem",
+                backgroundColor: "white",
+                color: "#2D3748",
+                cursor: "pointer",
+              }}
+            >
+              <option value="">All suburbs</option>
+              {currentCitySuburbs.map((suburb) => (
+                <option key={suburb} value={suburb}>
+                  {suburb}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: "12px" }}>
           <button
             onClick={handleClearFilters}
@@ -1274,9 +1173,6 @@ export default function PropertiesPage() {
             <div key={`${property.id}-${index}`} ref={isLast ? lastPropertyElementRef : null}>
               <PropertyCard 
                 property={property} 
-                selectMode={selectMode}
-                isSelected={selectedProperties.has(property.id)}
-                onToggle={() => toggleSelection(property)}
               />
             </div>
           );
@@ -1312,108 +1208,6 @@ export default function PropertiesPage() {
           fontWeight: "500",
         }}>
           No more properties to load
-        </div>
-      )}
-
-      {showAddModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            }}
-            onClick={() => setShowAddModal(false)}
-          />
-          <div style={{
-            position: 'relative',
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            padding: '32px',
-            maxWidth: '500px',
-            width: '90%',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-          }}>
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: '700',
-              color: '#2D3748',
-              marginBottom: '16px',
-            }}>
-              Add Properties to Outreach
-            </h2>
-            <p style={{
-              fontSize: '1rem',
-              color: '#4a5568',
-              marginBottom: '24px',
-            }}>
-              You are about to add {selectedProperties.size} {selectedProperties.size === 1 ? 'property' : 'properties'} to your outreach list.
-            </p>
-            {Object.keys(groupedBySuburb).length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <p style={{
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  color: '#4a5568',
-                  marginBottom: '12px',
-                }}>
-                  Selected suburbs:
-                </p>
-                <div style={{ paddingLeft: '12px' }}>
-                  {Object.entries(groupedBySuburb).map(([suburb, count]) => (
-                    <div key={suburb} style={{
-                      fontSize: '0.9rem',
-                      color: '#718096',
-                      marginBottom: '6px',
-                    }}>
-                      • {suburb} ({count} {count === 1 ? 'property' : 'properties'})
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => setShowAddModal(false)}
-                style={{
-                  flex: 1,
-                  padding: '12px 24px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#4a5568',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.95rem',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addToOutreach}
-                style={{
-                  flex: 1,
-                  padding: '12px 24px',
-                  backgroundColor: '#22c55e',
-                  color: 'white',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '0.95rem',
-                }}
-              >
-                Confirm & Add
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
