@@ -374,3 +374,64 @@ describe('Properties Page - Edit Functionality', () => {
     });
   });
 });
+
+describe('Properties Page - Quick Filter by Suburb clears Address Input', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('clears address input when a suburb button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '15 Marine Parade' } });
+    expect(addressInput.value).toBe('15 Marine Parade');
+
+    const suburbBtn = screen.getByRole('button', { name: 'Northcross' });
+    fireEvent.click(suburbBtn);
+
+    await waitFor(() => {
+      expect(addressInput.value).toBe('');
+    });
+  });
+
+  it('clears address input when suburb Clear button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const suburbBtn = screen.getByRole('button', { name: 'Northcross' });
+    fireEvent.click(suburbBtn);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '15 Marine Parade' } });
+    expect(addressInput.value).toBe('15 Marine Parade');
+
+    const clearBtn = screen.getByRole('button', { name: '✕ Clear' });
+    fireEvent.click(clearBtn);
+
+    await waitFor(() => {
+      expect(addressInput.value).toBe('');
+    });
+  });
+
+  it('clears address input when a different suburb is re-clicked (toggle off)', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+
+    fireEvent.change(addressInput, { target: { value: '10 Some Street' } });
+    const albanyBtn = screen.getByRole('button', { name: 'Albany' });
+    fireEvent.click(albanyBtn);
+    expect(addressInput.value).toBe('');
+
+    fireEvent.change(addressInput, { target: { value: '20 Other Road' } });
+    fireEvent.click(albanyBtn);
+    expect(addressInput.value).toBe('');
+  });
+});

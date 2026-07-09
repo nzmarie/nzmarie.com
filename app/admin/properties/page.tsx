@@ -863,8 +863,10 @@ export default function PropertiesPage() {
               <button
                 key={suburb}
                 onClick={() => {
+                  setAddressInput('');
                   setFilters(prev => ({
                     ...prev,
+                    search: '',
                     suburb: prev.suburb === suburb ? '' : suburb,
                   }));
                 }}
@@ -898,7 +900,10 @@ export default function PropertiesPage() {
             ))}
             {filters.suburb && (
               <button
-                onClick={() => setFilters(prev => ({ ...prev, suburb: '' }))}
+                onClick={() => {
+                  setAddressInput('');
+                  setFilters(prev => ({ ...prev, search: '', suburb: '' }));
+                }}
                 style={{
                   padding: '10px 18px',
                   backgroundColor: '#fef2f2',
