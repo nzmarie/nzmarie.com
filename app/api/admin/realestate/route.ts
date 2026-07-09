@@ -19,6 +19,7 @@ export async function GET(request: Request) {
   const maxBedrooms = searchParams.get('max_bedrooms');
   const minBathrooms = searchParams.get('min_bathrooms');
   const maxBathrooms = searchParams.get('max_bathrooms');
+  const propertyType = searchParams.get('property_type');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
@@ -45,7 +46,11 @@ export async function GET(request: Request) {
       r.cover_image_url,
       r.images,
       r.normalized_lead_address,
-      r.address_fingerprint
+      r.address_fingerprint,
+      r.property_type,
+      r.description,
+      r.listing_number,
+      r.listing_date_parsed
     FROM real_estate r
     WHERE 1=1
   `;
@@ -113,6 +118,12 @@ export async function GET(request: Request) {
     }
   }
 
+  if (propertyType) {
+    query += ` AND LOWER(r.property_type) = LOWER($${paramIndex})`;
+    params.push(propertyType);
+    paramIndex++;
+  }
+
   const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
   const countResult = await marieQuery<{ total: string }>(countQuery, params);
   const total = parseInt(countResult.rows[0]?.total || '0');
@@ -143,6 +154,10 @@ export async function GET(request: Request) {
       images: string | null;
       normalized_lead_address: string | null;
       address_fingerprint: string | null;
+      property_type: string | null;
+      description: string | null;
+      listing_number: string | null;
+      listing_date_parsed: string | null;
     }>(query, params);
 
     const listings = result.rows.map(row => ({
@@ -167,6 +182,10 @@ export async function GET(request: Request) {
       images: row.images ?? null,
       normalized_lead_address: row.normalized_lead_address ?? null,
       address_fingerprint: row.address_fingerprint ?? null,
+      property_type: row.property_type ?? null,
+      description: row.description ?? null,
+      listing_number: row.listing_number ?? null,
+      listing_date_parsed: row.listing_date_parsed ?? null,
     }));
 
     return NextResponse.json({

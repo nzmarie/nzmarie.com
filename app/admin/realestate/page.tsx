@@ -32,6 +32,10 @@ interface Listing {
   images: string | null;
   normalized_lead_address: string | null;
   address_fingerprint: string | null;
+  property_type: string | null;
+  description: string | null;
+  listing_number: string | null;
+  listing_date_parsed: string | null;
 }
 
 interface Filters {
@@ -43,6 +47,7 @@ interface Filters {
   max_bedrooms: string;
   min_bathrooms: string;
   max_bathrooms: string;
+  property_type: string;
 }
 
 const ListingCard = ({ listing }: { listing: Listing }) => {
@@ -67,12 +72,16 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
     listing.agent_name ? `Agent: ${listing.agent_name}` : null,
     listing.listing_date_raw ? `Listed: ${listing.listing_date_raw}` : null,
     listing.listing_date ? `Listing Date: ${listing.listing_date}` : null,
+    listing.listing_date_parsed ? `Listing Date Parsed: ${listing.listing_date_parsed}` : null,
     listing.data ? `Data Timestamp: ${listing.data}` : null,
+    listing.property_type ? `Property Type: ${listing.property_type}` : null,
     listing.bedroom_count != null ? `Bedrooms: ${listing.bedroom_count}` : null,
     listing.bathroom_count != null ? `Bathrooms: ${listing.bathroom_count}` : null,
     listing.land_area != null ? `Land Area: ${listing.land_area}m²` : null,
     listing.floor_area != null ? `Floor Area: ${listing.floor_area}m²` : null,
     listing.region ? `Region: ${listing.region}` : null,
+    listing.listing_number ? `Listing Number: ${listing.listing_number}` : null,
+    listing.description ? `Description: ${listing.description}` : null,
     listing.cover_image_url ? `Cover Image: ${listing.cover_image_url}` : null,
     imageCount != null ? `Image Count: ${imageCount}` : null,
     listing.property_url ? `Property URL: ${listing.property_url}` : null,
@@ -177,16 +186,26 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
           </div>
         )}
 
-        {listing.listing_date_raw && (
-          <div style={{
-            position: "absolute", top: "16px", right: "16px",
-            backgroundColor: "rgba(59, 130, 246, 0.9)", color: "white",
-            padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem",
-            fontWeight: "600", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-          }}>
-            {listing.listing_date_raw}
-          </div>
-        )}
+        <div style={{ position: "absolute", top: "16px", right: "16px", display: "flex", gap: "6px", flexDirection: "column", alignItems: "flex-end" }}>
+          {listing.listing_date_raw && (
+            <div style={{
+              backgroundColor: "rgba(59, 130, 246, 0.9)", color: "white",
+              padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem",
+              fontWeight: "600", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            }}>
+              {listing.listing_date_raw}
+            </div>
+          )}
+          {listing.property_type && (
+            <div style={{
+              backgroundColor: "rgba(139, 92, 246, 0.9)", color: "white",
+              padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem",
+              fontWeight: "600", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            }}>
+              {listing.property_type}
+            </div>
+          )}
+        </div>
 
         {imageCount != null && (
           <div style={{
@@ -228,10 +247,26 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "12px", color: "#718096", fontSize: "0.95rem" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: "8px", color: "#718096", fontSize: "0.95rem" }}>
           <FaMapMarkerAlt style={{ marginRight: "8px", fontSize: "1rem" }} />
           <span>{listing.region ? listing.region.charAt(0).toUpperCase() + listing.region.slice(1) : ''}</span>
         </div>
+
+        {listing.description && (
+          <div style={{
+            fontSize: "0.85rem", color: "#64748b", lineHeight: "1.5", marginBottom: "12px",
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+            overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {listing.description}
+          </div>
+        )}
+
+        {listing.listing_number && (
+          <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: "12px" }}>
+            Listing #: {listing.listing_number}
+          </div>
+        )}
 
         {listing.price_display && (
           <div style={{ fontSize: "1.4rem", fontWeight: "700", color: "#059669", marginBottom: "16px" }}>
@@ -300,6 +335,7 @@ const DEFAULT_FILTERS: Filters = {
   max_bedrooms: "",
   min_bathrooms: "",
   max_bathrooms: "",
+  property_type: "House",
 };
 
 export default function RealestatePage() {
@@ -353,6 +389,7 @@ export default function RealestatePage() {
       if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
       if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
       if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
+      if (filters.property_type && filters.property_type !== 'All') params.append("property_type", filters.property_type);
 
       const response = await fetch(`/api/admin/realestate?${params}`);
       const result = await response.json();
@@ -445,6 +482,9 @@ export default function RealestatePage() {
         bathroom_count: detail.bathroom_count?.toString() || '',
         land_area: detail.land_area?.toString() || '',
         floor_area: detail.floor_area?.toString() || '',
+        property_type: detail.property_type || '',
+        description: detail.description || '',
+        listing_number: detail.listing_number || '',
       });
     };
     window.addEventListener('open-edit-modal', handler);
@@ -460,7 +500,7 @@ export default function RealestatePage() {
     setSaving(true);
 
     const body: Record<string, string> = {};
-    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'region', 'bedroom_count', 'bathroom_count', 'land_area', 'floor_area'] as const) {
+    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'region', 'bedroom_count', 'bathroom_count', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number'] as const) {
       const val = editFormData[key];
       if (typeof val === 'string' && val !== '' && val !== (editingListing as any)[key]?.toString()) {
         body[key] = val;
@@ -626,6 +666,46 @@ export default function RealestatePage() {
                 <option key={suburb} value={suburb}>{suburb}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Property Type
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {(['All', 'House', 'Townhouse', 'Unit', 'Apartment', 'Retirement Living'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => handleFilterChange("property_type", type)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: filters.property_type === type ? '#3b82f6' : 'white',
+                  color: filters.property_type === type ? 'white' : '#4a5568',
+                  border: filters.property_type === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: filters.property_type === type ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: filters.property_type === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (filters.property_type !== type) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (filters.property_type !== type) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {type}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -808,6 +888,8 @@ export default function RealestatePage() {
                 { key: 'bathroom_count', label: 'Bathrooms', type: 'number' },
                 { key: 'land_area', label: 'Land Area (m²)', type: 'number' },
                 { key: 'floor_area', label: 'Floor Area (m²)', type: 'number' },
+                { key: 'property_type', label: 'Property Type', type: 'select', options: ['', 'House', 'Townhouse', 'Unit', 'Apartment', 'Retirement Living'] },
+                { key: 'listing_number', label: 'Listing Number', type: 'text' },
               ].map((field) => (
                 <div key={field.key}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
@@ -841,6 +923,22 @@ export default function RealestatePage() {
                   )}
                 </div>
               ))}
+            </div>
+            <div style={{ marginTop: "16px" }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                Description
+              </label>
+              <textarea
+                value={(editFormData.description as string) || ''}
+                onChange={(e) => handleEditFieldChange('description', e.target.value)}
+                rows={4}
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  border: '2px solid #e2e8f0', borderRadius: '8px',
+                  fontSize: '0.9rem', color: '#2D3748', resize: 'vertical',
+                  fontFamily: 'inherit',
+                }}
+              />
             </div>
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
               <button

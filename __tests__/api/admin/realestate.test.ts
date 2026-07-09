@@ -48,7 +48,14 @@ describe('GET /api/admin/realestate', () => {
               region: 'Auckland',
               latitude: '-36.7061',
               longitude: '174.7297',
-              property_description: 'Beautiful home with sea views',
+              cover_image_url: null,
+              images: null,
+              normalized_lead_address: null,
+              address_fingerprint: null,
+              property_type: 'House',
+              description: 'Beautiful home with sea views',
+              listing_number: 'RE12345',
+              listing_date_parsed: '2026-06-15',
             },
             {
               id: 're-2',
@@ -68,7 +75,14 @@ describe('GET /api/admin/realestate', () => {
               region: null,
               latitude: null,
               longitude: null,
-              property_description: null,
+              cover_image_url: null,
+              images: null,
+              normalized_lead_address: null,
+              address_fingerprint: null,
+              property_type: null,
+              description: null,
+              listing_number: null,
+              listing_date_parsed: null,
             },
           ],
         });
@@ -146,6 +160,32 @@ describe('GET /api/admin/realestate', () => {
     expect(dataCalls.length).toBeGreaterThan(0);
     expect((dataCalls[0][0] as string).includes('r.address ILIKE')).toBe(true);
     expect(dataCalls[0][1]).toContain('%Albany%');
+  });
+
+  it('filters by property_type', async () => {
+    const req = new Request('http://localhost/api/admin/realestate?property_type=House');
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const dataCalls = mockQuery.mock.calls.filter((call: unknown[]) =>
+      (call[0] as string).includes('FROM real_estate') && !(call[0] as string).includes('COUNT(*)')
+    );
+    expect(dataCalls.length).toBeGreaterThan(0);
+    expect((dataCalls[0][0] as string).includes('LOWER(r.property_type)')).toBe(true);
+    expect(dataCalls[0][1]).toContain('House');
+  });
+
+  it('returns property_type and description fields in response', async () => {
+    const req = new Request('http://localhost/api/admin/realestate?page=1&limit=18');
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+
+    expect(json.listings[0].property_type).toBe('House');
+    expect(json.listings[0].description).toBe('Beautiful home with sea views');
+    expect(json.listings[0].listing_number).toBe('RE12345');
+    expect(json.listings[0].listing_date_parsed).toBe('2026-06-15');
   });
 
   it('returns 401 for unauthorized users', async () => {

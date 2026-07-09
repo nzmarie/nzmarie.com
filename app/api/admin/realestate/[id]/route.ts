@@ -19,6 +19,7 @@ export async function PATCH(
     'price_display', 'agent_name', 'status',
     'address', 'region', 'bedroom_count', 'bathroom_count',
     'land_area', 'floor_area', 'property_url', 'cover_image_url',
+    'property_type', 'description', 'listing_number',
   ];
 
   const updates: string[] = [];

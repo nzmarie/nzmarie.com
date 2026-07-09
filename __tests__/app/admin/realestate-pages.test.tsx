@@ -38,6 +38,10 @@ vi.mock('@tanstack/react-query', () => ({
           images: '["img1.jpg","img2.jpg"]',
           normalized_lead_address: null,
           address_fingerprint: null,
+          property_type: 'House',
+          description: 'Beautiful home with sea views and modern renovations',
+          listing_number: 'RE12345',
+          listing_date_parsed: '2026-06-15',
         },
         {
           id: 're-2',
@@ -61,6 +65,10 @@ vi.mock('@tanstack/react-query', () => ({
           images: null,
           normalized_lead_address: null,
           address_fingerprint: null,
+          property_type: null,
+          description: null,
+          listing_number: null,
+          listing_date_parsed: null,
         },
       ],
       total: 45,
@@ -139,6 +147,10 @@ describe('Realestate Page', () => {
     expect(screen.getByText(/Cover Image: https:\/\/example\.com\/cover\.jpg/)).toBeDefined();
     expect(screen.getByText(/Image Count: 2/)).toBeDefined();
     expect(screen.getByText(/Coordinates: -36\.7061, 174\.7297/)).toBeDefined();
+    expect(screen.getByText(/Property Type: House/)).toBeDefined();
+    expect(screen.getByText(/Description: Beautiful home with sea views and modern renovations/)).toBeDefined();
+    expect(screen.getByText(/Listing Number: RE12345/)).toBeDefined();
+    expect(screen.getByText(/Listing Date Parsed: 2026-06-15/)).toBeDefined();
 
     expect(screen.getByText(/Address: 2\/910 East Coast Road/)).toBeDefined();
     expect(screen.getByText(/Bedrooms: 3/)).toBeDefined();
@@ -192,6 +204,59 @@ describe('Realestate Page', () => {
     render(<RealestatePage />);
 
     expect(screen.getByPlaceholderText('Search by address...')).toBeDefined();
+  });
+
+  it('renders property_type filter buttons with House selected by default', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    expect(screen.getByText('Property Type')).toBeDefined();
+    expect(screen.getByText('All')).toBeDefined();
+    expect(screen.getByText('Townhouse')).toBeDefined();
+    expect(screen.getByText('Unit')).toBeDefined();
+    expect(screen.getByText('Apartment')).toBeDefined();
+    expect(screen.getByText('Retirement Living')).toBeDefined();
+    const houseButtons = screen.getAllByText('House');
+    const houseButton = houseButtons.find(el => el.tagName === 'BUTTON');
+    expect(houseButton).toBeDefined();
+    expect(houseButton!.style.backgroundColor).toBe('rgb(59, 130, 246)');
+  });
+
+  it('changes property_type when a different type button is clicked', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    const townhouseButton = screen.getByText('Townhouse');
+    fireEvent.click(townhouseButton);
+
+    await waitFor(() => {
+      expect(townhouseButton.style.backgroundColor).toBe('rgb(59, 130, 246)');
+    });
+  });
+
+  it('renders description text on the card', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    const descElements = screen.getAllByText(/Beautiful home with sea views and modern renovations/);
+    expect(descElements.length).toBeGreaterThanOrEqual(1);
+    const visibleDesc = descElements.find(el => el.closest('[style*="position: absolute; top: -9999px"]') === null);
+    expect(visibleDesc).toBeDefined();
+  });
+
+  it('renders listing number when available', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    expect(screen.getByText(/Listing #: RE12345/)).toBeDefined();
+  });
+
+  it('renders property_type badge on the image', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    const badges = screen.getAllByText('House');
+    expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders More Filter Criteria toggle', async () => {
@@ -267,6 +332,8 @@ describe('Realestate Page - Edit Functionality', () => {
       expect(screen.getByDisplayValue('John Smith')).toBeDefined();
       expect(screen.getByDisplayValue('15 Marine Parade')).toBeDefined();
       expect(screen.getByDisplayValue('for Sale')).toBeDefined();
+      expect(screen.getByDisplayValue('House')).toBeDefined();
+      expect(screen.getByDisplayValue('RE12345')).toBeDefined();
     });
   });
 
