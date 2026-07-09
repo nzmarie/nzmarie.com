@@ -21,6 +21,7 @@ export function AdminNavbar() {
     { href: '/admin/bookings', label: '📅 Bookings', alwaysShow: true },
     { href: '/admin/properties', label: '🏠 Properties', alwaysShow: true },
     { href: '/admin/outreach', label: '📬 Outreach', alwaysShow: true },
+    { href: '/admin/realestate', label: '🏡 Realestate', alwaysShow: true },
     { href: '/admin/analytics', label: '📊 Analytics', alwaysShow: false },
     { href: '/admin/downloads', label: '📥 Downloads', alwaysShow: false },
     { href: '/admin/pdf-manager', label: '☁️ Suburb PDF', alwaysShow: false },
