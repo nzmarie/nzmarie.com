@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
-import { FaBed, FaBath, FaMapMarkerAlt, FaRulerCombined, FaUser } from "react-icons/fa";
+import { FaBed, FaBath, FaMapMarkerAlt, FaRulerCombined, FaUser, FaExpand } from "react-icons/fa";
 import Image from "next/image";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
@@ -61,6 +61,9 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
       return Array.isArray(parsed) ? parsed.length : null;
     } catch { return null; }
   })();
+
+  const descriptionText = listing.description?.trim() || "";
+  const displayDescription = descriptionText || "No description";
 
   const aiChamberText = [
     '[AI-DATA-START]',
@@ -247,26 +250,17 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "8px", color: "#718096", fontSize: "0.95rem" }}>
-          <FaMapMarkerAlt style={{ marginRight: "8px", fontSize: "1rem" }} />
-          <span>{listing.region ? listing.region.charAt(0).toUpperCase() + listing.region.slice(1) : ''}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", color: "#718096", fontSize: "0.95rem" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <FaMapMarkerAlt style={{ marginRight: "8px", fontSize: "1rem" }} />
+            <span>{listing.region ? listing.region.charAt(0).toUpperCase() + listing.region.slice(1) : ''}</span>
+          </div>
+          {listing.listing_date_raw && (
+            <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+              Listed: {listing.listing_date_raw}
+            </span>
+          )}
         </div>
-
-        {listing.description && (
-          <div style={{
-            fontSize: "0.85rem", color: "#64748b", lineHeight: "1.5", marginBottom: "12px",
-            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
-            overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {listing.description}
-          </div>
-        )}
-
-        {listing.listing_number && (
-          <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: "12px" }}>
-            Listing #: {listing.listing_number}
-          </div>
-        )}
 
         {listing.price_display && (
           <div style={{ fontSize: "1.4rem", fontWeight: "700", color: "#059669", marginBottom: "16px" }}>
@@ -276,7 +270,7 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
 
         <div style={{
           display: "flex", justifyContent: "space-around", textAlign: "center",
-          marginBottom: "16px", paddingBottom: "16px", borderBottom: "1px solid #e2e8f0",
+          marginBottom: "12px",
         }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
@@ -300,20 +294,43 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
               <FaRulerCombined style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
               <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
-                {listing.floor_area || listing.land_area || "-"}
+                {listing.floor_area != null ? listing.floor_area : "-"}
               </span>
             </div>
-            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>m²</div>
+            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>Floor</div>
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
+              <FaExpand style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
+              <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
+                {listing.land_area != null ? listing.land_area : "-"}
+              </span>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>Land</div>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "16px", color: "#718096", fontSize: "0.85rem", flexWrap: "wrap", marginBottom: "auto" }}>
-          {listing.land_area != null && <span>Land: {listing.land_area}m²</span>}
-          {listing.floor_area != null && <span>Floor: {listing.floor_area}m²</span>}
-          {listing.agent_name && (
-            <span><FaUser style={{ marginRight: "4px", display: "inline", fontSize: "0.75rem" }} /> {listing.agent_name}</span>
-          )}
+        <div style={{
+          width: "100%",
+          marginTop: "16px",
+          paddingTop: "12px",
+          borderTop: "1px solid #e2e8f0",
+          color: "#4a5568",
+          fontSize: "0.9rem",
+          lineHeight: 1.5,
+          cursor: descriptionText ? "help" : "default",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }} title={descriptionText || undefined}>
+          {displayDescription}
         </div>
+
+        {listing.agent_name && (
+          <div style={{ fontSize: "0.83rem", color: "#94a3b8", marginTop: "auto" }}>
+            <FaUser style={{ marginRight: "4px", display: "inline", fontSize: "0.75rem" }} /> {listing.agent_name}
+          </div>
+        )}
 
         <div style={{
           position: "absolute", top: "-9999px", left: "-9999px",
