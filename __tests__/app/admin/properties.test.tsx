@@ -162,10 +162,10 @@ describe('Properties Page', () => {
     render(<PropertiesPage />);
 
     const houseBtn = screen.getByText('House');
-    const allBtn = screen.getByText('All');
+    const allBtns = screen.getAllByText('All');
     const townhouseBtn = screen.getByText('Townhouse/Unit');
     expect(houseBtn).toBeDefined();
-    expect(allBtn).toBeDefined();
+    expect(allBtns.length).toBeGreaterThanOrEqual(2);
     expect(townhouseBtn).toBeDefined();
     expect(houseBtn.parentElement).toBeDefined();
   });
@@ -175,10 +175,10 @@ describe('Properties Page', () => {
     render(<PropertiesPage />);
 
     const houseBtn = screen.getByText('House');
-    const allBtn = screen.getByText('All');
+    const allBtns = screen.getAllByText('All');
     const townhouseBtn = screen.getByText('Townhouse/Unit');
 
-    fireEvent.click(allBtn);
+    fireEvent.click(allBtns[0]);
     fireEvent.click(townhouseBtn);
     fireEvent.click(houseBtn);
   });
@@ -189,6 +189,34 @@ describe('Properties Page', () => {
 
     expect(screen.getByText('15 Marine Parade')).toBeDefined();
     expect(screen.getByText('2/910 East Coast Road')).toBeDefined();
+  });
+
+  it('renders Last Sold preset buttons with 5-10 years selected by default', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.getByText('5-10 years')).toBeDefined();
+    expect(screen.getByText('3-5 years')).toBeDefined();
+    expect(screen.getByText('0-3 years')).toBeDefined();
+    expect(screen.getByText('15+ years')).toBeDefined();
+  });
+
+  it('switches Last Sold preset when a different preset button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('3-5 years'));
+    fireEvent.click(screen.getByText('0-3 years'));
+    fireEvent.click(screen.getByText('15+ years'));
+    fireEvent.click(screen.getByText('5-10 years'));
+  });
+
+  it('renders custom Min Years and Max Years inputs for Last Sold', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.getByText('Min Years')).toBeDefined();
+    expect(screen.getByText('Max Years')).toBeDefined();
   });
 
 });

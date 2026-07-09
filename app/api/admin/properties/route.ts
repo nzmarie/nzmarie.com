@@ -13,7 +13,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const suburbsParam = searchParams.get('suburbs');
   const suburb = searchParams.get('suburb');
-  const lastSoldYears = searchParams.get('last_sold_years');
+  const lastSoldMinYears = searchParams.get('last_sold_min_years');
+  const lastSoldMaxYears = searchParams.get('last_sold_max_years');
+  const lastSoldNone = searchParams.get('last_sold_none');
   const minBedrooms = searchParams.get('min_bedrooms');
   const maxBedrooms = searchParams.get('max_bedrooms');
   const minBathrooms = searchParams.get('min_bathrooms');
@@ -127,9 +129,21 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (lastSoldYears) {
-    const years = parseInt(lastSoldYears);
-    query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+  if (lastSoldNone === 'true') {
+    query += ` AND p.last_sold_date IS NULL`;
+  } else {
+    if (lastSoldMinYears) {
+      const years = parseInt(lastSoldMinYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+      }
+    }
+    if (lastSoldMaxYears) {
+      const years = parseInt(lastSoldMaxYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+      }
+    }
   }
 
   if (minBedrooms) {

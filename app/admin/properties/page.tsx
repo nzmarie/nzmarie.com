@@ -64,7 +64,8 @@ interface Filters {
   region: string;
   city: string;
   suburb: string;
-  last_sold_years: string;
+  last_sold_min_years: string;
+  last_sold_max_years: string;
   min_bedrooms: string;
   max_bedrooms: string;
   min_bathrooms: string;
@@ -498,7 +499,8 @@ export default function PropertiesPage() {
     region: "Auckland",
     city: "North Shore City",
     suburb: "",
-    last_sold_years: "",
+    last_sold_min_years: "5",
+    last_sold_max_years: "10",
     min_bedrooms: "",
     max_bedrooms: "",
     min_bathrooms: "",
@@ -509,6 +511,8 @@ export default function PropertiesPage() {
   });
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -551,7 +555,12 @@ export default function PropertiesPage() {
       if (filters.city) params.append("city", filters.city);
       if (filters.region) params.append("region", filters.region);
       if (filters.search) params.append("search", filters.search);
-      if (filters.last_sold_years) params.append("last_sold_years", filters.last_sold_years);
+      if (lastSoldPreset === 'none') {
+        params.append("last_sold_none", "true");
+      } else {
+        if (filters.last_sold_min_years) params.append("last_sold_min_years", filters.last_sold_min_years);
+        if (filters.last_sold_max_years) params.append("last_sold_max_years", filters.last_sold_max_years);
+      }
       if (filters.min_bedrooms) params.append("min_bedrooms", filters.min_bedrooms);
       if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
       if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
@@ -631,13 +640,39 @@ export default function PropertiesPage() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleLastSoldPreset = (preset: string) => {
+    setLastSoldPreset(preset);
+    switch (preset) {
+      case '5-10':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '5', last_sold_max_years: '10' }));
+        break;
+      case '3-5':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '3', last_sold_max_years: '5' }));
+        break;
+      case '0-3':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '0', last_sold_max_years: '3' }));
+        break;
+      case '15+':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '15', last_sold_max_years: '' }));
+        break;
+      case 'all':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '', last_sold_max_years: '' }));
+        break;
+      case 'none':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '', last_sold_max_years: '' }));
+        break;
+    }
+  };
+
   const handleClearFilters = () => {
     setAddressInput("");
+    setLastSoldPreset('5-10');
     setFilters({
       region: "Auckland",
       city: "North Shore City",
       suburb: "",
-      last_sold_years: "",
+      last_sold_min_years: "5",
+      last_sold_max_years: "10",
       min_bedrooms: "",
       max_bedrooms: "",
       min_bathrooms: "",
@@ -914,35 +949,95 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px", marginBottom: "16px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Last Sold Within
-            </label>
-            <input
-              list="last-sold-years"
-              value={filters.last_sold_years}
-              onChange={(e) => handleFilterChange("last_sold_years", e.target.value)}
-              placeholder="Any Time"
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-              }}
-            />
-            <datalist id="last-sold-years">
-              <option value="">Any Time</option>
-              <option value="1">1 year</option>
-              <option value="3">3 years</option>
-              <option value="5">5 years</option>
-              <option value="10">10 years</option>
-            </datalist>
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Last Sold
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            {(['all', '5-10', '3-5', '0-3', '15+', 'none'] as const).map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleLastSoldPreset(preset)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: lastSoldPreset === preset ? '#3b82f6' : 'white',
+                  color: lastSoldPreset === preset ? 'white' : '#4a5568',
+                  border: lastSoldPreset === preset ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: lastSoldPreset === preset ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: lastSoldPreset === preset ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {preset === 'all' ? 'All' : preset === '5-10' ? '5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+              </button>
+            ))}
+            {lastSoldPreset !== 'none' && lastSoldPreset !== 'all' && (
+              <>
+            <div>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
+                Min Years
+              </label>
+              <input
+                type="number"
+                value={filters.last_sold_min_years}
+                onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_min_years", e.target.value); }}
+                min="0"
+                placeholder="0"
+                style={{
+                  width: "90px",
+                  padding: "8px 14px",
+                  border: "2px solid #e2e8f0",
+                  borderRadius: "10px",
+                  fontSize: "0.95rem",
+                  backgroundColor: "white",
+                  color: "#2D3748",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
+                Max Years
+              </label>
+              <input
+                type="number"
+                value={filters.last_sold_max_years}
+                onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_max_years", e.target.value); }}
+                min="0"
+                placeholder="No Max"
+                style={{
+                  width: "90px",
+                  padding: "8px 14px",
+                  border: "2px solid #e2e8f0",
+                  borderRadius: "10px",
+                  fontSize: "0.95rem",
+                  backgroundColor: "white",
+                  color: "#2D3748",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            </>
+            )}
           </div>
+        </div>
 
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end", marginBottom: "16px" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
               Min Bedrooms
@@ -954,35 +1049,14 @@ export default function PropertiesPage() {
               min="0"
               placeholder="0"
               style={{
-                width: "100%",
-                padding: "10px 14px",
+                width: "90px",
+                padding: "8px 14px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
                 fontSize: "0.95rem",
                 backgroundColor: "white",
                 color: "#2D3748",
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Max Bedrooms
-            </label>
-            <input
-              type="number"
-              value={filters.max_bedrooms}
-              onChange={(e) => handleFilterChange("max_bedrooms", e.target.value)}
-              min="0"
-              placeholder="10"
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
+                boxSizing: "border-box",
               }}
             />
           </div>
@@ -998,35 +1072,14 @@ export default function PropertiesPage() {
               min="0"
               placeholder="0"
               style={{
-                width: "100%",
-                padding: "10px 14px",
+                width: "90px",
+                padding: "8px 14px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
                 fontSize: "0.95rem",
                 backgroundColor: "white",
                 color: "#2D3748",
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Max Bathrooms
-            </label>
-            <input
-              type="number"
-              value={filters.max_bathrooms}
-              onChange={(e) => handleFilterChange("max_bathrooms", e.target.value)}
-              min="0"
-              placeholder="10"
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
+                boxSizing: "border-box",
               }}
             />
           </div>
@@ -1042,37 +1095,109 @@ export default function PropertiesPage() {
               min="0"
               placeholder="0"
               style={{
-                width: "100%",
-                padding: "10px 14px",
+                width: "90px",
+                padding: "8px 14px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
                 fontSize: "0.95rem",
                 backgroundColor: "white",
                 color: "#2D3748",
+                boxSizing: "border-box",
               }}
             />
           </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Max Car Spaces
-            </label>
-            <input
-              type="number"
-              value={filters.max_car_spaces}
-              onChange={(e) => handleFilterChange("max_car_spaces", e.target.value)}
-              min="0"
-              placeholder="10"
+          {showMoreFilters && (
+            <>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Max Bedrooms
+                </label>
+                <input
+                  type="number"
+                  value={filters.max_bedrooms}
+                  onChange={(e) => handleFilterChange("max_bedrooms", e.target.value)}
+                  min="0"
+                  placeholder="10"
+                  style={{
+                    width: "90px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Max Bathrooms
+                </label>
+                <input
+                  type="number"
+                  value={filters.max_bathrooms}
+                  onChange={(e) => handleFilterChange("max_bathrooms", e.target.value)}
+                  min="0"
+                  placeholder="10"
+                  style={{
+                    width: "90px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Max Car Spaces
+                </label>
+                <input
+                  type="number"
+                  value={filters.max_car_spaces}
+                  onChange={(e) => handleFilterChange("max_car_spaces", e.target.value)}
+                  min="0"
+                  placeholder="10"
+                  style={{
+                    width: "90px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            </>
+          )}
+
+          <div style={{ marginLeft: "auto" }}>
+            <button
+              onClick={() => setShowMoreFilters(!showMoreFilters)}
               style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
+                padding: "8px 18px",
                 backgroundColor: "white",
-                color: "#2D3748",
+                color: "#3b82f6",
+                border: "2px dashed #93c5fd",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                transition: "all 0.2s",
+                whiteSpace: "nowrap",
               }}
-            />
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+            >
+              {showMoreFilters ? "− Hide" : "+ More Filter Criteria"}
+            </button>
           </div>
         </div>
 
