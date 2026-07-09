@@ -51,7 +51,57 @@ export async function PATCH(
 
   try {
     await marieQuery(sql, values);
-    return NextResponse.json({ success: true });
+    const updated = await marieQuery(
+      `SELECT * FROM properties WHERE id = $1`,
+      [id]
+    );
+    const row = updated.rows[0];
+    return NextResponse.json({
+      success: true,
+      property: row ? {
+        id: row.id,
+        address: row.address,
+        suburb: row.suburb,
+        city: row.city,
+        region: row.region,
+        bedrooms: row.bedrooms !== null ? Number(row.bedrooms) : null,
+        bathrooms: row.bathrooms !== null ? Number(row.bathrooms) : null,
+        garages: row.car_spaces !== null ? Number(row.car_spaces) : null,
+        rv: row.capital_value !== null ? Number(row.capital_value) : null,
+        last_sold_price: row.last_sold_price !== null ? Number(row.last_sold_price) : null,
+        last_sold_date: row.last_sold_date ?? "",
+        build_year: row.year_built ? Number(row.year_built) : null,
+        land_area: row.land_area !== null && row.land_area !== '-' ? row.land_area : null,
+        floor_area: row.floor_size ?? null,
+        image_url: row.cover_image_url || 'https://via.placeholder.com/400x300/e2e8f0/64748b?text=No+Image',
+        property_url: row.property_url,
+        description: row.description ?? null,
+        realestate_url: row.realestate_url ?? null,
+        postcode: row.postcode ?? null,
+        land_value: row.land_value !== null ? Number(row.land_value) : null,
+        improvement_value: row.improvement_value !== null ? Number(row.improvement_value) : null,
+        has_rental_history: row.has_rental_history === null ? null : row.has_rental_history === 't',
+        is_currently_rented: row.is_currently_rented === null ? null : row.is_currently_rented === 't',
+        status: row.status ?? null,
+        property_history: row.property_history ?? null,
+        normalized_address: row.normalized_address ?? null,
+        address_fingerprint: row.address_fingerprint ?? null,
+        land_area_numeric: row.land_area_numeric ?? null,
+        property_type: row.property_type ?? null,
+        sale_status: row.sale_status ?? null,
+        sale_status_source: row.sale_status_source ?? null,
+        sale_status_updated_at: row.sale_status_updated_at ?? null,
+        estimated_value_low: row.estimated_value_low !== null ? Number(row.estimated_value_low) : null,
+        estimated_value_high: row.estimated_value_high !== null ? Number(row.estimated_value_high) : null,
+        suburb_median_price: row.suburb_median_price !== null ? Number(row.suburb_median_price) : null,
+        suburb_median_rent: row.suburb_median_rent !== null ? Number(row.suburb_median_rent) : null,
+        suburb_days_on_market: row.suburb_days_on_market !== null ? Number(row.suburb_days_on_market) : null,
+        images: row.images ?? null,
+        latitude: row.latitude !== null ? Number(row.latitude) : null,
+        longitude: row.longitude !== null ? Number(row.longitude) : null,
+        created_at: row.created_at ?? null,
+      } : null,
+    });
   } catch (error: unknown) {
     console.error('Error updating property:', error);
     return NextResponse.json(

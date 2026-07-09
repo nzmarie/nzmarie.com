@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   FaBed,
   FaBath,
@@ -493,6 +493,7 @@ const PropertyCard = ({ property }: {
 export default function PropertiesPage() {
   const { status } = useSession();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const lastPropertyElementRef = useRef<HTMLDivElement>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -540,7 +541,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", filters, propertyFilter],
+    queryKey: ["admin-properties", filters, propertyFilter, lastSoldPreset],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const pageNum = (pageParam as number) || 1;
@@ -744,6 +745,21 @@ export default function PropertiesPage() {
       const result = await response.json();
       if (!result.success) {
         throw new Error(result.error || 'Failed to update property');
+      }
+      const updatedProperty = result.property;
+      if (updatedProperty) {
+        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page: any) => ({
+              ...page,
+              properties: page.properties.map((p: Property) =>
+                p.id === updatedProperty.id ? updatedProperty : p
+              ),
+            })),
+          };
+        });
       }
       showNotification('success', 'Property updated successfully');
       setEditingProperty(null);

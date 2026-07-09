@@ -12,7 +12,9 @@ vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: mockSession, status: 'authenticated' }),
 }));
 
+const mockSetQueryData = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ setQueryData: mockSetQueryData }),
   useInfiniteQuery: () => ({
     data: { pages: [{
       properties: [
