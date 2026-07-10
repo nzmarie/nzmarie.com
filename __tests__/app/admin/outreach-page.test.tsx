@@ -27,6 +27,12 @@ vi.mock('@/components/admin/InlineAddressInput', () => ({
   default: () => <div data-testid="inline-input" />,
 }));
 
+vi.mock('@/components/property/AddressAutocomplete', () => ({
+  default: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <input data-testid="address-autocomplete" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
 vi.mock('@/lib/geo-data', () => ({
   getAllSuburbs: () => ['Takapuna'],
 }));

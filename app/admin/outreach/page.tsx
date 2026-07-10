@@ -2,11 +2,10 @@
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { SkeletonOutreach } from '@/components/admin/Skeleton';
-import InlineAddressInput from '@/components/admin/InlineAddressInput';
-import { getAllSuburbs } from '@/lib/geo-data';
+import AddressAutocomplete from '@/components/property/AddressAutocomplete';
 import { isAdmin } from '@/lib/permissions';
 
 interface OutreachProperty {
@@ -72,14 +71,15 @@ export default function OutreachPage() {
   const [items, setItems] = useState<OutreachProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  const [search, setSearch] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const [addressInput, setAddressInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
   const [streetFilter, setStreetFilter] = useState('');
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
@@ -93,22 +93,30 @@ export default function OutreachPage() {
   const [availableStreets, setAvailableStreets] = useState<string[]>([]);
   const canMarkAsSent = isAdmin(session?.user?.email ?? '');
 
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(true);
+  const loadingMoreRef = useRef(false);
+  const lastPropertyElementRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
   }, [status, router]);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 500);
+    const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [addressInput]);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
+    pageRef.current = 1;
+    setHasMore(true);
+    hasMoreRef.current = true;
     try {
       const params = new URLSearchParams({
         status: activeTab,
-        page: page.toString(),
-        limit: '200',
+        page: '1',
+        limit: '20',
         sortOrder,
       });
       if (suburbFilter) params.set('suburb', suburbFilter);
@@ -120,21 +128,78 @@ export default function OutreachPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      setItems((data.data ?? []).map((item: OutreachProperty) => ({
+      const fetched = (data.data ?? []).map((item: OutreachProperty) => ({
         ...item,
         status: normalizeStatus(item.status),
-      })));
+      }));
+      setItems(fetched);
       setPagination(data.pagination ?? null);
+      if (fetched.length < 20) {
+        setHasMore(false);
+        hasMoreRef.current = false;
+      }
     } catch (error) {
       console.error('Error fetching outreach:', error);
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
   }, [status, fetchItems]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const nextPage = pageRef.current + 1;
+    try {
+      const params = new URLSearchParams({
+        status: activeTab,
+        page: nextPage.toString(),
+        limit: '20',
+        sortOrder,
+      });
+      if (suburbFilter) params.set('suburb', suburbFilter);
+      if (streetFilter) params.set('street', streetFilter);
+      if (campaignFilter) params.set('campaign', campaignFilter);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+
+      const res = await fetch(`/api/admin/outreach?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const fetched = (data.data ?? []).map((item: OutreachProperty) => ({
+        ...item,
+        status: normalizeStatus(item.status),
+      }));
+      setItems((prev) => [...prev, ...fetched]);
+      pageRef.current = nextPage;
+      if (fetched.length < 20) {
+        setHasMore(false);
+        hasMoreRef.current = false;
+      }
+      setPagination(data.pagination ?? null);
+    } catch (error) {
+      console.error('Error loading more:', error);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+
+  useEffect(() => {
+    const el = lastPropertyElementRef.current;
+    if (!el || !hasMore || loadingMore || loading) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+        loadMore();
+      }
+    }, { threshold: 0.5 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loading, loadMore]);
 
   useEffect(() => {
     const streets = new Set<string>();
@@ -155,16 +220,6 @@ export default function OutreachPage() {
       return value as OutreachProperty['status'];
     }
     return 'pending';
-  };
-
-  const handleAddSuccess = (newProperty: unknown) => {
-    showNotification('success', 'Address added successfully');
-    const prop = newProperty as OutreachProperty;
-    prop.status = normalizeStatus(prop.status);
-    setItems((prev) => [prop, ...prev]);
-    if (pagination) {
-      setPagination({ ...pagination, total: pagination.total + 1 });
-    }
   };
 
   const handleMarkAsSentSuccess = (updatedProperties: OutreachProperty[]) => {
@@ -387,12 +442,22 @@ export default function OutreachPage() {
     return { totalLiked, totalPending, totalSent, totalInteracted, total: pagination?.total ?? items.length };
   }, [items, pagination]);
 
-  const allSuburbs = getAllSuburbs();
-
   if (status === 'loading') return <SkeletonOutreach />;
 
   return (
-    <div className="space-y-6">
+    <div style={{
+      maxWidth: "1400px",
+      margin: "0 auto",
+      padding: "24px",
+      "--input-border": "#e2e8f0",
+      "--input-bg": "#ffffff",
+      "--foreground": "#171717",
+      "--card-bg": "#ffffff",
+      "--card-border": "#e2e8f0",
+      "--text-heading": "#2D3748",
+      "--text-muted": "#718096",
+      "--background": "#f8fafc",
+    } as React.CSSProperties}>
       {notification && (
         <div
           className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
@@ -411,7 +476,7 @@ export default function OutreachPage() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200">
         <button
-          onClick={() => { setActiveTab('liked'); setPage(1); }}
+          onClick={() => { setActiveTab('liked'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'liked'
               ? 'text-pink-600 border-b-2 border-pink-600'
@@ -426,7 +491,7 @@ export default function OutreachPage() {
           )}
         </button>
         <button
-          onClick={() => { setActiveTab('pending'); setPage(1); }}
+          onClick={() => { setActiveTab('pending'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'pending'
               ? 'text-blue-600 border-b-2 border-blue-600'
@@ -441,7 +506,7 @@ export default function OutreachPage() {
           )}
         </button>
         <button
-          onClick={() => { setActiveTab('sent'); setPage(1); }}
+          onClick={() => { setActiveTab('sent'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'sent'
               ? 'text-purple-600 border-b-2 border-purple-600'
@@ -457,49 +522,117 @@ export default function OutreachPage() {
         </button>
       </div>
 
-      {/* Smart Inline Input */}
-      {activeTab === 'pending' && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-            <span>📍</span>
-            <span>Quick Add to Current Campaign (2026 Q3 Report)</span>
-          </h3>
-          <InlineAddressInput campaign="2026_Q3_Report" onAddSuccess={handleAddSuccess} />
-        </div>
-      )}
-
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-        <div className="flex flex-wrap gap-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="🔍 Search by address..."
-            className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          
-          <select
-            value={suburbFilter}
-            onChange={(e) => { 
-              setSuburbFilter(e.target.value); 
-              setStreetFilter('');
-              setPage(1); 
-            }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Suburbs</option>
-            {allSuburbs.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+      <div style={{
+        marginBottom: "32px",
+        padding: "24px",
+        backgroundColor: "white",
+        borderRadius: "16px",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        border: "1px solid #e2e8f0",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748" }}>
+            Search Filters
+          </h2>
+          <p style={{ fontSize: "0.9rem", color: "#718096" }}>
+            Displaying {items.length} of {pagination?.total ?? 0} properties • Scroll to load more
+          </p>
+        </div>
 
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+            Search by Address
+          </label>
+          <AddressAutocomplete
+            value={addressInput}
+            city={''}
+            useGoogleMaps={true}
+            onChange={(val) => {
+              setAddressInput(val);
+            }}
+            onSelect={(suggestion) => {
+              setAddressInput(suggestion.address);
+              setSuburbFilter(suggestion.suburb || '');
+            }}
+            placeholder="🔍 Search by address..."
+          />
+        </div>
+
+        {/* Quick Suburb Filter Buttons */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
+            Quick Filter by Suburb
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany'].map((s) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setAddressInput('');
+                  setSuburbFilter(prev => prev === s ? '' : s);
+                }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: suburbFilter === s ? '#3b82f6' : 'white',
+                  color: suburbFilter === s ? 'white' : '#4a5568',
+                  border: suburbFilter === s ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: suburbFilter === s ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: suburbFilter === s ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (suburbFilter !== s) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (suburbFilter !== s) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {s}
+              </button>
+            ))}
+            {suburbFilter && (
+              <button
+                onClick={() => { setAddressInput(''); setSuburbFilter(''); }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: '#fef2f2',
+                  color: '#dc2626',
+                  border: '2px solid #fecaca',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                  e.currentTarget.style.borderColor = '#fca5a5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fef2f2';
+                  e.currentTarget.style.borderColor = '#fecaca';
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
           <select
             value={streetFilter}
-            onChange={(e) => { 
-              setStreetFilter(e.target.value); 
-              setPage(1); 
-            }}
+            onChange={(e) => { setStreetFilter(e.target.value); }}
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={availableStreets.length === 0}
           >
@@ -511,10 +644,7 @@ export default function OutreachPage() {
 
           <select
             value={sortOrder}
-            onChange={(e) => { 
-              setSortOrder(e.target.value as 'asc' | 'desc'); 
-              setPage(1); 
-            }}
+            onChange={(e) => { setSortOrder(e.target.value as 'asc' | 'desc'); }}
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="asc">📅 Time: Oldest First</option>
@@ -523,49 +653,17 @@ export default function OutreachPage() {
           
           <button
             onClick={() => { 
-              setSearch(''); 
+              setAddressInput(''); 
               setSuburbFilter(''); 
               setStreetFilter('');
               setCampaignFilter(''); 
               setSortOrder('asc');
-              setPage(1);
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
             ✕ Clear All
           </button>
         </div>
-
-        {/* Active Filters Display */}
-        {(suburbFilter || streetFilter || search || sortOrder === 'desc') && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
-            <span className="text-xs text-slate-500 font-medium">Active Filters:</span>
-            {suburbFilter && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
-                Suburb: {suburbFilter}
-                <button onClick={() => setSuburbFilter('')} className="hover:text-blue-900">✕</button>
-              </span>
-            )}
-            {streetFilter && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
-                Street: {streetFilter}
-                <button onClick={() => setStreetFilter('')} className="hover:text-purple-900">✕</button>
-              </span>
-            )}
-            {search && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
-                Search: {search}
-                <button onClick={() => setSearch('')} className="hover:text-green-900">✕</button>
-              </span>
-            )}
-            {sortOrder === 'desc' && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
-                Newest First
-                <button onClick={() => setSortOrder('asc')} className="hover:text-orange-900">✕</button>
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Bulk Actions */}
@@ -702,8 +800,8 @@ export default function OutreachPage() {
                 ☰ List
               </button>
             </div>
-            {pagination && (
-              <span className="text-sm text-slate-500">{pagination.total} total</span>
+            {loadingMore && (
+              <span className="text-sm text-blue-500 font-medium">Loading more...</span>
             )}
           </div>
         </div>
@@ -1214,6 +1312,10 @@ export default function OutreachPage() {
                 </div>
               ))}
             </div>
+            {/* Infinite scroll sentinel */}
+            {hasMore && !loading && (
+              <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+            )}
           </div>
         ) : (
           <div className="p-4 space-y-3">
@@ -1453,6 +1555,10 @@ export default function OutreachPage() {
               );
             })}
           </div>
+        )}
+        {/* Infinite scroll sentinel for list view */}
+        {viewMode === 'list' && hasMore && !loading && (
+          <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
         )}
       </div>
     </div>

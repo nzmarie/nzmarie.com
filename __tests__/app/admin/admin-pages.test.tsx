@@ -22,6 +22,10 @@ vi.mock('next/image', () => ({
   default: ({ src, alt, ...props }: any) => <img src={src} alt={alt} {...props} />,
 }));
 
+vi.mock('@/components/property/AddressAutocomplete', () => ({
+  default: () => <input data-testid="address-autocomplete" />,
+}));
+
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonBookings: () => <div>Loading Bookings</div>,
   SkeletonOutreach: () => <div>Loading Outreach</div>,
