@@ -75,8 +75,10 @@ interface Filters {
   search: string;
 }
 
-const PropertyCard = ({ property }: { 
-  property: Property; 
+const PropertyCard = ({ property, isLiked, onToggleLike }: { 
+  property: Property;
+  isLiked: boolean;
+  onToggleLike: (property: Property) => void;
 }) => {
   const [imageError, setImageError] = useState(false);
 
@@ -222,12 +224,43 @@ const PropertyCard = ({ property }: {
           </div>
         )}
         
+        {/* Like Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onToggleLike(property);
+          }}
+          style={{
+            position: "absolute",
+            top: "12px",
+            right: "12px",
+            background: isLiked ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '36px',
+            height: '36px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            transition: 'all 0.2s ease',
+            color: isLiked ? 'white' : '#64748b',
+            zIndex: 2,
+          }}
+          title={isLiked ? 'Unlike' : 'Like'}
+        >
+          {isLiked ? '\u2764' : '\u2661'}
+        </button>
+
         {/* Built Year Badge */}
         {property.build_year && (
           <div style={{
             position: "absolute",
             top: "16px",
-            right: "16px",
+            left: "16px",
             backgroundColor: "rgba(59, 130, 246, 0.9)",
             color: "white",
             padding: "4px 10px",
@@ -512,6 +545,7 @@ export default function PropertiesPage() {
   });
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
+  const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
 
@@ -541,10 +575,107 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", filters, propertyFilter, lastSoldPreset],
+    queryKey: ["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const pageNum = (pageParam as number) || 1;
+
+      if (showLikedOnly) {
+        const params = new URLSearchParams({
+          status: 'liked',
+          page: pageNum.toString(),
+          limit: '18',
+        });
+        if (filters.suburb) params.append('suburb', filters.suburb);
+        if (filters.city) params.append('city', filters.city);
+        if (filters.region) params.append('region', filters.region);
+        if (filters.search) params.append('search', filters.search);
+
+        const response = await fetch(`/api/admin/outreach?${params}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Failed to fetch liked properties');
+
+        let mapped: Property[] = result.data.map((item: any) => ({
+          id: item.joined_property_id || (item.property_id ? item.property_id.replace(/-/g, '') : item.id),
+          address: item.property_address || '',
+          suburb: item.suburb || '',
+          city: item.city || '',
+          region: item.region || '',
+          bedrooms: item.bedrooms ?? null,
+          bathrooms: item.bathrooms ?? null,
+          garages: item.car_spaces ?? null,
+          rv: item.capital_value ?? null,
+          last_sold_price: item.last_sold_price ?? null,
+          last_sold_date: item.last_sold_date ?? null,
+          build_year: item.build_year ?? null,
+          land_area: item.land_area ?? null,
+          floor_area: item.floor_area ?? null,
+          image_url: item.image_url || '',
+          property_url: item.property_url || '',
+          realestate_url: item.realestate_url || null,
+          description: item.description || null,
+          property_type: item.property_type || null,
+        }));
+
+        if (propertyFilter === 'house') {
+          mapped = mapped.filter(p => {
+            if (!p.property_type) return true;
+            const t = p.property_type.toLowerCase();
+            return !['townhouse', 'unit', 'apartment'].includes(t);
+          });
+        } else if (propertyFilter === 'townhouse') {
+          mapped = mapped.filter(p => {
+            if (!p.property_type) return false;
+            const t = p.property_type.toLowerCase();
+            return ['townhouse', 'unit'].includes(t);
+          });
+        }
+
+        if (lastSoldPreset === 'none') {
+          mapped = mapped.filter(p => !p.last_sold_date);
+        } else {
+          const minYears = filters.last_sold_min_years ? parseInt(filters.last_sold_min_years) : 0;
+          const maxYears = filters.last_sold_max_years ? parseInt(filters.last_sold_max_years) : 999;
+          if (minYears > 0 || maxYears < 999) {
+            const now = new Date();
+            mapped = mapped.filter(p => {
+              if (!p.last_sold_date) return false;
+              const sold = new Date(p.last_sold_date);
+              if (isNaN(sold.getTime())) return false;
+              const years = (now.getTime() - sold.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+              return years >= minYears && years <= maxYears;
+            });
+          }
+        }
+
+        if (filters.min_bedrooms) {
+          const min = parseInt(filters.min_bedrooms);
+          mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms >= min);
+        }
+        if (filters.max_bedrooms) {
+          const max = parseInt(filters.max_bedrooms);
+          mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms <= max);
+        }
+        if (filters.min_bathrooms) {
+          const min = parseInt(filters.min_bathrooms);
+          mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms >= min);
+        }
+        if (filters.max_bathrooms) {
+          const max = parseInt(filters.max_bathrooms);
+          mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms <= max);
+        }
+        if (filters.min_car_spaces) {
+          const min = parseInt(filters.min_car_spaces);
+          mapped = mapped.filter(p => p.garages !== null && p.garages >= min);
+        }
+        if (filters.max_car_spaces) {
+          const max = parseInt(filters.max_car_spaces);
+          mapped = mapped.filter(p => p.garages !== null && p.garages <= max);
+        }
+
+        return { properties: mapped, total: result.pagination.total };
+      }
+
       const params = new URLSearchParams({
         page: pageNum.toString(),
         limit: "18",
@@ -597,6 +728,63 @@ export default function PropertiesPage() {
     ? propertiesData.pages.flatMap((page) => page.properties)
     : [];
   const totalProperties = propertiesData?.pages[0]?.total || 0;
+
+  const [likedPropertyIds, setLikedPropertyIds] = useState<Set<string>>(new Set());
+
+  const displayProperties = properties;
+
+  const propertyIds = !showLikedOnly ? properties.map(p => p.id).filter(Boolean).join(',') : '';
+
+  useEffect(() => {
+    if (!propertyIds) return;
+    fetch(`/api/admin/outreach/like?property_ids=${propertyIds}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.liked_ids) {
+          setLikedPropertyIds(new Set(data.liked_ids));
+        }
+      })
+      .catch(() => {});
+  }, [propertyIds]);
+
+  const handleToggleLike = async (property: Property) => {
+    const wasLiked = likedPropertyIds.has(property.id);
+    setLikedPropertyIds(prev => {
+      const next = new Set(prev);
+      if (wasLiked) next.delete(property.id);
+      else next.add(property.id);
+      return next;
+    });
+    try {
+      const res = await fetch('/api/admin/outreach/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id: property.id,
+          property_address: property.address,
+          suburb: property.suburb,
+          city: property.city,
+          region: property.region || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.liked === undefined) {
+        setLikedPropertyIds(prev => {
+          const next = new Set(prev);
+          if (wasLiked) next.add(property.id);
+          else next.delete(property.id);
+          return next;
+        });
+      }
+    } catch {
+      setLikedPropertyIds(prev => {
+        const next = new Set(prev);
+        if (wasLiked) next.add(property.id);
+        else next.delete(property.id);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     const currentElement = lastPropertyElementRef.current;
@@ -667,6 +855,7 @@ export default function PropertiesPage() {
 
   const handleClearFilters = () => {
     setAddressInput("");
+    setShowLikedOnly(false);
     setLastSoldPreset('5-10');
     setFilters({
       region: "Auckland",
@@ -821,7 +1010,7 @@ export default function PropertiesPage() {
             Search Filters
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            Displaying {properties.length} of {totalProperties} properties • Scroll to load more
+            Displaying {displayProperties.length} of {totalProperties} properties • Scroll to load more
           </p>
         </div>
         
@@ -926,6 +1115,48 @@ export default function PropertiesPage() {
               >
                 ✕ Clear
               </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Like Status
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowLikedOnly(!showLikedOnly)}
+              style={{
+                padding: '8px 18px',
+                backgroundColor: showLikedOnly ? '#ef4444' : 'white',
+                color: showLikedOnly ? 'white' : '#4a5568',
+                border: showLikedOnly ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: showLikedOnly ? '600' : '500',
+                transition: 'all 0.2s ease',
+                boxShadow: showLikedOnly ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!showLikedOnly) {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                  e.currentTarget.style.borderColor = '#9ca3af';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!showLikedOnly) {
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                }
+              }}
+            >
+              {showLikedOnly ? '\u2665 Liked' : '\u2661 Liked'}
+            </button>
+            {showLikedOnly && (
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#718096' }}>
+                {displayProperties.length} liked
+              </span>
             )}
           </div>
         </div>
@@ -1342,12 +1573,14 @@ export default function PropertiesPage() {
         opacity: isFetching && !isFetchingNextPage ? 0.6 : 1,
         transition: "opacity 0.2s ease-in-out",
       }}>
-        {properties.map((property, index) => {
-          const isLast = index === properties.length - 1;
+        {displayProperties.map((property, index) => {
+          const isLast = index === displayProperties.length - 1;
           return (
             <div key={`${property.id}-${index}`} ref={isLast ? lastPropertyElementRef : null}>
               <PropertyCard 
-                property={property} 
+                property={property}
+                isLiked={showLikedOnly || likedPropertyIds.has(property.id)}
+                onToggleLike={handleToggleLike}
               />
             </div>
           );
@@ -1374,7 +1607,7 @@ export default function PropertiesPage() {
       )}
 
       {/* No More Data Indicator */}
-      {!hasNextPage && properties.length > 0 && !isFetchingNextPage && (
+      {!hasNextPage && displayProperties.length > 0 && !isFetchingNextPage && (
         <div style={{
           textAlign: "center",
           padding: "30px",
@@ -1386,19 +1619,19 @@ export default function PropertiesPage() {
         </div>
       )}
 
-      {!hasNextPage && properties.length > 0 && (
+      {!hasNextPage && displayProperties.length > 0 && (
         <div style={{
           textAlign: "center",
           padding: "30px",
           color: "#718096",
           fontSize: "0.95rem",
         }}>
-          🎉 You{"'"}ve reached the end! No more properties to load.
+          You{"'"}ve reached the end! No more properties to load.
         </div>
       )}
 
       {/* Empty State */}
-      {properties.length === 0 && !isLoading && (
+      {displayProperties.length === 0 && !isLoading && (
         <div style={{
           textAlign: "center",
           padding: "80px 30px",

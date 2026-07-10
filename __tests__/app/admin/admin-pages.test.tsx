@@ -139,6 +139,10 @@ describe('Admin pages', () => {
 
     render(<OutreachPage />);
 
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    const listBtn = await screen.findByRole('button', { name: /☰ List/i });
+    fireEvent.click(listBtn);
     const suburbGroup = await screen.findByRole('button', { name: /Takapuna/i });
     fireEvent.click(suburbGroup);
 

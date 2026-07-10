@@ -32,10 +32,23 @@ export async function GET(request: Request) {
     let query = `
       SELECT 
         op.*,
+        p.id as joined_property_id,
         p.property_url,
+        p.cover_image_url as image_url,
+        p.bedrooms,
+        p.bathrooms,
+        p.car_spaces,
+        p.floor_size as floor_area,
+        p.land_area,
+        p.last_sold_price,
+        p.last_sold_date,
+        p.capital_value,
+        p.year_built as build_year,
+        p.property_url as pv_url,
+        p.description,
         COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
       FROM outreach_properties op
-      LEFT JOIN properties p ON op.louis_property_id = p.id
+      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
       LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
       LEFT JOIN real_estate_rent rer ON p.address_fingerprint = rer.address_fingerprint
       WHERE 1=1
@@ -52,19 +65,19 @@ export async function GET(request: Request) {
       params.push(campaign);
     }
     if (region) {
-      query += ` AND op.region = $${idx++}`;
+      query += ` AND op.region ILIKE $${idx++}`;
       params.push(region);
     }
     if (city) {
-      query += ` AND op.city = $${idx++}`;
+      query += ` AND op.city ILIKE $${idx++}`;
       params.push(city);
     }
     if (suburb) {
-      query += ` AND op.suburb = $${idx++}`;
+      query += ` AND op.suburb ILIKE $${idx++}`;
       params.push(suburb);
     }
     if (street) {
-      query += ` AND op.street = $${idx++}`;
+      query += ` AND op.street ILIKE $${idx++}`;
       params.push(street);
     }
     if (search) {
@@ -93,10 +106,10 @@ export async function GET(request: Request) {
 
     if (status) { countQuery += ` AND status = $${ci++}`; countParams.push(status); }
     if (campaign) { countQuery += ` AND campaign = $${ci++}`; countParams.push(campaign); }
-    if (region) { countQuery += ` AND region = $${ci++}`; countParams.push(region); }
-    if (city) { countQuery += ` AND city = $${ci++}`; countParams.push(city); }
-    if (suburb) { countQuery += ` AND suburb = $${ci++}`; countParams.push(suburb); }
-    if (street) { countQuery += ` AND street = $${ci++}`; countParams.push(street); }
+    if (region) { countQuery += ` AND region ILIKE $${ci++}`; countParams.push(region); }
+    if (city) { countQuery += ` AND city ILIKE $${ci++}`; countParams.push(city); }
+    if (suburb) { countQuery += ` AND suburb ILIKE $${ci++}`; countParams.push(suburb); }
+    if (street) { countQuery += ` AND street ILIKE $${ci++}`; countParams.push(street); }
     if (search) { countQuery += ` AND property_address ILIKE $${ci++}`; countParams.push(`%${search}%`); }
 
     const countResult = await marieDB.query(countQuery, countParams);
@@ -144,6 +157,7 @@ export async function POST(request: Request) {
       campaign?: string;
       notes?: string;
       louis_property_id?: string;
+      property_id?: string;
     };
     const {
       property_address,
@@ -156,6 +170,7 @@ export async function POST(request: Request) {
       campaign = '2026_Q3_Report',
       notes,
       louis_property_id,
+      property_id,
     } = body;
 
     if (!property_address || !suburb || !city || !region) {
@@ -165,9 +180,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Idempotent check: prefer louis_property_id, otherwise check address+campaign
+    // Idempotent check: prefer property_id, then louis_property_id, otherwise check address+campaign
     let duplicate;
-    if (louis_property_id && louis_property_id.trim().length > 0) {
+    if (property_id) {
+      duplicate = await marieDB.query(
+        `SELECT id FROM outreach_properties WHERE property_id = $1 LIMIT 1`,
+        [property_id]
+      );
+    } else if (louis_property_id && louis_property_id.trim().length > 0) {
       duplicate = await marieDB.query(
         `SELECT id FROM outreach_properties WHERE louis_property_id = $1 AND campaign = $2 LIMIT 1`,
         [louis_property_id.trim(), campaign]
@@ -208,10 +228,11 @@ export async function POST(request: Request) {
 
     const result = await marieDB.query(
       `INSERT INTO outreach_properties 
-       (louis_property_id, property_address, suburb, city, region, street, owner_name, property_type, campaign, notes, status, selected_by, selected_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, NOW())
+       (property_id, louis_property_id, property_address, suburb, city, region, street, owner_name, property_type, campaign, notes, status, selected_by, selected_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', $12, NOW())
        RETURNING *`,
       [
+        property_id?.trim() || null,
         louis_property_id?.trim() || null,
         property_address.trim(),
         suburb.trim(),

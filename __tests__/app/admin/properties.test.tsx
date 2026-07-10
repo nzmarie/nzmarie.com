@@ -105,9 +105,24 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 })) as any;
 
+const mockLikeFetch = () => {
+  (global.fetch as any).mockResolvedValue({
+    ok: true,
+    json: async () => ({ liked_ids: [] }),
+  });
+};
+
+const mockLikeFetchOnce = () => {
+  (global.fetch as any).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ liked_ids: [] }),
+  });
+};
+
 describe('Properties Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLikeFetch();
   });
 
   afterEach(() => {
@@ -226,6 +241,7 @@ describe('Properties Page', () => {
 describe('Properties Page - Edit Functionality', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLikeFetch();
   });
 
   afterEach(() => {
@@ -270,9 +286,10 @@ describe('Properties Page - Edit Functionality', () => {
   });
 
   it('calls PATCH API with updated data when Save Changes is clicked', async () => {
+    mockLikeFetchOnce();
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ success: true, property: { id: 'prop-1', address: '16 Marine Parade' } }),
     });
 
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
@@ -301,16 +318,19 @@ describe('Properties Page - Edit Functionality', () => {
       );
     });
 
-    const fetchCall = (global.fetch as any).mock.calls[0];
-    const body = JSON.parse(fetchCall[1].body);
+    const patchCall = (global.fetch as any).mock.calls.find((c: unknown[]) =>
+      c[0] === '/api/admin/properties/prop-1' && c[1]?.method === 'PATCH'
+    );
+    const body = JSON.parse(patchCall[1].body);
     expect(body.address).toBe('16 Marine Parade');
     expect(body.suburb).toBe('Takapuna');
   });
 
   it('shows success notification after successful edit', async () => {
+    mockLikeFetchOnce();
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ success: true, property: { id: 'prop-1' } }),
     });
 
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
@@ -332,6 +352,7 @@ describe('Properties Page - Edit Functionality', () => {
   });
 
   it('shows error notification on failed edit', async () => {
+    mockLikeFetchOnce();
     (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: 'Update failed' }),
@@ -378,6 +399,7 @@ describe('Properties Page - Edit Functionality', () => {
 describe('Properties Page - Quick Filter by Suburb clears Address Input', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLikeFetch();
   });
 
   afterEach(() => {
@@ -433,5 +455,63 @@ describe('Properties Page - Quick Filter by Suburb clears Address Input', () => 
     fireEvent.change(addressInput, { target: { value: '20 Other Road' } });
     fireEvent.click(albanyBtn);
     expect(addressInput.value).toBe('');
+  });
+});
+
+describe('Properties Page - Like Icon', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLikeFetch();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders a like button on each property card', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const likeButtons = await screen.findAllByTitle('Like');
+    expect(likeButtons.length).toBe(2);
+  });
+
+  it('calls like API when like button is clicked', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ liked_ids: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ liked: true }) });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const likeButtons = await screen.findAllByTitle('Like');
+    fireEvent.click(likeButtons[0]);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/admin/outreach/like',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+  });
+
+  it('toggles like icon state on click', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ liked_ids: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ liked: true }) });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const likeButtons = await screen.findAllByTitle('Like');
+    expect(likeButtons.length).toBe(2);
+    fireEvent.click(likeButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Unlike')).toBeTruthy();
+    });
   });
 });

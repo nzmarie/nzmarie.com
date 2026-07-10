@@ -47,28 +47,41 @@ describe('Outreach page', () => {
   });
 
   it('renders pending address row and shows mark as sent button', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        data: [
-          {
-            id: 'out-1',
-            property_address: '15 Marine Parade',
-            suburb: 'Takapuna',
-            city: 'Auckland',
-            region: 'North Shore',
-            status: 'PENDING',
-            created_at: '2026-07-01T10:00:00Z',
-          },
-        ],
-        pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
-      }),
-    });
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: 'out-1',
+              property_address: '15 Marine Parade',
+              suburb: 'Takapuna',
+              city: 'Auckland',
+              region: 'North Shore',
+              status: 'PENDING',
+              created_at: '2026-07-01T10:00:00Z',
+            },
+          ],
+          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+        }),
+      });
 
     render(<OutreachPage />);
 
     expect(await screen.findByText('📬 Outreach')).toBeTruthy();
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    const listBtn = await screen.findByRole('button', { name: /☰ List/i });
+    fireEvent.click(listBtn);
     const suburbButton = await screen.findByRole('button', { name: /Takapuna/i });
     fireEvent.click(suburbButton);
 
@@ -78,6 +91,14 @@ describe('Outreach page', () => {
 
   it('marks a pending address as sent when row button clicked', async () => {
     (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        }),
+      })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -121,6 +142,10 @@ describe('Outreach page', () => {
 
     render(<OutreachPage />);
 
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    const listBtn = await screen.findByRole('button', { name: /☰ List/i });
+    fireEvent.click(listBtn);
     const suburbButton = await screen.findByRole('button', { name: /Takapuna/i });
     fireEvent.click(suburbButton);
 
@@ -129,7 +154,6 @@ describe('Outreach page', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/admin/outreach/out-1/mark-sent', { method: 'PATCH' });
-      expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(screen.queryByText('15 Marine Parade')).toBeNull();
     });
   });

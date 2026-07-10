@@ -51,6 +51,7 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     CREATE TABLE IF NOT EXISTS outreach_properties (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       louis_property_id VARCHAR(100),
+      property_id UUID,
       property_address TEXT NOT NULL,
       suburb VARCHAR(100) NOT NULL,
       city VARCHAR(100) NOT NULL,
@@ -72,10 +73,12 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     );
 
     ALTER TABLE outreach_properties ADD COLUMN IF NOT EXISTS sent_by VARCHAR(255);
+    ALTER TABLE outreach_properties ADD COLUMN IF NOT EXISTS property_id UUID;
 
     CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach_properties(status);
     CREATE INDEX IF NOT EXISTS idx_outreach_suburb ON outreach_properties(suburb);
     CREATE INDEX IF NOT EXISTS idx_outreach_campaign ON outreach_properties(campaign);
+    CREATE INDEX IF NOT EXISTS idx_outreach_property_id ON outreach_properties(property_id);
 
     CREATE TABLE IF NOT EXISTS outreach_qr_tokens (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
