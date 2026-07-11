@@ -15,6 +15,7 @@ import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
 import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
+import { getFixedImageUrl } from "@/lib/google-maps";
 
 interface Property {
   id: string;
@@ -81,6 +82,8 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
   onToggleLike: (property: Property) => void;
 }) => {
   const [imageError, setImageError] = useState(false);
+
+  const fixedImageUrl = getFixedImageUrl(property.image_url);
 
   const formatCurrency = (amount: number | null) => {
     if (amount === null || amount === undefined) return "N/A";
@@ -166,9 +169,9 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           rel="noopener noreferrer"
           style={{ display: "block", height: "220px", textDecoration: "none", color: "inherit" }}
         >
-          {property.image_url && !imageError ? (
+          {fixedImageUrl && !imageError ? (
             <Image
-              src={property.image_url}
+              src={fixedImageUrl}
               alt={property.address}
               unoptimized
               onError={() => setImageError(true)}

@@ -48,3 +48,6 @@ next-env.d.ts
 tasks/
 
 tmp/
+
+# documentation (internal notes)
+docs/

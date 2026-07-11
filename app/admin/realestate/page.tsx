@@ -9,6 +9,7 @@ import Image from "next/image";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { REGION_CITIES, CITY_SUBURBS, REGIONS as GEO_REGIONS } from "@/lib/geo-data";
+import { getFixedImageUrl } from "@/lib/google-maps";
 
 interface Listing {
   id: string;
@@ -53,7 +54,7 @@ interface Filters {
 const ListingCard = ({ listing }: { listing: Listing }) => {
   const [imageError, setImageError] = useState(false);
 
-  const imageSrc = listing.cover_image_url;
+  const imageSrc = getFixedImageUrl(listing.cover_image_url);
   const imageCount = (() => {
     if (!listing.images) return null;
     try {

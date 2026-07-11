@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { SkeletonOutreach } from '@/components/admin/Skeleton';
 import AddressAutocomplete from '@/components/property/AddressAutocomplete';
 import { isAdmin } from '@/lib/permissions';
+import { getFixedImageUrl } from '@/lib/google-maps';
 
 interface OutreachProperty {
   id: string;
@@ -842,7 +843,7 @@ export default function OutreachPage() {
                   <div style={{ position: 'relative', height: '220px', backgroundColor: '#f8fafc' }}>
                     {prop.image_url ? (
                       <Image
-                        src={prop.image_url}
+                        src={getFixedImageUrl(prop.image_url) || prop.image_url}
                         alt={prop.property_address}
                         width={400}
                         height={220}

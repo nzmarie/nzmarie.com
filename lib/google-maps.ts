@@ -262,3 +262,40 @@ export class GoogleAutocompleteService {
     });
   }
 }
+
+/**
+ * Fix Google Maps Street View image URLs by reconstructing with the correct API key
+ * and returning error codes for missing street view images.
+ * 
+ * Parses lat/lng from the existing URL and rebuilds it as:
+ *   https://maps.googleapis.com/maps/api/streetview?size=470x313&location={lat},{lng}&key={API_KEY}&return_error_code=true
+ */
+export function getFixedImageUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  // Only reconstruct Google Street View URLs
+  if (url.includes('maps.googleapis.com/maps/api/streetview')) {
+    try {
+      const urlObj = new URL(url);
+      const location = urlObj.searchParams.get('location');
+      if (location && apiKey) {
+        const reconstructed = `https://maps.googleapis.com/maps/api/streetview?size=470x313&location=${encodeURIComponent(location)}&key=${apiKey}&return_error_code=true`;
+        return reconstructed;
+      }
+    } catch {
+      // URL parsing failed, fall through to legacy handling
+    }
+  }
+
+  // Legacy fallback: add API key if missing
+  if (url.includes('maps.googleapis.com') && !url.includes('key=') && !url.includes('client=')) {
+    if (apiKey) {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}key=${apiKey}`;
+    }
+  }
+
+  return url;
+}

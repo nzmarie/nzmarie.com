@@ -1,6 +1,7 @@
 import React, { RefObject } from "react";
 import Image from "next/image";
 import { Property } from "@/types/property";
+import { getFixedImageUrl } from "@/lib/google-maps";
 import {
   FaBed,
   FaBath,
@@ -26,6 +27,8 @@ const PropertyCard: React.FC<{
       maximumFractionDigits: 0,
     }).format(amount);
   };
+
+  const fixedImageUrl = getFixedImageUrl(property.cover_image_url);
 
   return (
     <div
@@ -63,9 +66,9 @@ const PropertyCard: React.FC<{
             color: "inherit",
           }}
         >
-          {property.cover_image_url && !imageError ? (
+          {fixedImageUrl && !imageError ? (
             <Image
-              src={property.cover_image_url}
+              src={fixedImageUrl}
               alt={property.address}
               unoptimized
               onError={() => setImageError(true)}
