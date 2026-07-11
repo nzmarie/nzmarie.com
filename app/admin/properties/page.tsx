@@ -937,7 +937,7 @@ export default function PropertiesPage() {
       }
       const updatedProperty = result.property;
       if (updatedProperty) {
-        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset], (oldData: any) => {
+        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly], (oldData: any) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
