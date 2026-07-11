@@ -384,7 +384,6 @@ export default function RealestatePage() {
     data,
     isFetchingNextPage,
     isLoading,
-    isFetching,
     isError,
     error,
     fetchNextPage,
@@ -520,7 +519,7 @@ export default function RealestatePage() {
     const body: Record<string, string> = {};
     for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'region', 'bedroom_count', 'bathroom_count', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number'] as const) {
       const val = editFormData[key];
-      if (typeof val === 'string' && val !== '' && val !== (editingListing as any)[key]?.toString()) {
+      if (typeof val === 'string' && val !== '' && val !== (editingListing as unknown as Record<string, string>)[key]?.toString()) {
         body[key] = val;
       }
     }

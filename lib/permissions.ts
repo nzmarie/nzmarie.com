@@ -18,20 +18,17 @@ export const USER_ACCOUNTS = {
  * Get user role from email
  */
 export function getUserRole(email: string): UserRole | null {
-  if (email === USER_ACCOUNTS.LOUIS) {
+  if (email === USER_ACCOUNTS.LOUIS || email === USER_ACCOUNTS.MARIE) {
     return UserRole.SUPER_ADMIN;
-  }
-  if (email === USER_ACCOUNTS.MARIE) {
-    return UserRole.ADMIN;
   }
   return null;
 }
 
 /**
- * Check if user is super admin (Louis)
+ * Check if user is super admin (Louis or Marie)
  */
 export function isSuperAdmin(email: string): boolean {
-  return email === USER_ACCOUNTS.LOUIS;
+  return email === USER_ACCOUNTS.LOUIS || email === USER_ACCOUNTS.MARIE;
 }
 
 /**

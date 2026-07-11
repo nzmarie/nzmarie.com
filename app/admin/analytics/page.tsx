@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonAnalytics } from '@/components/admin/Skeleton';
-
-const SUPER_ADMIN = 'nzlouis.com@gmail.com';
+import MarketTrendsChart from '@/components/admin/MarketTrendsChart';
+import ExcelUploadForm from '@/components/admin/ExcelUploadForm';
+import { isSuperAdmin } from '@/lib/permissions';
 const CARD_BADGE_STYLES = {
   blue: 'bg-blue-100 text-blue-700',
   green: 'bg-green-100 text-green-700',
@@ -23,6 +24,18 @@ type RegionRow = {
   region: string;
   count: number;
 };
+
+interface ChartQuarter {
+  period: string;
+  suburbMedian: number | null;
+  suburbSales: number;
+  suburbDays: number | null;
+  cityMedian: number | null;
+  citySales: number;
+  cityDays: number | null;
+}
+
+const SUBURB_OPTIONS = ['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay'];
 
 export default function AnalyticsPage() {
   const { data: session, status } = useSession();
@@ -44,14 +57,18 @@ export default function AnalyticsPage() {
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [migrationMessage, setMigrationMessage] = useState('');
 
+  const [selectedSuburb, setSelectedSuburb] = useState('Oteha');
+  const [chartData, setChartData] = useState<ChartQuarter[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email !== SUPER_ADMIN) {
+    if (status === 'authenticated' && session?.user?.email && !isSuperAdmin(session.user.email)) {
       router.push('/admin/dashboard');
     }
   }, [status, session, router]);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email === SUPER_ADMIN) {
+    if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
       // Fetch overview stats
       fetch('/api/admin/analytics/overview')
         .then((res) => res.json())
@@ -83,6 +100,27 @@ export default function AnalyticsPage() {
     }
   }, [status, session]);
 
+  const fetchChartData = useCallback(async (suburb: string) => {
+    setChartLoading(true);
+    try {
+      const res = await fetch(`/api/admin/analytics/chart-data?suburb=${encodeURIComponent(suburb)}&district=North Shore City`);
+      const data = await res.json();
+      if (data.success) {
+        setChartData(data.data.chartData);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setChartLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
+      fetchChartData(selectedSuburb);
+    }
+  }, [status, session, selectedSuburb, fetchChartData]);
+
   const runMigration = async () => {
     setMigrationStatus('running');
     setMigrationMessage('');
@@ -110,7 +148,7 @@ export default function AnalyticsPage() {
     return <SkeletonAnalytics />;
   }
 
-  if (!session || session.user?.email !== SUPER_ADMIN) {
+  if (!session || (session.user?.email && !isSuperAdmin(session.user.email))) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
@@ -259,17 +297,81 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <svg className="h-5 w-5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">Under Development</h3>
-            <p className="mt-2 text-sm text-blue-700">
-              Full analytics dashboard with real-time metrics, campaign comparison, and detailed ROI
-              calculations is being implemented.
-            </p>
+      {/* Market Trends Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900">REINZ Market Trends</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Suburb:</label>
+            <select
+              value={selectedSuburb}
+              onChange={(e) => setSelectedSuburb(e.target.value)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
+            >
+              {SUBURB_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {chartLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[400px]">
+            <div className="text-gray-400">Loading chart data...</div>
+          </div>
+        ) : chartData.length > 0 ? (
+          <MarketTrendsChart data={chartData} suburb={selectedSuburb} district="North Shore City" />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[200px]">
+            <div className="text-center text-gray-400">
+              <p className="text-lg mb-2">No market data yet</p>
+              <p className="text-sm">Upload a REINZ Excel file below to get started</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Market Data Table */}
+      {chartData.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quarterly Data</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-600">Period</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Median</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600">North Shore City Median</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Sales</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600">Avg Days</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartData.map((row) => (
+                  <tr key={row.period} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-3 font-medium">{row.period}</td>
+                    <td className="text-right py-2 px-3">{row.suburbMedian ? `$${row.suburbMedian.toLocaleString()}` : 'N/A'}</td>
+                    <td className="text-right py-2 px-3">{row.cityMedian ? `$${row.cityMedian.toLocaleString()}` : 'N/A'}</td>
+                    <td className="text-right py-2 px-3">{row.suburbSales}</td>
+                    <td className="text-right py-2 px-3">{row.suburbDays ?? 'N/A'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Upload Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ExcelUploadForm />
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Guide</h3>
+          <div className="space-y-3 text-sm text-gray-600">
+            <p>1. Export REINZ data for a suburb (e.g., Oteha)</p>
+            <p>2. Upload the .xlsx or .csv file using the form</p>
+            <p>3. Data is automatically parsed and stored</p>
+            <p>4. Select the suburb above to view trend chart</p>
+            <p>5. Use the data table for detailed quarterly breakdown</p>
           </div>
         </div>
       </div>

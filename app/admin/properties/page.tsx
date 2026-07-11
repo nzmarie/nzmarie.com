@@ -598,8 +598,8 @@ export default function PropertiesPage() {
         const result = await response.json();
         if (!result.success) throw new Error(result.error || 'Failed to fetch liked properties');
 
-        let mapped: Property[] = result.data.map((item: any) => ({
-          id: item.joined_property_id || (item.property_id ? item.property_id.replace(/-/g, '') : item.id),
+        let mapped: Property[] = result.data.map((item: Record<string, unknown>) => ({
+          id: (item.joined_property_id as string) || ((item.property_id as string) ? (item.property_id as string).replace(/-/g, '') : (item.id as string)),
           address: item.property_address || '',
           suburb: item.suburb || '',
           city: item.city || '',
@@ -940,11 +940,11 @@ export default function PropertiesPage() {
       }
       const updatedProperty = result.property;
       if (updatedProperty) {
-        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly], (oldData: any) => {
+        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly], (oldData: { pages: { properties: Property[] }[] } | undefined) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            pages: oldData.pages.map((page: any) => ({
+            pages: oldData.pages.map((page: { properties: Property[] }) => ({
               ...page,
               properties: page.properties.map((p: Property) =>
                 p.id === updatedProperty.id ? updatedProperty : p

@@ -4,8 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
-
-const SUPER_ADMIN = 'nzlouis.com@gmail.com';
+import { isSuperAdmin } from '@/lib/permissions';
 
 export default function PDFManagerPage() {
   const { data: session, status } = useSession();
@@ -13,13 +12,13 @@ export default function PDFManagerPage() {
   const [reports, setReports] = useState<Array<{ id: string; title: string; suburb: string; version: string; is_active: boolean }>>([]);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email !== SUPER_ADMIN) {
+    if (status === 'authenticated' && session?.user?.email && !isSuperAdmin(session.user.email)) {
       router.push('/admin/dashboard');
     }
   }, [status, session, router]);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email === SUPER_ADMIN) {
+    if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
       fetch('/api/admin/reports')
         .then((res) => res.json())
         .then((data) => {
@@ -36,7 +35,7 @@ export default function PDFManagerPage() {
     return <SkeletonPDFManager />;
   }
 
-  if (!session || session.user?.email !== SUPER_ADMIN) {
+  if (!session || (session.user?.email && !isSuperAdmin(session.user.email))) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">

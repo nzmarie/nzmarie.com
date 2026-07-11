@@ -5,17 +5,16 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useState, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
+import { isSuperAdmin } from '@/lib/permissions';
 
 export function AdminNavbar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
-  const isSuperAdmin = session?.user?.email === 'nzlouis.com@gmail.com';
-  const isMarie = session?.user?.email === 'nzmarie.com@gmail.com';
+  const superAdmin = session?.user?.email ? isSuperAdmin(session.user.email) : false;
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
-  const roleName = isSuperAdmin ? 'Super Admin' : 'Admin';
 
   const navLinks = [
     { href: '/admin/bookings', label: '📅 Bookings', alwaysShow: true },
@@ -52,16 +51,16 @@ export function AdminNavbar() {
           <div className="flex items-center">
             <Link 
               href="/admin"
-              className="text-xl font-semibold text-gray-900 hover:text-gray-700"
+              className="text-lg font-semibold text-gray-900 hover:text-gray-700"
             >
-              NZ Marie Admin
+              CRM
             </Link>
           </div>
 
           {/* Center: Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
             {navLinks.map(link => {
-              if (!link.alwaysShow && !isSuperAdmin && !isMarie) return null;
+              if (!link.alwaysShow && !superAdmin) return null;
               
               return (
                 <NavLink key={link.href} href={link.href}>
@@ -89,9 +88,6 @@ export function AdminNavbar() {
                 <div className="hidden sm:block text-right">
                   <div className="text-sm font-medium text-gray-900">
                     {userName}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {roleName}
                   </div>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
@@ -182,7 +178,7 @@ export function AdminNavbar() {
               {/* Navigation Links */}
               <div className="flex-1 overflow-y-auto py-4">
                 {navLinks.map(link => {
-                  if (!link.alwaysShow && !isSuperAdmin && !isMarie) return null;
+              if (!link.alwaysShow && !superAdmin) return null;
                   
                   const isActive = pathname === link.href;
                   

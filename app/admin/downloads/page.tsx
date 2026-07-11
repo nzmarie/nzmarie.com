@@ -5,9 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonDownloads } from '@/components/admin/Skeleton';
 import { SuburbFilter } from '@/components/admin/SuburbFilter';
-
-const SUPER_ADMIN = 'nzlouis.com@gmail.com';
-const MARIE_EMAIL = 'nzmarie.com@gmail.com';
+import { isSuperAdmin } from '@/lib/permissions';
 
 interface Download {
   id: string;
@@ -35,7 +33,7 @@ interface Stats {
 }
 
 const isAdminUser = (email?: string | null) => 
-  email === SUPER_ADMIN || email === MARIE_EMAIL;
+  email ? isSuperAdmin(email) : false;
 
 export default function DownloadsPage() {
   const { data: session, status } = useSession();
