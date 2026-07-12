@@ -13,63 +13,68 @@ vi.mock('next-auth/react', () => ({
 }));
 
 const mockSetQueryData = vi.fn();
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ setQueryData: mockSetQueryData }),
-  useInfiniteQuery: () => ({
-    data: { pages: [{
-      properties: [
-        {
-          id: 'prop-1',
-          address: '15 Marine Parade',
-          suburb: 'Takapuna',
-          city: 'North Shore City',
-          region: 'Auckland',
-          description: 'Beautiful home with sea views and modern renovations throughout the entire property',
-          bedrooms: 4,
-          bathrooms: 2,
-          garages: 2,
-          rv: 1200000,
-          last_sold_price: 1150000,
-          last_sold_date: '2023-01-15',
-          build_year: 1990,
-          floor_area: '220',
-          land_area: '801',
-          image_url: 'https://example.com/image.jpg',
-          property_url: 'https://example.com/prop1',
-          postcode: '0632',
-          land_value: 1075000,
-          improvement_value: 200000,
-          estimated_value_low: 1200000,
-          estimated_value_high: 1300000,
-          property_type: 'Residential',
-          sale_status: 'unknown',
-          has_rental_history: false,
-          is_currently_rented: false,
-          latitude: -36.7061,
-          longitude: 174.7297,
-        },
-        {
-          id: 'prop-2',
-          address: '2/910 East Coast Road',
-          suburb: 'Albany',
-          city: 'North Shore City',
-          bedrooms: 3,
-          bathrooms: 2,
-          garages: 1,
-          rv: 950000,
-          last_sold_price: 920000,
-          last_sold_date: '2022-11-20',
-          image_url: 'https://example.com/image2.jpg',
-          property_url: 'https://example.com/prop2',
-        }
-      ],
-      total: 45,
-    }] },
+
+const defaultProperties = [
+  {
+    id: 'prop-1',
+    address: '15 Marine Parade',
+    suburb: 'Takapuna',
+    city: 'North Shore City',
+    region: 'Auckland',
+    description: 'Beautiful home with sea views and modern renovations throughout the entire property',
+    bedrooms: 4,
+    bathrooms: 2,
+    garages: 2,
+    rv: 1200000,
+    last_sold_price: 1150000,
+    last_sold_date: '2023-01-15',
+    build_year: 1990,
+    floor_area: '220',
+    land_area: '801',
+    image_url: 'https://example.com/image.jpg',
+    property_url: 'https://example.com/prop1',
+    postcode: '0632',
+    land_value: 1075000,
+    improvement_value: 200000,
+    estimated_value_low: 1200000,
+    estimated_value_high: 1300000,
+    property_type: 'Residential',
+    sale_status: 'unknown',
+    has_rental_history: false,
+    is_currently_rented: false,
+    latitude: -36.7061,
+    longitude: 174.7297,
+  },
+  {
+    id: 'prop-2',
+    address: '2/910 East Coast Road',
+    suburb: 'Albany',
+    city: 'North Shore City',
+    bedrooms: 3,
+    bathrooms: 2,
+    garages: 1,
+    rv: 950000,
+    last_sold_price: 920000,
+    last_sold_date: '2022-11-20',
+    image_url: 'https://example.com/image2.jpg',
+    property_url: 'https://example.com/prop2',
+  }
+];
+
+const { mockUseInfiniteQuery } = vi.hoisted(() => {
+  const fn = vi.fn(() => ({
+    data: { pages: [{ properties: defaultProperties, total: 45 }] },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: vi.fn(),
-  }),
+  }));
+  return { mockUseInfiniteQuery: fn };
+});
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ setQueryData: mockSetQueryData }),
+  useInfiniteQuery: (...args: unknown[]) => mockUseInfiniteQuery(...args),
   keepPreviousData: vi.fn(),
 }));
 
@@ -99,11 +104,26 @@ vi.mock('next/image', () => ({
 
 global.fetch = vi.fn();
 
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-})) as any;
+let intersectionCallback: ((entries: IntersectionObserverEntry[]) => void) | null = null;
+let intersectionOptions: IntersectionObserverInit | null = null;
+const mockObserve = vi.fn();
+const mockDisconnect = vi.fn();
+
+global.IntersectionObserver = vi.fn().mockImplementation((callback, options) => {
+  intersectionCallback = callback;
+  intersectionOptions = options;
+  return {
+    observe: mockObserve,
+    unobserve: vi.fn(),
+    disconnect: mockDisconnect,
+  };
+}) as any;
+
+function triggerIntersection(isIntersecting: boolean) {
+  if (intersectionCallback) {
+    intersectionCallback([{ isIntersecting } as IntersectionObserverEntry]);
+  }
+}
 
 const mockLikeFetch = () => {
   (global.fetch as any).mockResolvedValue({
@@ -512,6 +532,119 @@ describe('Properties Page - Like Icon', () => {
 
     await waitFor(() => {
       expect(screen.getByTitle('Unlike')).toBeTruthy();
+    });
+  });
+});
+
+describe('Properties Page - Infinite Scroll', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    intersectionCallback = null;
+    intersectionOptions = null;
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ liked_ids: [] }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    intersectionCallback = null;
+    intersectionOptions = null;
+  });
+
+  it('creates IntersectionObserver with threshold 0 and rootMargin 200px', async () => {
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(global.IntersectionObserver).toHaveBeenCalled();
+      expect(intersectionOptions).toEqual({ threshold: 0, rootMargin: '200px' });
+    });
+  });
+
+  it('observes the last property card element', async () => {
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(mockObserve).toHaveBeenCalled();
+    });
+  });
+
+  it('calls fetchNextPage when sentinel intersects, hasNextPage=true, and isFetchingNextPage=false', async () => {
+    const fetchNextPage = vi.fn();
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    triggerIntersection(true);
+
+    await waitFor(() => {
+      expect(fetchNextPage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does NOT call fetchNextPage when hasNextPage is false', async () => {
+    const fetchNextPage = vi.fn();
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    triggerIntersection(true);
+
+    await waitFor(() => {
+      expect(fetchNextPage).not.toHaveBeenCalled();
+    });
+  });
+
+  it('does NOT call fetchNextPage when isFetchingNextPage is true', async () => {
+    const fetchNextPage = vi.fn();
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: true,
+      hasNextPage: true,
+      fetchNextPage,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    triggerIntersection(true);
+
+    await waitFor(() => {
+      expect(fetchNextPage).not.toHaveBeenCalled();
     });
   });
 });

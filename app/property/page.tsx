@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, RefObject } from "react";
+import React, { useState, useEffect, useRef, RefObject } from "react";
 import { usePropertiesData } from "@/lib/hooks/usePropertiesData";
 import { Property } from "@/types/property";
 import PropertyList from "@/components/property/PropertyList";
@@ -69,7 +69,7 @@ export default function PropertyPage() {
         console.log("Fetching next page...");
         fetchNextPage();
       }
-    }, { threshold: 1.0 });
+    }, { threshold: 0, rootMargin: "200px" });
 
     observer.observe(currentElement);
 

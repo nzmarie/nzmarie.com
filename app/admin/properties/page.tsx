@@ -798,7 +798,7 @@ export default function PropertiesPage() {
         console.log("Fetching next page...");
         fetchNextPage();
       }
-    }, { threshold: 1.0 });
+    }, { threshold: 0, rootMargin: "200px" });
 
     observer.observe(currentElement);
 
