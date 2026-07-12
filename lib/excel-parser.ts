@@ -26,16 +26,25 @@ export interface ParseResult {
   rows: REINZRow[];
   suburb_name: string;
   city: string;
+  region_type: 'suburb' | 'district';
   period_start: string;
   period_end: string;
   count: number;
 }
 
-function parseLocation(location: string): { region_name: string; city: string } {
+function parseLocation(location: string): { region_name: string; city: string; region_type: 'suburb' | 'district' } {
   const parts = location.split(',').map(s => s.trim());
+  if (parts.length > 1) {
+    return {
+      region_name: parts[0],
+      city: parts[1],
+      region_type: 'suburb',
+    };
+  }
   return {
     region_name: parts[0] || location,
-    city: parts[1] || 'Auckland',
+    city: 'Auckland',
+    region_type: 'district',
   };
 }
 
@@ -64,11 +73,15 @@ export function parseREINZExcel(buffer: ArrayBuffer): ParseResult {
   const rows: REINZRow[] = [];
   let suburb_name = '';
   let city = '';
+  let region_type: 'suburb' | 'district' = 'suburb';
 
   for (const raw of rawData) {
     const location = String(raw['Location'] || '');
-    const { region_name, city: parsedCity } = parseLocation(location);
-    if (!suburb_name) suburb_name = region_name;
+    const { region_name, city: parsedCity, region_type: parsedType } = parseLocation(location);
+    if (!suburb_name) {
+      suburb_name = region_name;
+      region_type = parsedType;
+    }
     if (!city) city = parsedCity;
 
     const periodRaw = raw['Period'];
@@ -101,14 +114,13 @@ export function parseREINZExcel(buffer: ArrayBuffer): ParseResult {
   const period_start = dates[0] || '';
   const period_end = dates[dates.length - 1] || '';
 
-  return { rows, suburb_name, city, period_start, period_end, count: rows.length };
+  return { rows, suburb_name, city, region_type, period_start, period_end, count: rows.length };
 }
 
 export function validateREINZData(row: REINZRow): boolean {
   return (
     row.median_price !== null &&
     row.median_price > 0 &&
-    row.sales_count > 0 &&
-    row.location.includes(',')
+    row.sales_count > 0
   );
 }

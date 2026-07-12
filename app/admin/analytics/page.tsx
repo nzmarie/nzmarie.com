@@ -62,6 +62,7 @@ export default function AnalyticsPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [chartNeedsMigration, setChartNeedsMigration] = useState(false);
   const [availableSuburbs, setAvailableSuburbs] = useState<string[]>(FALLBACK_SUBURBS);
+  const [showDistrict, setShowDistrict] = useState(true);
 
   const chartReqIdRef = React.useRef(0);
 
@@ -333,20 +334,19 @@ export default function AnalyticsPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-bold text-gray-900">REINZ Market Trends</h2>
-          <div className="flex items-center gap-3">
-            <div className="flex bg-gray-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setDataMode('monthly')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >Monthly</button>
-              <button
-                onClick={() => setDataMode('quarterly')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'quarterly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >Quarterly</button>
-            </div>
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setDataMode('monthly')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >Monthly</button>
+            <button
+              onClick={() => setDataMode('quarterly')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'quarterly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >Quarterly</button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
           {availableSuburbs.map((s, i) => {
             const active = selectedSuburbs.includes(s);
             const color = getSuburbColor(i);
@@ -365,6 +365,17 @@ export default function AnalyticsPage() {
               </button>
             );
           })}
+          </div>
+          <button
+            onClick={() => setShowDistrict(v => !v)}
+            className={`text-sm font-medium rounded-full px-3 py-1.5 border transition-all ${
+              showDistrict
+                ? 'bg-[#94A3B8] text-white border-[#94A3B8] shadow-sm'
+                : 'text-gray-500 border-gray-300 hover:border-gray-400 bg-white'
+            }`}
+          >
+            North Shore {showDistrict ? '✓' : ''}
+          </button>
         </div>
         {(() => {
           const activeData = dataMode === 'monthly' ? monthlyData : quarterlyData;
@@ -404,6 +415,7 @@ export default function AnalyticsPage() {
                 district="North Shore City"
                 mode={dataMode}
                 suburbColors={Object.fromEntries(selectedSuburbs.map(s => [s, getSuburbColor(availableSuburbs.indexOf(s))]))}
+                showDistrict={showDistrict}
               />
               {chartLoading && (
                 <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-xl z-10">

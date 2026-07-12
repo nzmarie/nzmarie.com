@@ -47,10 +47,10 @@ export async function POST(request: Request) {
     await query(`CREATE INDEX IF NOT EXISTS idx_snapshots_region ON market_monthly_snapshots(region_name)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_snapshots_type ON market_monthly_snapshots(region_type)`);
 
-    // Pre-check which months already exist in the DB for this suburb
+    // Pre-check which months already exist in the DB for this region
     const existingResult = await query<{ period_month: string }>(
       `SELECT DISTINCT period_month::text FROM market_monthly_snapshots
-       WHERE region_name = $1 AND region_type = 'suburb'`,
+       WHERE region_name = $1`,
       [parsed.suburb_name]
     );
     const existingMonths = new Set(existingResult.rows.map(r => r.period_month.slice(0, 7)));
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
             $20, $21
           ) ON CONFLICT (region_name, period_month, property_type) DO NOTHING`,
           [
-            'suburb', row.region_name, row.city, 'House', row.period_month,
+            parsed.region_type, row.region_name, row.city, 'House', row.period_month,
             row.median_price, row.sales_count, row.days_to_sell,
             row.median_price_1yr_prior, row.price_diff_1yr_pct,
             row.median_price_3yrs_prior, row.price_diff_3yrs_pct,

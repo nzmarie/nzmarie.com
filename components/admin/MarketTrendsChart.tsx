@@ -33,6 +33,7 @@ interface Props {
   district: string;
   mode: 'monthly' | 'quarterly';
   suburbColors: Record<string, string>;
+  showDistrict: boolean;
 }
 
 interface ChartRow {
@@ -68,13 +69,13 @@ function buildLabels(data: DataPoint[], suburbs: string[], mode: 'monthly' | 'qu
   });
 }
 
-export default function MarketTrendsChart({ data, suburbs, district, mode, suburbColors }: Props) {
+export default function MarketTrendsChart({ data, suburbs, district, mode, suburbColors, showDistrict }: Props) {
   const chartData = buildLabels(data, suburbs, mode);
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
       <h3 className="text-xl font-bold mb-4">
-        {suburbs.join(', ')} vs {district} {mode === 'monthly' ? 'Monthly' : 'Quarterly'} Median Price
+        {suburbs.join(', ')}{showDistrict ? ` vs ${district}` : ''} {mode === 'monthly' ? 'Monthly' : 'Quarterly'} Median Price
       </h3>
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={chartData}>
@@ -84,7 +85,7 @@ export default function MarketTrendsChart({ data, suburbs, district, mode, subur
           <Tooltip
             formatter={(value, name) => {
               if (typeof value !== 'number') return [value, name];
-              if (name === 'cityMedian') return [`$${value.toLocaleString()}`, district];
+              if (name === 'cityMedian') return [`$${value.toLocaleString()}`, 'North Shore'];
               return [`$${value.toLocaleString()}`, name];
             }}
             labelFormatter={(label) => `${mode === 'monthly' ? 'Month' : 'Period'}: ${label}`}
@@ -103,16 +104,18 @@ export default function MarketTrendsChart({ data, suburbs, district, mode, subur
               activeDot={{ r: 8 }}
             />
           ))}
-          <Line
-            name="cityMedian"
-            type="monotone"
-            dataKey="cityMedian"
-            stroke="#94A3B8"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            connectNulls
-            dot={{ r: 4, fill: '#94A3B8' }}
-          />
+          {showDistrict && (
+            <Line
+              name="North Shore"
+              type="monotone"
+              dataKey="cityMedian"
+              stroke="#94A3B8"
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              connectNulls
+              dot={{ r: 4, fill: '#94A3B8' }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

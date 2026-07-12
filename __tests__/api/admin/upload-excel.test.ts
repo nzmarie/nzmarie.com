@@ -81,6 +81,7 @@ describe('POST /api/admin/analytics/upload-excel', () => {
       ],
       suburb_name: 'Torbay',
       city: 'Auckland',
+      region_type: 'suburb',
       period_start: '2026-06-01',
       period_end: '2026-07-01',
       count: 2,
@@ -98,6 +99,37 @@ describe('POST /api/admin/analytics/upload-excel', () => {
     expect(body.validation_skipped).toBe(0);
     expect(body.total_rows).toBe(2);
     expect(body.suburb).toBe('Torbay');
+  });
+
+  it('inserts district data (North Shore City) with region_type=district', async () => {
+    mockParse.mockReturnValue({
+      rows: [
+        { location: 'North Shore City', region_name: 'North Shore City', city: 'Auckland', period_month: '2025-01-01', median_price: 1250000, sales_count: 132, days_to_sell: 65, median_price_1yr_prior: null, price_diff_1yr_pct: null, median_price_3yrs_prior: null, price_diff_3yrs_pct: null, median_valuation: null, median_list_price: null, sale_to_valuation_pct: null, list_to_valuation_pct: null, total_volume: null, pct_of_national_sales: null, house_price_index: null, price_diff_mom_pct: null },
+        { location: 'North Shore City', region_name: 'North Shore City', city: 'Auckland', period_month: '2025-02-01', median_price: 1275000, sales_count: 302, days_to_sell: 62, median_price_1yr_prior: null, price_diff_1yr_pct: null, median_price_3yrs_prior: null, price_diff_3yrs_pct: null, median_valuation: null, median_list_price: null, sale_to_valuation_pct: null, list_to_valuation_pct: null, total_volume: null, pct_of_national_sales: null, house_price_index: null, price_diff_mom_pct: null },
+      ],
+      suburb_name: 'North Shore City',
+      city: 'Auckland',
+      region_type: 'district',
+      period_start: '2025-01-01',
+      period_end: '2025-02-01',
+      count: 2,
+    });
+
+    const form = new FormData();
+    form.append('file', new File([makeFileBuffer('dummy')], 'test.csv', { type: 'text/csv' }));
+    const res = await POST(makeRequest(form));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.inserted_count).toBe(2);
+
+    const insertCalls = mockQuery.mock.calls.filter(
+      (c: unknown[]) => (c[0] as string).includes('INSERT INTO market_monthly_snapshots')
+    );
+    for (const call of insertCalls) {
+      expect(call[1][0]).toBe('district');
+    }
   });
 
   it('skips months that already exist in the DB', async () => {
@@ -121,6 +153,7 @@ describe('POST /api/admin/analytics/upload-excel', () => {
       ],
       suburb_name: 'Torbay',
       city: 'Auckland',
+      region_type: 'suburb',
       period_start: '2026-06-01',
       period_end: '2026-07-01',
       count: 2,
@@ -147,6 +180,7 @@ describe('POST /api/admin/analytics/upload-excel', () => {
       ],
       suburb_name: 'Torbay',
       city: 'Auckland',
+      region_type: 'suburb',
       period_start: '2026-06-01',
       period_end: '2026-07-01',
       count: 2,
@@ -188,6 +222,7 @@ describe('POST /api/admin/analytics/upload-excel', () => {
       ],
       suburb_name: 'Torbay',
       city: 'Auckland',
+      region_type: 'suburb',
       period_start: '2026-06-01',
       period_end: '2026-08-01',
       count: 3,
