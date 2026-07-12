@@ -5,23 +5,6 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
-interface DataPoint {
-  period: string;
-  suburbMedian: number | null;
-  suburbSales: number;
-  suburbDays: number | null;
-  cityMedian: number | null;
-  citySales: number;
-  cityDays: number | null;
-}
-
-interface Props {
-  data: DataPoint[];
-  suburb: string;
-  district: string;
-  mode: 'monthly' | 'quarterly';
-}
-
 const formatYAxis = (value: number) => `$${(value / 1000000).toFixed(1)}M`;
 
 const MONTH_SHORT: Record<string, string> = {
@@ -29,9 +12,44 @@ const MONTH_SHORT: Record<string, string> = {
   '07': 'Jul','08': 'Aug','09': 'Sep','10': 'Oct','11': 'Nov','12': 'Dec',
 };
 
-function buildLabels(data: DataPoint[], mode: 'monthly' | 'quarterly'): DataPoint[] {
+interface SuburbDataPoint {
+  median: number | null;
+  sales: number;
+  days: number | null;
+}
+
+interface DataPoint {
+  period: string;
+  periodRaw: string;
+  cityMedian: number | null;
+  citySales: number;
+  cityDays: number | null;
+  suburbs: Record<string, SuburbDataPoint>;
+}
+
+interface Props {
+  data: DataPoint[];
+  suburbs: string[];
+  district: string;
+  mode: 'monthly' | 'quarterly';
+  suburbColors: Record<string, string>;
+}
+
+interface ChartRow {
+  _label: string;
+  cityMedian?: number;
+  [key: string]: number | string | undefined;
+}
+
+function buildLabels(data: DataPoint[], suburbs: string[], mode: 'monthly' | 'quarterly'): ChartRow[] {
   if (mode === 'quarterly') {
-    return data.map(d => ({ ...d, _label: d.period }));
+    return data.map(d => {
+      const row: ChartRow = { _label: d.period, cityMedian: d.cityMedian ?? undefined };
+      for (const s of suburbs) {
+        if (d.suburbs[s]?.median != null) row[s] = d.suburbs[s]!.median!;
+      }
+      return row;
+    });
   }
 
   let currentYear = '';
@@ -41,24 +59,22 @@ function buildLabels(data: DataPoint[], mode: 'monthly' | 'quarterly'): DataPoin
     const y = parts[0];
     const showYear = y !== currentYear;
     currentYear = y;
-    return {
-      ...d,
-      _label: showYear ? `${MONTH_SHORT[m] || m} ${y}` : (MONTH_SHORT[m] || m),
-    };
+    const label = showYear ? `${MONTH_SHORT[m] || m} ${y}` : (MONTH_SHORT[m] || m);
+    const row: ChartRow = { _label: label, cityMedian: d.cityMedian ?? undefined };
+    for (const s of suburbs) {
+      if (d.suburbs[s]?.median != null) row[s] = d.suburbs[s]!.median!;
+    }
+    return row;
   });
 }
 
-export default function MarketTrendsChart({ data, suburb, district, mode }: Props) {
-  const chartData = buildLabels(data, mode).map(d => ({
-    ...d,
-    suburbMedian: d.suburbMedian ?? undefined,
-    cityMedian: d.cityMedian ?? undefined,
-  }));
+export default function MarketTrendsChart({ data, suburbs, district, mode, suburbColors }: Props) {
+  const chartData = buildLabels(data, suburbs, mode);
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
       <h3 className="text-xl font-bold mb-4">
-        {suburb} vs {district} {mode === 'monthly' ? 'Monthly' : 'Quarterly'} Median Price
+        {suburbs.join(', ')} vs {district} {mode === 'monthly' ? 'Monthly' : 'Quarterly'} Median Price
       </h3>
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={chartData}>
@@ -67,24 +83,26 @@ export default function MarketTrendsChart({ data, suburb, district, mode }: Prop
           <YAxis tickFormatter={formatYAxis} />
           <Tooltip
             formatter={(value, name) => {
-              if (typeof value === 'number' && (name === 'suburbMedian' || name === 'cityMedian')) {
-                return [`$${value.toLocaleString()}`, name === 'suburbMedian' ? suburb : district];
-              }
-              return [value, name];
+              if (typeof value !== 'number') return [value, name];
+              if (name === 'cityMedian') return [`$${value.toLocaleString()}`, district];
+              return [`$${value.toLocaleString()}`, name];
             }}
             labelFormatter={(label) => `${mode === 'monthly' ? 'Month' : 'Period'}: ${label}`}
           />
           <Legend />
-          <Line
-            name="suburbMedian"
-            type="monotone"
-            dataKey="suburbMedian"
-            stroke="#2563EB"
-            strokeWidth={3}
-            connectNulls
-            dot={{ r: 6, fill: '#2563EB' }}
-            activeDot={{ r: 8 }}
-          />
+          {suburbs.map(s => (
+            <Line
+              key={s}
+              name={s}
+              type="monotone"
+              dataKey={s}
+              stroke={suburbColors[s] || '#2563EB'}
+              strokeWidth={3}
+              connectNulls
+              dot={{ r: 6, fill: suburbColors[s] || '#2563EB' }}
+              activeDot={{ r: 8 }}
+            />
+          ))}
           <Line
             name="cityMedian"
             type="monotone"

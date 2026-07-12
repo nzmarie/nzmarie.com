@@ -11,14 +11,16 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const suburb = searchParams.get('suburb');
+  const suburbsParam = searchParams.get('suburbs');
   const district = searchParams.get('district') || 'North Shore City';
   const from = searchParams.get('from') || '2025-01-01';
   const to = searchParams.get('to') || '2026-12-31';
 
-  if (!suburb) {
-    return NextResponse.json({ error: 'suburb parameter is required' }, { status: 400 });
+  if (!suburbsParam) {
+    return NextResponse.json({ error: 'suburbs parameter is required' }, { status: 400 });
   }
+
+  const suburbNames = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
 
   const tableCheck = await query(
     `SELECT EXISTS (
@@ -31,7 +33,6 @@ export async function GET(request: Request) {
       success: false,
       error: 'Database table "market_monthly_snapshots" does not exist.',
       needsMigration: true,
-      chartData: [],
       monthlyData: [],
       availableSuburbs: [],
     });
@@ -44,20 +45,20 @@ export async function GET(request: Request) {
     );
     const availableSuburbs = suburbResult.rows.map(r => r.region_name);
 
-    const [chartData, monthlyData] = await Promise.all([
-      getQuarterlyComparison(suburb, district, from, to),
-      getMonthlyData(suburb, district, from, to),
+    const [monthlyData, quarterlyData] = await Promise.all([
+      getMonthlyData(suburbNames, district, from, to),
+      getQuarterlyComparison(suburbNames, district, from, to),
     ]);
 
     return NextResponse.json({
       success: true,
       availableSuburbs,
       data: {
-        suburb,
+        suburbs: suburbNames,
         district,
         timeRange: { from, to },
-        chartData,
         monthlyData,
+        quarterlyData,
       },
     });
   } catch (error) {
