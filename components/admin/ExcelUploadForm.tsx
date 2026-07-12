@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface UploadResult {
   success: boolean;
@@ -9,16 +9,28 @@ interface UploadResult {
   period_start?: string;
   period_end?: string;
   inserted_count?: number;
-  duplicates_skipped?: number;
+  already_existed?: number;
+  validation_skipped?: number;
   total_rows?: number;
   message?: string;
   error?: string;
 }
 
-export default function ExcelUploadForm() {
+interface Props {
+  onSuccess?: (suburb: string) => void;
+}
+
+export default function ExcelUploadForm({ onSuccess }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const logRef = useRef<HTMLPreElement>(null);
+
+  const addLog = (line: string) => {
+    setLogs(prev => [...prev, line]);
+    setTimeout(() => logRef.current?.scrollTo(0, logRef.current.scrollHeight), 50);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,19 +38,27 @@ export default function ExcelUploadForm() {
 
     setUploading(true);
     setResult(null);
+    setLogs([]);
+    addLog(`Uploading ${file.name}...`);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
+      addLog('Sending to server...');
       const res = await fetch('/api/admin/analytics/upload-excel', {
         method: 'POST',
         body: formData,
       });
       const data = await res.json();
+      addLog(data.success ? 'Upload complete.' : 'Upload failed.');
       setResult(data);
+      if (data.success && onSuccess) {
+        setTimeout(() => onSuccess(data.suburb || ''), 300);
+      }
     } catch {
       setResult({ success: false, error: 'Network error' });
+      addLog('Network error');
     } finally {
       setUploading(false);
     }
@@ -70,6 +90,18 @@ export default function ExcelUploadForm() {
         </button>
       </form>
 
+      {/* Live progress log */}
+      {logs.length > 0 && (
+        <pre
+          ref={logRef}
+          className="mt-4 p-3 bg-gray-900 text-green-400 text-xs rounded-lg max-h-32 overflow-y-auto font-mono"
+        >
+          {logs.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+        </pre>
+      )}
+
       {result && (
         <div className={`mt-4 p-4 rounded-lg text-sm ${
           result.success ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -78,8 +110,9 @@ export default function ExcelUploadForm() {
             <div>
               <p className="font-semibold">{result.message}</p>
               <ul className="mt-2 space-y-1">
-                <li>Inserted: {result.inserted_count}</li>
-                <li>Skipped (duplicates): {result.duplicates_skipped}</li>
+                <li>Newly inserted: {result.inserted_count}</li>
+                <li>Already in DB: {result.already_existed ?? 0}</li>
+                <li>Invalid rows skipped: {result.validation_skipped ?? 0}</li>
                 <li>Total rows: {result.total_rows}</li>
                 <li>Suburb: {result.suburb}</li>
                 <li>Period: {result.period_start} to {result.period_end}</li>

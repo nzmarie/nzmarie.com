@@ -35,7 +35,9 @@ interface ChartQuarter {
   cityDays: number | null;
 }
 
-const SUBURB_OPTIONS = ['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay'];
+const FALLBACK_SUBURBS = ['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay'];
+
+type DataMode = 'monthly' | 'quarterly';
 
 export default function AnalyticsPage() {
   const { data: session, status } = useSession();
@@ -58,8 +60,27 @@ export default function AnalyticsPage() {
   const [migrationMessage, setMigrationMessage] = useState('');
 
   const [selectedSuburb, setSelectedSuburb] = useState('Oteha');
-  const [chartData, setChartData] = useState<ChartQuarter[]>([]);
+  const [quarterlyData, setQuarterlyData] = useState<ChartQuarter[]>([]);
+  const [monthlyData, setMonthlyData] = useState<ChartQuarter[]>([]);
+  const [dataMode, setDataMode] = useState<DataMode>('monthly');
   const [chartLoading, setChartLoading] = useState(false);
+  const [chartNeedsMigration, setChartNeedsMigration] = useState(false);
+  const [availableSuburbs, setAvailableSuburbs] = useState<string[]>(FALLBACK_SUBURBS);
+
+  // Fetch available suburbs from the database — runs on mount and after upload
+  const fetchAvailableSuburbs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/analytics/chart-data?suburb=_none_&district=_none_');
+      const data = await res.json();
+      if (data.availableSuburbs && Array.isArray(data.availableSuburbs) && data.availableSuburbs.length > 0) {
+        setAvailableSuburbs(data.availableSuburbs);
+        // If current selection isn't in the list, switch to first available
+        setSelectedSuburb(prev => data.availableSuburbs.includes(prev) ? prev : data.availableSuburbs[0]);
+      }
+    } catch {
+      // fallback stays
+    }
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && !isSuperAdmin(session.user.email)) {
@@ -69,6 +90,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
+      fetchAvailableSuburbs();
       // Fetch overview stats
       fetch('/api/admin/analytics/overview')
         .then((res) => res.json())
@@ -98,22 +120,56 @@ export default function AnalyticsPage() {
         })
         .catch(() => undefined);
     }
-  }, [status, session]);
+  }, [status, session, fetchAvailableSuburbs]);
+
+  // Compute quarterly from monthly: requires all 3 months in a quarter to display
+  const computeQuarterly = useCallback((monthly: ChartQuarter[]): ChartQuarter[] => {
+    const groups = new Map<string, ChartQuarter[]>();
+    for (const m of monthly) {
+      const [y, mo] = m.period.split('-');
+      const q = Math.ceil(parseInt(mo) / 3);
+      const key = `${y}-Q${q}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+    const result: ChartQuarter[] = [];
+    for (const [key, items] of groups) {
+      if (items.length < 3) continue; // skip incomplete quarters
+      const avg = (key: 'suburbMedian' | 'suburbDays' | 'cityMedian' | 'cityDays') => {
+        const vals = items.map(i => i[key]).filter((v): v is number => v !== null);
+        return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+      };
+      result.push({
+        period: key,
+        suburbMedian: avg('suburbMedian'),
+        suburbSales: items.reduce((s, i) => s + i.suburbSales, 0),
+        suburbDays: avg('suburbDays'),
+        cityMedian: avg('cityMedian'),
+        citySales: items.reduce((s, i) => s + i.citySales, 0),
+        cityDays: avg('cityDays'),
+      });
+    }
+    return result.sort((a, b) => a.period.localeCompare(b.period));
+  }, []);
 
   const fetchChartData = useCallback(async (suburb: string) => {
     setChartLoading(true);
+    setChartNeedsMigration(false);
     try {
       const res = await fetch(`/api/admin/analytics/chart-data?suburb=${encodeURIComponent(suburb)}&district=North Shore City`);
       const data = await res.json();
-      if (data.success) {
-        setChartData(data.data.chartData);
+      if (data.needsMigration) {
+        setChartNeedsMigration(true);
+      } else if (data.success) {
+        const monthly = data.data.monthlyData ?? [];
+        setMonthlyData(monthly);
+        setQuarterlyData(computeQuarterly(monthly));
       }
     } catch {
-      // ignore
     } finally {
       setChartLoading(false);
     }
-  }, []);
+  }, [computeQuarterly]);
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
@@ -301,76 +357,104 @@ export default function AnalyticsPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">REINZ Market Trends</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setDataMode('monthly')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >Monthly</button>
+              <button
+                onClick={() => setDataMode('quarterly')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dataMode === 'quarterly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >Quarterly</button>
+            </div>
             <label className="text-sm text-gray-600">Suburb:</label>
             <select
               value={selectedSuburb}
               onChange={(e) => setSelectedSuburb(e.target.value)}
               className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
             >
-              {SUBURB_OPTIONS.map((s) => (
+              {availableSuburbs.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
         </div>
-        {chartLoading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[400px]">
-            <div className="text-gray-400">Loading chart data...</div>
-          </div>
-        ) : chartData.length > 0 ? (
-          <MarketTrendsChart data={chartData} suburb={selectedSuburb} district="North Shore City" />
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[200px]">
-            <div className="text-center text-gray-400">
-              <p className="text-lg mb-2">No market data yet</p>
-              <p className="text-sm">Upload a REINZ Excel file below to get started</p>
+        {(() => {
+          const activeData = dataMode === 'monthly' ? monthlyData : quarterlyData;
+          return chartLoading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[400px]">
+              <div className="text-gray-400">Loading chart data...</div>
             </div>
-          </div>
-        )}
+          ) : chartNeedsMigration ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center justify-center h-[200px]">
+              <div className="text-center">
+                <p className="text-lg font-semibold text-amber-800 mb-2">Table Not Found</p>
+                <p className="text-sm text-amber-700">The market data table has not been created yet.</p>
+                <p className="text-sm text-amber-700">Click <strong>&ldquo;Run Migrations&rdquo;</strong> at the top of this page, then upload a REINZ Excel file.</p>
+              </div>
+            </div>
+          ) : activeData.length > 0 ? (
+            <MarketTrendsChart data={activeData} suburb={selectedSuburb} district="North Shore City" mode={dataMode} />
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-center h-[200px]">
+              <div className="text-center text-gray-400">
+                <p className="text-lg mb-2">No market data yet</p>
+                <p className="text-sm">Upload a REINZ Excel file below to get started</p>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Market Data Table */}
-      {chartData.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quarterly Data</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-3 font-medium text-gray-600">Period</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Median</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600">North Shore City Median</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Sales</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600">Avg Days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {chartData.map((row) => (
-                  <tr key={row.period} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2 px-3 font-medium">{row.period}</td>
-                    <td className="text-right py-2 px-3">{row.suburbMedian ? `$${row.suburbMedian.toLocaleString()}` : 'N/A'}</td>
-                    <td className="text-right py-2 px-3">{row.cityMedian ? `$${row.cityMedian.toLocaleString()}` : 'N/A'}</td>
-                    <td className="text-right py-2 px-3">{row.suburbSales}</td>
-                    <td className="text-right py-2 px-3">{row.suburbDays ?? 'N/A'}</td>
+      {(() => {
+        const activeData = dataMode === 'monthly' ? monthlyData : quarterlyData;
+        return activeData.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{dataMode === 'monthly' ? 'Monthly' : 'Quarterly'} Data</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Period</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Median</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">North Shore City Median</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">{selectedSuburb} Sales</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Avg Days</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeData.map((row) => (
+                    <tr key={row.period} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 px-3 font-medium">{row.period}</td>
+                      <td className="text-right py-2 px-3">{row.suburbMedian ? `$${row.suburbMedian.toLocaleString()}` : 'N/A'}</td>
+                      <td className="text-right py-2 px-3">{row.cityMedian ? `$${row.cityMedian.toLocaleString()}` : 'N/A'}</td>
+                      <td className="text-right py-2 px-3">{row.suburbSales}</td>
+                      <td className="text-right py-2 px-3">{row.suburbDays ?? 'N/A'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Excel Upload Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ExcelUploadForm />
+        <ExcelUploadForm onSuccess={(suburb) => {
+          if (suburb) setSelectedSuburb(suburb);
+          fetchChartData(suburb || selectedSuburb);
+          fetchAvailableSuburbs();
+        }} />
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Guide</h3>
           <div className="space-y-3 text-sm text-gray-600">
-            <p>1. Export REINZ data for a suburb (e.g., Oteha)</p>
+            <p>1. Export REINZ data for a suburb (e.g., Torbay)</p>
             <p>2. Upload the .xlsx or .csv file using the form</p>
-            <p>3. Data is automatically parsed and stored</p>
-            <p>4. Select the suburb above to view trend chart</p>
+            <p>3. Table is auto-created if needed, data is imported</p>
+            <p>4. Chart refreshes automatically with the uploaded data</p>
             <p>5. Use the data table for detailed quarterly breakdown</p>
           </div>
         </div>

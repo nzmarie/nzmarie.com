@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS market_monthly_snapshots (
     -- Region classification
     region_type VARCHAR(20) NOT NULL,       -- 'suburb' or 'district'
     region_name VARCHAR(50) NOT NULL,       -- 'Oteha', 'North Shore City'
+    city VARCHAR(50) DEFAULT '',            -- 'Auckland'
     property_type VARCHAR(20) DEFAULT 'House',
 
     -- Time dimension
