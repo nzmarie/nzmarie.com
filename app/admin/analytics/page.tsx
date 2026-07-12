@@ -67,15 +67,19 @@ export default function AnalyticsPage() {
   const [chartNeedsMigration, setChartNeedsMigration] = useState(false);
   const [availableSuburbs, setAvailableSuburbs] = useState<string[]>(FALLBACK_SUBURBS);
 
+  // Track current request to ignore stale responses
+  const chartReqIdRef = React.useRef(0);
+
   // Fetch available suburbs from the database — runs on mount and after upload
   const fetchAvailableSuburbs = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/analytics/chart-data?suburb=_none_&district=_none_');
+      const res = await fetch('/api/admin/analytics/available-suburbs');
       const data = await res.json();
       if (data.availableSuburbs && Array.isArray(data.availableSuburbs) && data.availableSuburbs.length > 0) {
         setAvailableSuburbs(data.availableSuburbs);
-        // If current selection isn't in the list, switch to first available
-        setSelectedSuburb(prev => data.availableSuburbs.includes(prev) ? prev : data.availableSuburbs[0]);
+        setSelectedSuburb(prev =>
+          data.availableSuburbs.includes(prev) ? prev : data.availableSuburbs[0]
+        );
       }
     } catch {
       // fallback stays
@@ -122,7 +126,7 @@ export default function AnalyticsPage() {
     }
   }, [status, session, fetchAvailableSuburbs]);
 
-  // Compute quarterly from monthly: requires all 3 months in a quarter to display
+  // Compute quarterly from monthly — works with partial quarters too
   const computeQuarterly = useCallback((monthly: ChartQuarter[]): ChartQuarter[] => {
     const groups = new Map<string, ChartQuarter[]>();
     for (const m of monthly) {
@@ -134,7 +138,6 @@ export default function AnalyticsPage() {
     }
     const result: ChartQuarter[] = [];
     for (const [key, items] of groups) {
-      if (items.length < 3) continue; // skip incomplete quarters
       const avg = (key: 'suburbMedian' | 'suburbDays' | 'cityMedian' | 'cityDays') => {
         const vals = items.map(i => i[key]).filter((v): v is number => v !== null);
         return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
@@ -153,11 +156,14 @@ export default function AnalyticsPage() {
   }, []);
 
   const fetchChartData = useCallback(async (suburb: string) => {
+    const reqId = ++chartReqIdRef.current;
     setChartLoading(true);
     setChartNeedsMigration(false);
     try {
       const res = await fetch(`/api/admin/analytics/chart-data?suburb=${encodeURIComponent(suburb)}&district=North Shore City`);
       const data = await res.json();
+      // Ignore stale responses from outdated requests
+      if (reqId !== chartReqIdRef.current) return;
       if (data.needsMigration) {
         setChartNeedsMigration(true);
       } else if (data.success) {
@@ -167,7 +173,9 @@ export default function AnalyticsPage() {
       }
     } catch {
     } finally {
-      setChartLoading(false);
+      if (reqId === chartReqIdRef.current) {
+        setChartLoading(false);
+      }
     }
   }, [computeQuarterly]);
 
