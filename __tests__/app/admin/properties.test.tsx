@@ -448,7 +448,7 @@ describe('Properties Page - Quick Filter by Suburb clears Address Input', () => 
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const suburbBtn = screen.getByRole('button', { name: 'Northcross' });
+    const suburbBtn = screen.getByRole('button', { name: 'Albany' });
     fireEvent.click(suburbBtn);
 
     const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;

@@ -538,7 +538,7 @@ export default function PropertiesPage() {
   const [filters, setFilters] = useState<Filters>({
     region: "Auckland",
     city: "North Shore City",
-    suburb: "",
+    suburb: "Northcross",
     last_sold_min_years: "5",
     last_sold_max_years: "10",
     build_year_min: "",
@@ -984,7 +984,7 @@ export default function PropertiesPage() {
     setFilters({
       region: "Auckland",
       city: "North Shore City",
-      suburb: "",
+      suburb: "Northcross",
       last_sold_min_years: "5",
       last_sold_max_years: "10",
       build_year_min: "",
