@@ -12,72 +12,77 @@ vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: mockSession, status: 'authenticated' }),
 }));
 
+const defaultListings = [
+  {
+    id: 're-1',
+    address: '15 Marine Parade',
+    status: 'for Sale',
+    data: '{}',
+    listing_date: '2026-06-15T00:00:00.000Z',
+    listing_date_raw: '15 Jun 2026',
+    price_display: '$1,200,000',
+    agent_name: 'John Smith',
+    bedroom_count: 4,
+    bathroom_count: 2,
+    land_area: 801,
+    floor_area: 220,
+    property_url: 'https://example.com/re-1',
+    original_link: null,
+    region: 'Auckland',
+    latitude: -36.7061,
+    longitude: 174.7297,
+    cover_image_url: 'https://example.com/cover.jpg',
+    images: '["img1.jpg","img2.jpg"]',
+    normalized_lead_address: null,
+    address_fingerprint: null,
+    property_type: 'House',
+    description: 'Beautiful home with sea views and modern renovations',
+    listing_number: 'RE12345',
+    listing_date_parsed: '2026-06-15',
+  },
+  {
+    id: 're-2',
+    address: '2/910 East Coast Road',
+    status: null,
+    data: null,
+    listing_date: null,
+    listing_date_raw: null,
+    price_display: null,
+    agent_name: null,
+    bedroom_count: 3,
+    bathroom_count: 1,
+    land_area: null,
+    floor_area: 150,
+    property_url: null,
+    original_link: 'https://example.com/re-2',
+    region: null,
+    latitude: null,
+    longitude: null,
+    cover_image_url: null,
+    images: null,
+    normalized_lead_address: null,
+    address_fingerprint: null,
+    property_type: null,
+    description: null,
+    listing_number: null,
+    listing_date_parsed: null,
+  },
+];
+
+const { mockUseQuery } = vi.hoisted(() => {
+  const uq = vi.fn(() => ({ data: undefined, isLoading: false, isFetching: false }));
+  return { mockUseQuery: uq };
+});
+
 vi.mock('@tanstack/react-query', () => ({
   useInfiniteQuery: () => ({
-    data: { pages: [{
-      listings: [
-        {
-          id: 're-1',
-          address: '15 Marine Parade',
-          status: 'for Sale',
-          data: '{}',
-          listing_date: '2026-06-15T00:00:00.000Z',
-          listing_date_raw: '15 Jun 2026',
-          price_display: '$1,200,000',
-          agent_name: 'John Smith',
-          bedroom_count: 4,
-          bathroom_count: 2,
-          land_area: 801,
-          floor_area: 220,
-          property_url: 'https://example.com/re-1',
-          original_link: null,
-          region: 'Auckland',
-          latitude: -36.7061,
-          longitude: 174.7297,
-          cover_image_url: 'https://example.com/cover.jpg',
-          images: '["img1.jpg","img2.jpg"]',
-          normalized_lead_address: null,
-          address_fingerprint: null,
-          property_type: 'House',
-          description: 'Beautiful home with sea views and modern renovations',
-          listing_number: 'RE12345',
-          listing_date_parsed: '2026-06-15',
-        },
-        {
-          id: 're-2',
-          address: '2/910 East Coast Road',
-          status: null,
-          data: null,
-          listing_date: null,
-          listing_date_raw: null,
-          price_display: null,
-          agent_name: null,
-          bedroom_count: 3,
-          bathroom_count: 1,
-          land_area: null,
-          floor_area: 150,
-          property_url: null,
-          original_link: 'https://example.com/re-2',
-          region: null,
-          latitude: null,
-          longitude: null,
-          cover_image_url: null,
-          images: null,
-          normalized_lead_address: null,
-          address_fingerprint: null,
-          property_type: null,
-          description: null,
-          listing_number: null,
-          listing_date_parsed: null,
-        },
-      ],
-      total: 45,
-    }] },
+    data: { pages: [{ listings: defaultListings, total: 45 }] },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: vi.fn(),
   }),
+  useQuery: (...args: unknown[]) => mockUseQuery(...args),
   keepPreviousData: vi.fn(),
 }));
 
@@ -184,7 +189,7 @@ describe('Realestate Page', () => {
     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
     render(<RealestatePage />);
 
-    expect(screen.getByText(/Displaying 2 of 45 listings/)).toBeDefined();
+    expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
   });
 
   it('renders region, city, and suburb dropdowns', async () => {
@@ -443,6 +448,152 @@ describe('Realestate Page - Edit Functionality', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Edit Listing')).toBeNull();
+    });
+  });
+});
+
+describe('Realestate Page - Dual Pagination Mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, listings: defaultListings, pagination: { total: 45 } }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders segmented control with Infinite Scroll and Classic Pages buttons', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Infinite Scroll')).toBeDefined();
+      expect(screen.getByText('Classic Pages')).toBeDefined();
+    });
+  });
+
+  it('shows counter in infinite mode', async () => {
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('switches to classic mode and shows page controls', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('disables first/prev buttons on page 1 in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const firstBtns = buttons.filter(b => b.textContent === '≪');
+      firstBtns.forEach(b => expect(b.disabled).toBe(true));
+    });
+  });
+
+  it('shows counter with range in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 18 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('switches back to infinite mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getByText('Infinite Scroll'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('shows Loading text in classic mode when isFetching is true', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: true,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Loading...')).toBeDefined();
+    });
+  });
+
+  it('shows bottom pagination with range info in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { listings: [defaultListings[0]], total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+    render(<RealestatePage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getByText('1–18 of 45')).toBeDefined();
     });
   });
 });

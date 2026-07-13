@@ -74,6 +74,11 @@ export default function OutreachPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [classicItems, setClassicItems] = useState<OutreachProperty[]>([]);
+  const [classicPagination, setClassicPagination] = useState<PaginationMeta | null>(null);
+  const [classicLoading, setClassicLoading] = useState(false);
 
   const [addressInput, setAddressInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -94,6 +99,11 @@ export default function OutreachPage() {
   const [availableStreets, setAvailableStreets] = useState<string[]>([]);
   const canMarkAsSent = isAdmin(session?.user?.email ?? '');
 
+  const isClassic = paginationMode === 'classic';
+  const displayItems = isClassic ? classicItems : items;
+  const displayPagination = isClassic ? classicPagination : pagination;
+  const totalPages = Math.max(1, Math.ceil((displayPagination?.total || 0) / 20));
+
   const pageRef = useRef(1);
   const hasMoreRef = useRef(true);
   const loadingMoreRef = useRef(false);
@@ -108,34 +118,42 @@ export default function OutreachPage() {
     return () => clearTimeout(t);
   }, [addressInput]);
 
+  const fetchPageData = useCallback(async (pageNum: number): Promise<{ items: OutreachProperty[]; pagination: PaginationMeta | null }> => {
+    const params = new URLSearchParams({
+      status: activeTab,
+      page: pageNum.toString(),
+      limit: '20',
+      sortOrder,
+    });
+    if (suburbFilter) params.set('suburb', suburbFilter);
+    if (streetFilter) params.set('street', streetFilter);
+    if (campaignFilter) params.set('campaign', campaignFilter);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+
+    const res = await fetch(`/api/admin/outreach?${params}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    return {
+      items: (data.data ?? []).map((item: OutreachProperty) => ({
+        ...item,
+        status: normalizeStatus(item.status),
+      })),
+      pagination: data.pagination ?? null,
+    };
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+
   const fetchItems = useCallback(async () => {
+    if (isClassic) return;
     setLoading(true);
     pageRef.current = 1;
     setHasMore(true);
     hasMoreRef.current = true;
     try {
-      const params = new URLSearchParams({
-        status: activeTab,
-        page: '1',
-        limit: '20',
-        sortOrder,
-      });
-      if (suburbFilter) params.set('suburb', suburbFilter);
-      if (streetFilter) params.set('street', streetFilter);
-      if (campaignFilter) params.set('campaign', campaignFilter);
-      if (debouncedSearch) params.set('search', debouncedSearch);
-
-      const res = await fetch(`/api/admin/outreach?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      const fetched = (data.data ?? []).map((item: OutreachProperty) => ({
-        ...item,
-        status: normalizeStatus(item.status),
-      }));
-      setItems(fetched);
-      setPagination(data.pagination ?? null);
-      if (fetched.length < 20) {
+      const result = await fetchPageData(1);
+      setItems(result.items);
+      setPagination(result.pagination);
+      if (result.items.length < 20) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
@@ -144,11 +162,31 @@ export default function OutreachPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+  }, [fetchPageData, isClassic]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
   }, [status, fetchItems]);
+
+  useEffect(() => {
+    if (!isClassic || status !== 'authenticated') return;
+    let cancelled = false;
+    (async () => {
+      setClassicLoading(true);
+      try {
+        const result = await fetchPageData(currentPage);
+        if (!cancelled) {
+          setClassicItems(result.items);
+          setClassicPagination(result.pagination);
+        }
+      } catch (error) {
+        console.error('Error fetching outreach (classic):', error);
+      } finally {
+        if (!cancelled) setClassicLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isClassic, currentPage, fetchPageData, status]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current) return;
@@ -156,41 +194,24 @@ export default function OutreachPage() {
     setLoadingMore(true);
     const nextPage = pageRef.current + 1;
     try {
-      const params = new URLSearchParams({
-        status: activeTab,
-        page: nextPage.toString(),
-        limit: '20',
-        sortOrder,
-      });
-      if (suburbFilter) params.set('suburb', suburbFilter);
-      if (streetFilter) params.set('street', streetFilter);
-      if (campaignFilter) params.set('campaign', campaignFilter);
-      if (debouncedSearch) params.set('search', debouncedSearch);
-
-      const res = await fetch(`/api/admin/outreach?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      const fetched = (data.data ?? []).map((item: OutreachProperty) => ({
-        ...item,
-        status: normalizeStatus(item.status),
-      }));
-      setItems((prev) => [...prev, ...fetched]);
+      const result = await fetchPageData(nextPage);
+      setItems((prev) => [...prev, ...result.items]);
       pageRef.current = nextPage;
-      if (fetched.length < 20) {
+      if (result.items.length < 20) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
-      setPagination(data.pagination ?? null);
+      setPagination(result.pagination);
     } catch (error) {
       console.error('Error loading more:', error);
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+  }, [fetchPageData]);
 
   useEffect(() => {
+    if (isClassic) return;
     const el = lastPropertyElementRef.current;
     if (!el || !hasMore || loadingMore || loading) return;
     const observer = new IntersectionObserver((entries) => {
@@ -200,15 +221,15 @@ export default function OutreachPage() {
     }, { threshold: 0.5 });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, loading, loadMore]);
+  }, [hasMore, loadingMore, loading, loadMore, isClassic]);
 
   useEffect(() => {
     const streets = new Set<string>();
-    items.forEach(item => {
+    displayItems.forEach(item => {
       if (item.street) streets.add(item.street);
     });
     setAvailableStreets(Array.from(streets).sort());
-  }, [items]);
+  }, [displayItems]);
 
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
@@ -225,9 +246,10 @@ export default function OutreachPage() {
 
   const handleMarkAsSentSuccess = (updatedProperties: OutreachProperty[]) => {
     setItems((prev) => prev.filter((item) => !updatedProperties.some((updated) => updated.id === item.id)));
-    if (pagination) {
-      setPagination((prev) => prev ? { ...prev, total: Math.max(0, prev.total - updatedProperties.length) } : prev);
-    }
+    setClassicItems((prev) => prev.filter((item) => !updatedProperties.some((updated) => updated.id === item.id)));
+    const dec = (p: PaginationMeta | null) => p ? { ...p, total: Math.max(0, p.total - updatedProperties.length) } : p;
+    setPagination(dec);
+    setClassicPagination(dec);
   };
 
   const toggleSuburb = (suburb: string) => {
@@ -359,6 +381,7 @@ export default function OutreachPage() {
     showNotification('success', `Deleted ${selected.size} address${selected.size === 1 ? '' : 'es'} successfully`);
     clearSelected();
     setItems((prev) => prev.filter((item) => !idsToDelete.has(item.id)));
+    setClassicItems((prev) => prev.filter((item) => !idsToDelete.has(item.id)));
 
     try {
       await Promise.all(
@@ -384,7 +407,7 @@ export default function OutreachPage() {
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
     
-    items.forEach((item) => {
+    displayItems.forEach((item) => {
       const suburb = item.suburb || 'Unknown';
       const street = item.street || 'Unknown Street';
       
@@ -433,15 +456,15 @@ export default function OutreachPage() {
         };
       })
       .sort((a, b) => b.totalCount - a.totalCount);
-  }, [items, sortOrder]);
+  }, [displayItems, sortOrder]);
 
   const stats = useMemo(() => {
-    const totalLiked = items.filter((i) => i.status === 'liked').length;
-    const totalPending = items.filter((i) => i.status === 'pending').length;
-    const totalSent = items.filter((i) => i.status === 'sent').length;
-    const totalInteracted = items.filter((i) => i.status === 'interacted').length;
-    return { totalLiked, totalPending, totalSent, totalInteracted, total: pagination?.total ?? items.length };
-  }, [items, pagination]);
+    const totalLiked = displayItems.filter((i) => i.status === 'liked').length;
+    const totalPending = displayItems.filter((i) => i.status === 'pending').length;
+    const totalSent = displayItems.filter((i) => i.status === 'sent').length;
+    const totalInteracted = displayItems.filter((i) => i.status === 'interacted').length;
+    return { totalLiked, totalPending, totalSent, totalInteracted, total: displayPagination?.total ?? displayItems.length };
+  }, [displayItems, displayPagination]);
 
   if (status === 'loading') return <SkeletonOutreach />;
 
@@ -477,7 +500,7 @@ export default function OutreachPage() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200">
         <button
-          onClick={() => { setActiveTab('liked'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
+          onClick={() => { setActiveTab('liked'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'liked'
               ? 'text-pink-600 border-b-2 border-pink-600'
@@ -492,7 +515,7 @@ export default function OutreachPage() {
           )}
         </button>
         <button
-          onClick={() => { setActiveTab('pending'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
+          onClick={() => { setActiveTab('pending'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'pending'
               ? 'text-blue-600 border-b-2 border-blue-600'
@@ -507,7 +530,7 @@ export default function OutreachPage() {
           )}
         </button>
         <button
-          onClick={() => { setActiveTab('sent'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); }}
+          onClick={() => { setActiveTab('sent'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
           className={`px-6 py-3 font-semibold transition-colors relative ${
             activeTab === 'sent'
               ? 'text-purple-600 border-b-2 border-purple-600'
@@ -537,7 +560,9 @@ export default function OutreachPage() {
             Search Filters
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            Displaying {items.length} of {pagination?.total ?? 0} properties • Scroll to load more
+            {isClassic
+              ? `Displaying ${Math.max(1, (currentPage - 1) * 20 + 1)} to ${Math.min(currentPage * 20, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
+              : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
           </p>
         </div>
 
@@ -666,6 +691,98 @@ export default function OutreachPage() {
           </button>
         </div>
       </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+        <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
+          {isClassic
+            ? `Displaying ${Math.max(1, (currentPage - 1) * 20 + 1)} to ${Math.min(currentPage * 20, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
+            : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
+        </span>
+        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+          <button
+            onClick={() => setPaginationMode('infinite')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: !isClassic ? '#3b82f6' : 'white',
+              color: !isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Infinite Scroll
+          </button>
+          <button
+            onClick={() => setPaginationMode('classic')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: isClassic ? '#3b82f6' : 'white',
+              color: isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Classic Pages
+          </button>
+        </div>
+      </div>
+
+      {isClassic && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input
+              type="number"
+              value={currentPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                  setCurrentPage(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                    setCurrentPage(v);
+                  }
+                }
+              }}
+              style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1}
+              max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≫</button>
+        </div>
+      )}
 
       {/* Bulk Actions */}
       {activeTab === 'liked' && selected.size > 0 && (
@@ -809,7 +926,7 @@ export default function OutreachPage() {
 
         {loading ? (
           <SkeletonOutreach />
-        ) : items.length === 0 ? (
+        ) : displayItems.length === 0 ? (
           <div className="p-12 text-center">
             <div className="text-6xl mb-4">📭</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
@@ -826,7 +943,7 @@ export default function OutreachPage() {
               gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
               gap: "20px",
             }}>
-              {items.map((prop) => (
+              {displayItems.map((prop) => (
                 <div
                   key={prop.id}
                   style={{
@@ -924,12 +1041,14 @@ export default function OutreachPage() {
                             e.stopPropagation();
                             const itemId = prop.id;
                             setItems((prev) => prev.filter((item) => item.id !== itemId));
+                            setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
                             try {
                               const res = await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
                               if (!res.ok) throw new Error('Failed');
                               showNotification('success', 'Removed from Liked');
                             } catch {
                               setItems((prev) => [...prev, prop]);
+                              setClassicItems((prev) => [...prev, prop]);
                               showNotification('error', 'Failed to remove');
                             }
                           }}
@@ -1238,6 +1357,7 @@ export default function OutreachPage() {
                             if (window.confirm(`Delete "${prop.property_address}"?`)) {
                               const itemId = prop.id;
                               setItems((prev) => prev.filter((item) => item.id !== itemId));
+                              setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
                               try {
                                 await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
                                 showNotification('success', 'Address deleted');
@@ -1313,9 +1433,47 @@ export default function OutreachPage() {
                 </div>
               ))}
             </div>
-            {/* Infinite scroll sentinel */}
-            {hasMore && !loading && (
+            {isClassic && displayItems.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+                <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+                  {Math.max(1, (currentPage - 1) * 20 + 1)}–{Math.min(currentPage * 20, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+                </span>
+                <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+                <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                  onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                  onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+                >≪</button>
+                <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                  onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                  onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+                >‹</button>
+                <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+                  Page{' '}
+                  <input type="number" value={currentPage}
+                    onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
+                    style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    min={1} max={totalPages}
+                  />{' '}
+                  of {totalPages}
+                </span>
+                <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                  onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                  onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+                >›</button>
+                <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                  onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                  onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+                >≫</button>
+              </div>
+            )}
+            {!isClassic && hasMore && !loading && (
               <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+            )}
+            {classicLoading && isClassic && (
+              <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>Loading...</div>
             )}
           </div>
         ) : (
@@ -1524,6 +1682,7 @@ export default function OutreachPage() {
                                       if (window.confirm(`Delete "${prop.property_address}"?`)) {
                                         const itemId = prop.id;
                                         setItems((prev) => prev.filter((item) => item.id !== itemId));
+                                        setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
                                         try {
                                           await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
                                           showNotification('success', 'Address deleted');
@@ -1557,9 +1716,47 @@ export default function OutreachPage() {
             })}
           </div>
         )}
-        {/* Infinite scroll sentinel for list view */}
-        {viewMode === 'list' && hasMore && !loading && (
+        {isClassic && displayItems.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+            <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+              {Math.max(1, (currentPage - 1) * 20 + 1)}–{Math.min(currentPage * 20, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+            </span>
+            <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+            <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+              onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+              onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            >≪</button>
+            <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+              onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+              onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            >‹</button>
+            <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+              Page{' '}
+              <input type="number" value={currentPage}
+                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
+                style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                min={1} max={totalPages}
+              />{' '}
+              of {totalPages}
+            </span>
+            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+              onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+              onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            >›</button>
+            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+              onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+              onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            >≫</button>
+          </div>
+        )}
+        {!isClassic && viewMode === 'list' && hasMore && !loading && (
           <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+        )}
+        {classicLoading && isClassic && (
+          <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>Loading...</div>
         )}
       </div>
     </div>

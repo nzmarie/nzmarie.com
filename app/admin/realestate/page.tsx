@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useInfiniteQuery, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { FaBed, FaBath, FaMapMarkerAlt, FaRulerCombined, FaUser, FaExpand } from "react-icons/fa";
 import Image from "next/image";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
@@ -363,6 +363,8 @@ export default function RealestatePage() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [addressInput, setAddressInput] = useState("");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -380,6 +382,32 @@ export default function RealestatePage() {
     return () => clearTimeout(timer);
   }, [addressInput]);
 
+  const fetchPageData = async (pageNum: number): Promise<{ listings: Listing[]; total: number }> => {
+    const params = new URLSearchParams({
+      page: pageNum.toString(),
+      limit: "18",
+    });
+
+    if (filters.search) params.append("search", filters.search);
+    if (filters.region) params.append("region", filters.region);
+    if (filters.city) params.append("city", filters.city);
+    if (filters.suburb) params.append("suburb", filters.suburb);
+    if (filters.min_bedrooms) params.append("min_bedrooms", filters.min_bedrooms);
+    if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
+    if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
+    if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
+    if (filters.property_type && filters.property_type !== 'All') params.append("property_type", filters.property_type);
+
+    const response = await fetch(`/api/admin/realestate?${params}`);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to fetch listings");
+    }
+
+    return { listings: result.listings, total: result.pagination.total };
+  };
+
   const {
     data,
     isFetchingNextPage,
@@ -392,30 +420,7 @@ export default function RealestatePage() {
     queryKey: ["admin-realestate", filters],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
-      const pageNum = (pageParam as number) || 1;
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "18",
-      });
-
-      if (filters.search) params.append("search", filters.search);
-      if (filters.region) params.append("region", filters.region);
-      if (filters.city) params.append("city", filters.city);
-      if (filters.suburb) params.append("suburb", filters.suburb);
-      if (filters.min_bedrooms) params.append("min_bedrooms", filters.min_bedrooms);
-      if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
-      if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
-      if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
-      if (filters.property_type && filters.property_type !== 'All') params.append("property_type", filters.property_type);
-
-      const response = await fetch(`/api/admin/realestate?${params}`);
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch listings");
-      }
-
-      return { listings: result.listings, total: result.pagination.total };
+      return fetchPageData((pageParam as number) || 1);
     },
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage && lastPage.listings.length === 18) {
@@ -429,13 +434,27 @@ export default function RealestatePage() {
     refetchOnWindowFocus: false,
   });
 
+  const {
+    data: classicData,
+    isLoading: classicLoading,
+    isFetching: classicFetching,
+  } = useQuery<{ listings: Listing[]; total: number }, Error>({
+    queryKey: ["admin-realestate", "classic", filters, currentPage],
+    queryFn: async () => fetchPageData(currentPage),
+    placeholderData: keepPreviousData,
+    enabled: paginationMode === 'classic' && status === "authenticated",
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isClassic = paginationMode === 'classic';
   const listingsData = data as { pages: { listings: Listing[]; total: number }[] } | undefined;
-  const listings: Listing[] = listingsData
-    ? listingsData.pages.flatMap((page) => page.listings)
-    : [];
-  const totalListings = listingsData?.pages[0]?.total || 0;
+  const allInfiniteListings: Listing[] = listingsData ? listingsData.pages.flatMap((page) => page.listings) : [];
+  const listings: Listing[] = isClassic ? (classicData?.listings ?? []) : allInfiniteListings;
+  const totalListings = isClassic ? (classicData?.total ?? 0) : (listingsData?.pages[0]?.total || 0);
+  const totalPages = Math.max(1, Math.ceil(totalListings / 18));
 
   useEffect(() => {
+    if (isClassic) return;
     const currentElement = lastPropertyElementRef.current;
     if (!currentElement) return;
 
@@ -447,7 +466,7 @@ export default function RealestatePage() {
 
     observer.observe(currentElement);
     return () => { observer.disconnect(); };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, listingsData]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, listingsData, isClassic]);
 
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
 
@@ -599,7 +618,9 @@ export default function RealestatePage() {
             Search Filters
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096", margin: 0 }}>
-            Displaying {listings.length} of {totalListings} listings
+            {isClassic
+  ? `Displaying ${Math.max(1, (currentPage - 1) * 18 + 1)} to ${Math.min(currentPage * 18, totalListings)} of ${totalListings} listings`
+  : `Displaying 1 to ${listings.length} of ${totalListings} listings`}
           </p>
         </div>
 
@@ -832,6 +853,129 @@ export default function RealestatePage() {
         </div>
       </div>
 
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+        <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
+          {isClassic
+            ? `Displaying ${Math.max(1, (currentPage - 1) * 18 + 1)} to ${Math.min(currentPage * 18, totalListings)} of ${totalListings} listings`
+            : `Displaying 1 to ${listings.length} of ${totalListings} listings`}
+        </span>
+        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+          <button
+            onClick={() => setPaginationMode('infinite')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: !isClassic ? '#3b82f6' : 'white',
+              color: !isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Infinite Scroll
+          </button>
+          <button
+            onClick={() => setPaginationMode('classic')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: isClassic ? '#3b82f6' : 'white',
+              color: isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Classic Pages
+          </button>
+        </div>
+      </div>
+
+      {isClassic && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input
+              type="number"
+              value={currentPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                  setCurrentPage(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                    setCurrentPage(v);
+                  }
+                }
+              }}
+              style={{
+                width: "52px",
+                padding: "4px 6px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                color: "#2D3748",
+                textAlign: "center",
+                outline: "none",
+                MozAppearance: "textfield",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1}
+              max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≫</button>
+        </div>
+      )}
+
       {isError && (
         <div style={{
           padding: "16px", marginBottom: "24px", backgroundColor: "#fee2e2",
@@ -859,9 +1003,56 @@ export default function RealestatePage() {
             ))}
           </div>
 
+          {isClassic && listings.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+              <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+                {Math.max(1, (currentPage - 1) * 18 + 1)}–{Math.min(currentPage * 18, totalListings)} of {totalListings}
+              </span>
+              <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+              <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+                style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+              >≪</button>
+              <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+              >‹</button>
+              <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+                Page{' '}
+                <input type="number" value={currentPage}
+                  onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
+                  style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                  min={1} max={totalPages}
+                />{' '}
+                of {totalPages}
+              </span>
+              <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+              >›</button>
+              <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+                style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+                onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+              >≫</button>
+            </div>
+          )}
+
           {isFetchingNextPage && (
             <div style={{ textAlign: "center", padding: "24px", color: "#718096" }}>
               Loading more listings...
+            </div>
+          )}
+
+          {classicFetching && isClassic && (
+            <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>
+              Loading...
             </div>
           )}
 

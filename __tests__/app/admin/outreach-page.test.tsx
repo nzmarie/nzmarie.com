@@ -164,3 +164,171 @@ describe('Outreach page', () => {
     });
   });
 });
+
+describe('Outreach page - Dual Pagination Mode', () => {
+  const mockItems = [
+    {
+      id: 'out-1',
+      property_address: '15 Marine Parade',
+      suburb: 'Takapuna',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'liked',
+      created_at: '2026-07-01T10:00:00Z',
+    },
+    {
+      id: 'out-2',
+      property_address: '22 Beach Road',
+      suburb: 'Takapuna',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'liked',
+      created_at: '2026-07-02T10:00:00Z',
+    },
+  ];
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it('renders segmented control with Infinite Scroll and Classic Pages buttons', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Infinite Scroll')).toBeDefined();
+      expect(screen.getByText('Classic Pages')).toBeDefined();
+    });
+  });
+
+  it('shows counter text in infinite mode', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 2 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('switches to classic mode and shows page controls', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [mockItems[0]], pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('disables prev/first buttons on page 1 in classic mode', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [mockItems[0]], pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const firstBtns = buttons.filter(b => b.textContent === '≪');
+      firstBtns.forEach(b => expect(b.disabled).toBe(true));
+    });
+  });
+
+  it('switches back to infinite mode', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [mockItems[0]], pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(1);
+    });
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Infinite Scroll'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 2 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows counter with range in classic mode', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [mockItems[0]], pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 20 of 45 properties/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+});
