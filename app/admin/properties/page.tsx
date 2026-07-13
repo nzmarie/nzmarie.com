@@ -78,6 +78,8 @@ interface Filters {
   rv_min: string;
   rv_max: string;
   min_floor_area: string;
+  min_land_area: string;
+  max_land_area: string;
   market_premium: string;
   search: string;
 }
@@ -550,6 +552,8 @@ export default function PropertiesPage() {
     rv_min: "",
     rv_max: "",
     min_floor_area: "",
+    min_land_area: "",
+    max_land_area: "",
     market_premium: "",
     search: "",
   });
@@ -695,6 +699,20 @@ export default function PropertiesPage() {
           return fa !== null && !isNaN(fa) && fa >= min;
         });
       }
+      if (filters.min_land_area) {
+        const min = parseFloat(filters.min_land_area);
+        mapped = mapped.filter(p => {
+          const la = typeof p.land_area === 'string' ? parseFloat(p.land_area) : (p.land_area as number);
+          return la !== null && !isNaN(la) && la >= min;
+        });
+      }
+      if (filters.max_land_area) {
+        const max = parseFloat(filters.max_land_area);
+        mapped = mapped.filter(p => {
+          const la = typeof p.land_area === 'string' ? parseFloat(p.land_area) : (p.land_area as number);
+          return la !== null && !isNaN(la) && la <= max;
+        });
+      }
       if (filters.market_premium) {
         const threshold = parseFloat(filters.market_premium) / 100.0;
         mapped = mapped.filter(p => {
@@ -734,6 +752,8 @@ export default function PropertiesPage() {
     if (filters.rv_min) params.append("rv_min", filters.rv_min);
     if (filters.rv_max) params.append("rv_max", filters.rv_max);
     if (filters.min_floor_area) params.append("min_floor_area", filters.min_floor_area);
+    if (filters.min_land_area) params.append("min_land_area", filters.min_land_area);
+    if (filters.max_land_area) params.append("max_land_area", filters.max_land_area);
     if (filters.market_premium) params.append("market_premium", filters.market_premium);
     if (propertyFilter === 'house') params.append("standalone_only", "true");
     if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
@@ -969,6 +989,8 @@ export default function PropertiesPage() {
       rv_min: "",
       rv_max: "",
       min_floor_area: "",
+      min_land_area: "",
+      max_land_area: "",
       market_premium: "",
       search: "",
     });
@@ -1418,10 +1440,10 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end", marginBottom: "16px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end", marginBottom: "16px" }}>
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Min Bedrooms
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Min Beds
             </label>
             <input
               type="number"
@@ -1430,11 +1452,11 @@ export default function PropertiesPage() {
               min="0"
               placeholder="0"
               style={{
-                width: "90px",
-                padding: "8px 14px",
+                width: "70px",
+                padding: "7px 10px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
-                fontSize: "0.95rem",
+                fontSize: "0.9rem",
                 backgroundColor: "white",
                 color: "#2D3748",
                 boxSizing: "border-box",
@@ -1443,21 +1465,21 @@ export default function PropertiesPage() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Min Bathrooms
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Min RV ($)
             </label>
             <input
               type="number"
-              value={filters.min_bathrooms}
-              onChange={(e) => handleFilterChange("min_bathrooms", e.target.value)}
+              value={filters.rv_min}
+              onChange={(e) => handleFilterChange("rv_min", e.target.value)}
               min="0"
               placeholder="0"
               style={{
-                width: "90px",
-                padding: "8px 14px",
+                width: "100px",
+                padding: "7px 10px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
-                fontSize: "0.95rem",
+                fontSize: "0.9rem",
                 backgroundColor: "white",
                 color: "#2D3748",
                 boxSizing: "border-box",
@@ -1466,21 +1488,21 @@ export default function PropertiesPage() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Min Car Spaces
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Max RV ($)
             </label>
             <input
               type="number"
-              value={filters.min_car_spaces}
-              onChange={(e) => handleFilterChange("min_car_spaces", e.target.value)}
+              value={filters.rv_max}
+              onChange={(e) => handleFilterChange("rv_max", e.target.value)}
               min="0"
-              placeholder="0"
+              placeholder="No Max"
               style={{
-                width: "90px",
-                padding: "8px 14px",
+                width: "100px",
+                padding: "7px 10px",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
-                fontSize: "0.95rem",
+                fontSize: "0.9rem",
                 backgroundColor: "white",
                 color: "#2D3748",
                 boxSizing: "border-box",
@@ -1488,10 +1510,110 @@ export default function PropertiesPage() {
             />
           </div>
 
-          {showMoreFilters && (
-            <>
+          <div>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Min Floor (m²)
+            </label>
+            <input
+              type="number"
+              value={filters.min_floor_area}
+              onChange={(e) => handleFilterChange("min_floor_area", e.target.value)}
+              min="0"
+              placeholder="0"
+              style={{
+                width: "90px",
+                padding: "7px 10px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.9rem",
+                backgroundColor: "white",
+                color: "#2D3748",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Min Land (m²)
+            </label>
+            <input
+              type="number"
+              value={filters.min_land_area}
+              onChange={(e) => handleFilterChange("min_land_area", e.target.value)}
+              min="0"
+              placeholder="0"
+              style={{
+                width: "90px",
+                padding: "7px 10px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.9rem",
+                backgroundColor: "white",
+                color: "#2D3748",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+              Market Premium
+            </label>
+            <select
+              value={filters.market_premium}
+              onChange={(e) => handleFilterChange("market_premium", e.target.value)}
+              style={{
+                width: "110px",
+                padding: "7px 10px",
+                border: "2px solid #e2e8f0",
+                borderRadius: "10px",
+                fontSize: "0.9rem",
+                backgroundColor: "white",
+                color: filters.market_premium ? "#2D3748" : "#9ca3af",
+                cursor: "pointer",
+              }}
+            >
+              <option value="">Any</option>
+              <option value="100">Sale &gt; RV</option>
+              <option value="110">Sale &gt; 110% RV</option>
+            </select>
+          </div>
+
+          <div style={{ marginLeft: "auto" }}>
+            <button
+              onClick={() => setShowMoreFilters(!showMoreFilters)}
+              style={{
+                padding: "7px 16px",
+                backgroundColor: "white",
+                color: "#3b82f6",
+                border: "2px dashed #93c5fd",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                fontWeight: "600",
+                transition: "all 0.2s",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+            >
+              {showMoreFilters ? "− Hide" : "+ More"}
+            </button>
+          </div>
+        </div>
+
+        {showMoreFilters && (
+          <div style={{
+            marginBottom: "16px",
+            padding: "16px",
+            backgroundColor: "#fafafa",
+            borderRadius: "12px",
+            border: "1px solid #e2e8f0",
+          }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end", marginBottom: "16px" }}>
               <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
                   Max Bedrooms
                 </label>
                 <input
@@ -1501,11 +1623,11 @@ export default function PropertiesPage() {
                   min="0"
                   placeholder="10"
                   style={{
-                    width: "90px",
-                    padding: "8px 14px",
+                    width: "80px",
+                    padding: "7px 10px",
                     border: "2px solid #e2e8f0",
                     borderRadius: "10px",
-                    fontSize: "0.95rem",
+                    fontSize: "0.9rem",
                     backgroundColor: "white",
                     color: "#2D3748",
                     boxSizing: "border-box",
@@ -1513,7 +1635,29 @@ export default function PropertiesPage() {
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  Min Bathrooms
+                </label>
+                <input
+                  type="number"
+                  value={filters.min_bathrooms}
+                  onChange={(e) => handleFilterChange("min_bathrooms", e.target.value)}
+                  min="0"
+                  placeholder="0"
+                  style={{
+                    width: "80px",
+                    padding: "7px 10px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.9rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
                   Max Bathrooms
                 </label>
                 <input
@@ -1523,11 +1667,11 @@ export default function PropertiesPage() {
                   min="0"
                   placeholder="10"
                   style={{
-                    width: "90px",
-                    padding: "8px 14px",
+                    width: "80px",
+                    padding: "7px 10px",
                     border: "2px solid #e2e8f0",
                     borderRadius: "10px",
-                    fontSize: "0.95rem",
+                    fontSize: "0.9rem",
                     backgroundColor: "white",
                     color: "#2D3748",
                     boxSizing: "border-box",
@@ -1535,7 +1679,29 @@ export default function PropertiesPage() {
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  Min Car Spaces
+                </label>
+                <input
+                  type="number"
+                  value={filters.min_car_spaces}
+                  onChange={(e) => handleFilterChange("min_car_spaces", e.target.value)}
+                  min="0"
+                  placeholder="0"
+                  style={{
+                    width: "80px",
+                    padding: "7px 10px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.9rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
                   Max Car Spaces
                 </label>
                 <input
@@ -1545,34 +1711,11 @@ export default function PropertiesPage() {
                   min="0"
                   placeholder="10"
                   style={{
-                    width: "90px",
-                    padding: "8px 14px",
+                    width: "80px",
+                    padding: "7px 10px",
                     border: "2px solid #e2e8f0",
                     borderRadius: "10px",
-                    fontSize: "0.95rem",
-                    backgroundColor: "white",
-                    color: "#2D3748",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-              <div style={{ width: "100%", height: "1px", backgroundColor: "#e2e8f0", margin: "4px 0" }} />
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-                  Min RV ($)
-                </label>
-                <input
-                  type="number"
-                  value={filters.rv_min}
-                  onChange={(e) => handleFilterChange("rv_min", e.target.value)}
-                  min="0"
-                  placeholder="0"
-                  style={{
-                    width: "110px",
-                    padding: "8px 14px",
-                    border: "2px solid #e2e8f0",
-                    borderRadius: "10px",
-                    fontSize: "0.95rem",
+                    fontSize: "0.9rem",
                     backgroundColor: "white",
                     color: "#2D3748",
                     boxSizing: "border-box",
@@ -1580,188 +1723,121 @@ export default function PropertiesPage() {
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-                  Max RV ($)
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  Max Land (m²)
                 </label>
                 <input
                   type="number"
-                  value={filters.rv_max}
-                  onChange={(e) => handleFilterChange("rv_max", e.target.value)}
+                  value={filters.max_land_area}
+                  onChange={(e) => handleFilterChange("max_land_area", e.target.value)}
                   min="0"
                   placeholder="No Max"
                   style={{
-                    width: "110px",
-                    padding: "8px 14px",
+                    width: "80px",
+                    padding: "7px 10px",
                     border: "2px solid #e2e8f0",
                     borderRadius: "10px",
-                    fontSize: "0.95rem",
+                    fontSize: "0.9rem",
                     backgroundColor: "white",
                     color: "#2D3748",
                     boxSizing: "border-box",
                   }}
                 />
               </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "16px" }}>
               <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-                  Min Floor Area (m²)
-                </label>
-                <input
-                  type="number"
-                  value={filters.min_floor_area}
-                  onChange={(e) => handleFilterChange("min_floor_area", e.target.value)}
-                  min="0"
-                  placeholder="0"
-                  style={{
-                    width: "110px",
-                    padding: "8px 14px",
-                    border: "2px solid #e2e8f0",
-                    borderRadius: "10px",
-                    fontSize: "0.95rem",
-                    backgroundColor: "white",
-                    color: "#2D3748",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-                  Market Premium
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  Region
                 </label>
                 <select
-                  value={filters.market_premium}
-                  onChange={(e) => handleFilterChange("market_premium", e.target.value)}
+                  value={filters.region}
+                  onChange={(e) => handleRegionChange(e.target.value)}
                   style={{
-                    width: "120px",
-                    padding: "8px 14px",
+                    width: "100%",
+                    padding: "7px 10px",
                     border: "2px solid #e2e8f0",
                     borderRadius: "10px",
-                    fontSize: "0.95rem",
+                    fontSize: "0.9rem",
                     backgroundColor: "white",
-                    color: filters.market_premium ? "#2D3748" : "#9ca3af",
+                    color: "#2D3748",
                     cursor: "pointer",
                   }}
                 >
-                  <option value="">Any</option>
-                  <option value="100">Sale &gt; RV (&gt;100%)</option>
-                  <option value="110">Sale &gt; 110% of RV</option>
+                  <option value="Auckland">Auckland</option>
+                  <option value="Wellington">Wellington</option>
                 </select>
               </div>
-            </>
-          )}
 
-          <div style={{ marginLeft: "auto" }}>
-            <button
-              onClick={() => setShowMoreFilters(!showMoreFilters)}
-              style={{
-                padding: "8px 18px",
-                backgroundColor: "white",
-                color: "#3b82f6",
-                border: "2px dashed #93c5fd",
-                borderRadius: "10px",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                fontWeight: "600",
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-            >
-              {showMoreFilters ? "− Hide" : "+ More Filter Criteria"}
-            </button>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  City / District
+                </label>
+                <select
+                  value={filters.city}
+                  onChange={(e) => handleCityChange(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "7px 10px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.9rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    cursor: "pointer",
+                  }}
+                >
+                  {(REGION_CITIES[filters.region as keyof typeof REGION_CITIES] || []).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "500", color: "#4a5568", marginBottom: "4px" }}>
+                  Suburb
+                </label>
+                <select
+                  value={filters.suburb}
+                  onChange={(e) => handleFilterChange("suburb", e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "7px 10px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.9rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="">All suburbs</option>
+                  {currentCitySuburbs.map((suburb) => (
+                    <option key={suburb} value={suburb}>
+                      {suburb}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
           </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Region
-            </label>
-            <select
-              value={filters.region}
-              onChange={(e) => handleRegionChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              <option value="Auckland">Auckland</option>
-              <option value="Wellington">Wellington</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              City / District
-            </label>
-            <select
-              value={filters.city}
-              onChange={(e) => handleCityChange(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              {(REGION_CITIES[filters.region as keyof typeof REGION_CITIES] || []).map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
-              Suburb
-            </label>
-            <select
-              value={filters.suburb}
-              onChange={(e) => handleFilterChange("suburb", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                backgroundColor: "white",
-                color: "#2D3748",
-                cursor: "pointer",
-              }}
-            >
-              <option value="">All suburbs</option>
-              {currentCitySuburbs.map((suburb) => (
-                <option key={suburb} value={suburb}>
-                  {suburb}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-          <div style={{ display: "flex", gap: "12px" }}>
+        )}
+          <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
             <button
               onClick={handleClearFilters}
               style={{
-                padding: "12px 24px",
+                padding: "10px 20px",
                 backgroundColor: "#e2e8f0",
                 color: "#4a5568",
                 borderRadius: "10px",
                 border: "none",
                 cursor: "pointer",
                 fontWeight: "600",
-                fontSize: "0.95rem",
+                fontSize: "0.9rem",
                 transition: "all 0.2s",
               }}
             >

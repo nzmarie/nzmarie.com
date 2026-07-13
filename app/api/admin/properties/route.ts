@@ -27,6 +27,8 @@ export async function GET(request: Request) {
   const rvMin = searchParams.get('rv_min');
   const rvMax = searchParams.get('rv_max');
   const minFloorArea = searchParams.get('min_floor_area');
+  const minLandArea = searchParams.get('min_land_area');
+  const maxLandArea = searchParams.get('max_land_area');
   const marketPremium = searchParams.get('market_premium');
   const city = searchParams.get('city');
   const region = searchParams.get('region');
@@ -215,6 +217,18 @@ export async function GET(request: Request) {
   if (minFloorArea) {
     query += ` AND CASE WHEN p.floor_size ~ '^\\d+(\\.\\d+)?$' THEN p.floor_size::NUMERIC ELSE NULL END >= $${paramIndex}`;
     params.push(parseFloat(minFloorArea));
+    paramIndex++;
+  }
+
+  if (minLandArea) {
+    query += ` AND COALESCE(p.land_area_numeric, NULLIF(p.land_area, '-')::NUMERIC) >= $${paramIndex}`;
+    params.push(parseFloat(minLandArea));
+    paramIndex++;
+  }
+
+  if (maxLandArea) {
+    query += ` AND COALESCE(p.land_area_numeric, NULLIF(p.land_area, '-')::NUMERIC) <= $${paramIndex}`;
+    params.push(parseFloat(maxLandArea));
     paramIndex++;
   }
 

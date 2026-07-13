@@ -958,60 +958,88 @@ describe('Properties Page - Extended Advanced Filters', () => {
     cleanup();
   });
 
-  it('shows extended filters when + More Filter Criteria is clicked', async () => {
+  it('shows RV, Floor Area, Market Premium in permanent panel by default', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    expect(screen.queryByText('Min RV ($)')).toBeNull();
-    expect(screen.queryByText('Max RV ($)')).toBeNull();
-    expect(screen.queryByText('Min Floor Area (m²)')).toBeNull();
-    expect(screen.queryByText('Market Premium')).toBeNull();
+    expect(screen.getByText('Min RV ($)')).toBeDefined();
+    expect(screen.getByText('Max RV ($)')).toBeDefined();
+    expect(screen.getByText('Market Premium')).toBeDefined();
+  });
 
-    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+  it('hides advanced panel (Max Beds, Baths, Car Spaces, Region) by default', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.queryByText('Max Bedrooms')).toBeNull();
+    expect(screen.queryByText('Min Bathrooms')).toBeNull();
+    expect(screen.queryByText('Max Bathrooms')).toBeNull();
+    expect(screen.queryByText('Max Car Spaces')).toBeNull();
+  });
+
+  it('shows hidden filters when + More is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More'));
 
     await waitFor(() => {
-      expect(screen.getByText('Min RV ($)')).toBeDefined();
-      expect(screen.getByText('Max RV ($)')).toBeDefined();
-      expect(screen.getByText('Min Floor Area (m²)')).toBeDefined();
-      expect(screen.getByText('Market Premium')).toBeDefined();
+      expect(screen.getByText('Max Bedrooms')).toBeDefined();
+      expect(screen.getByText('Min Bathrooms')).toBeDefined();
+      expect(screen.getByText('Max Bathrooms')).toBeDefined();
+      expect(screen.getByText('Min Car Spaces')).toBeDefined();
+      expect(screen.getByText('Max Car Spaces')).toBeDefined();
     });
   });
 
-  it('hides extended filters when Hide is clicked', async () => {
+  it('hides advanced panel when Hide is clicked', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+    fireEvent.click(screen.getByText('+ More'));
     await waitFor(() => {
-      expect(screen.getByText('Min RV ($)')).toBeDefined();
+      expect(screen.getByText('Max Bedrooms')).toBeDefined();
     });
 
     fireEvent.click(screen.getByText('− Hide'));
     await waitFor(() => {
-      expect(screen.queryByText('Min RV ($)')).toBeNull();
+      expect(screen.queryByText('Max Bedrooms')).toBeNull();
     });
   });
 
-  it('renders RV min/max inputs', async () => {
+  it('renders Region/City/Suburb selects inside the advanced panel', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+    fireEvent.click(screen.getByText('+ More'));
 
     await waitFor(() => {
-      expect(screen.getByText('Min RV ($)')).toBeDefined();
-      expect(screen.getByText('Max RV ($)')).toBeDefined();
+      expect(screen.getByText('Region')).toBeDefined();
+      expect(screen.getByText('City / District')).toBeDefined();
+      expect(screen.getByText('Suburb')).toBeDefined();
     });
   });
 
-  it('renders Market Premium dropdown with options', async () => {
+  it('renders Core Metrics row with Min Beds, RV, Floor, Land, Premium', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+    expect(screen.getByText('Min Beds')).toBeDefined();
+    expect(screen.getByText('Min RV ($)')).toBeDefined();
+    expect(screen.getByText('Max RV ($)')).toBeDefined();
+    expect(screen.getByText('Min Floor (m²)')).toBeDefined();
+    expect(screen.getByText('Min Land (m²)')).toBeDefined();
+    expect(screen.getByText('Market Premium')).toBeDefined();
+  });
+
+  it('shows Max Land (m²) inside the advanced panel', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More'));
 
     await waitFor(() => {
-      expect(screen.getByText('Market Premium')).toBeDefined();
+      expect(screen.getByText('Max Land (m²)')).toBeDefined();
     });
   });
 });
