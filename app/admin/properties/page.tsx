@@ -897,6 +897,15 @@ export default function PropertiesPage() {
   }, [isClassic, hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData]);
 
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
+  const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'];
+  const sortedSuburbs = [...currentCitySuburbs].sort((a, b) => {
+    const ai = SUBURB_ORDER.indexOf(a);
+    const bi = SUBURB_ORDER.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   const handleRegionChange = (region: string) => {
     const cities = REGION_CITIES[region as keyof typeof REGION_CITIES] || [];
@@ -1159,7 +1168,7 @@ export default function PropertiesPage() {
             gap: "10px",
             alignItems: "center"
           }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany'].map((suburb) => (
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
               <button
                 key={suburb}
                 onClick={() => {
@@ -1815,7 +1824,7 @@ export default function PropertiesPage() {
                   }}
                 >
                   <option value="">All suburbs</option>
-                  {currentCitySuburbs.map((suburb) => (
+                  {sortedSuburbs.map((suburb) => (
                     <option key={suburb} value={suburb}>
                       {suburb}
                     </option>

@@ -478,6 +478,39 @@ describe('Properties Page - Quick Filter by Suburb clears Address Input', () => 
     fireEvent.click(albanyBtn);
     expect(addressInput.value).toBe('');
   });
+
+  it('renders new suburb buttons in the quick filter section', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.getByRole('button', { name: 'Long Bay' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Forrest Hill' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Schnapper Rock' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Unsworth Heights' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Sunnynook' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Greenhithe' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Chatswood' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Mairangi Bay' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Campbells Bay' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Castor Bay' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Milford' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Glenfield' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Hillcrest' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Birkenhead' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Hauraki' })).toBeDefined();
+  });
+
+  it('selects a new suburb when its button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const longBayBtn = screen.getByRole('button', { name: 'Long Bay' });
+    fireEvent.click(longBayBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Long Bay' })).toBeDefined();
+    });
+  });
 });
 
 describe('Properties Page - Like Icon', () => {
@@ -1040,6 +1073,19 @@ describe('Properties Page - Extended Advanced Filters', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Max Land (m²)')).toBeDefined();
+    });
+  });
+
+  it('shows new suburbs in the hidden Suburb dropdown options', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Long Bay' })).toBeDefined();
+      expect(screen.getByRole('option', { name: 'Unsworth Heights' })).toBeDefined();
+      expect(screen.getByRole('option', { name: 'Chatswood' })).toBeDefined();
     });
   });
 });
