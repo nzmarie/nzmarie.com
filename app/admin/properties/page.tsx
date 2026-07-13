@@ -67,12 +67,18 @@ interface Filters {
   suburb: string;
   last_sold_min_years: string;
   last_sold_max_years: string;
+  build_year_min: string;
+  build_year_max: string;
   min_bedrooms: string;
   max_bedrooms: string;
   min_bathrooms: string;
   max_bathrooms: string;
   min_car_spaces: string;
   max_car_spaces: string;
+  rv_min: string;
+  rv_max: string;
+  min_floor_area: string;
+  market_premium: string;
   search: string;
 }
 
@@ -479,18 +485,13 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
               <FaRulerCombined style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
-              <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
-                {(() => {
-                  // 优先显示 floor_area（室内面积），如果没有则显示 land_area（土地面积）
-                  const area = property.floor_area || property.land_area;
-                  if (area && area !== "0" && area !== 0 && area !== "-") {
-                    return area;
-                  }
-                  return "-";
-                })()}
-              </span>
             </div>
-            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>m²</div>
+            <div style={{ fontWeight: "600", color: "#2D3748", fontSize: "0.9rem", lineHeight: "1.3" }}>
+              F: {property.floor_area && property.floor_area !== "-" ? property.floor_area : "-"} m²
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "#718096", fontWeight: "500", lineHeight: "1.3" }}>
+              L: {property.land_area && property.land_area !== "-" && property.land_area !== 0 ? property.land_area : "-"} m²
+            </div>
           </div>
         </div>
 
@@ -538,12 +539,18 @@ export default function PropertiesPage() {
     suburb: "",
     last_sold_min_years: "5",
     last_sold_max_years: "10",
+    build_year_min: "",
+    build_year_max: "",
     min_bedrooms: "",
     max_bedrooms: "",
     min_bathrooms: "",
     max_bathrooms: "",
     min_car_spaces: "",
     max_car_spaces: "",
+    rv_min: "",
+    rv_max: "",
+    min_floor_area: "",
+    market_premium: "",
     search: "",
   });
   const [addressInput, setAddressInput] = useState("");
@@ -551,6 +558,7 @@ export default function PropertiesPage() {
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
+  const [buildYearPreset, setBuildYearPreset] = useState('all');
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -664,6 +672,37 @@ export default function PropertiesPage() {
         mapped = mapped.filter(p => p.garages !== null && p.garages <= max);
       }
 
+      if (filters.build_year_min) {
+        const min = parseInt(filters.build_year_min);
+        mapped = mapped.filter(p => p.build_year !== null && p.build_year >= min);
+      }
+      if (filters.build_year_max) {
+        const max = parseInt(filters.build_year_max);
+        mapped = mapped.filter(p => p.build_year !== null && p.build_year <= max);
+      }
+      if (filters.rv_min) {
+        const min = parseInt(filters.rv_min);
+        mapped = mapped.filter(p => p.rv !== null && p.rv >= min);
+      }
+      if (filters.rv_max) {
+        const max = parseInt(filters.rv_max);
+        mapped = mapped.filter(p => p.rv !== null && p.rv <= max);
+      }
+      if (filters.min_floor_area) {
+        const min = parseFloat(filters.min_floor_area);
+        mapped = mapped.filter(p => {
+          const fa = p.floor_area ? parseFloat(p.floor_area) : null;
+          return fa !== null && !isNaN(fa) && fa >= min;
+        });
+      }
+      if (filters.market_premium) {
+        const threshold = parseFloat(filters.market_premium) / 100.0;
+        mapped = mapped.filter(p => {
+          if (!p.last_sold_price || !p.rv || p.rv <= 0) return false;
+          return (p.last_sold_price / p.rv) > threshold;
+        });
+      }
+
       return { properties: mapped, total: result.pagination.total };
     }
 
@@ -690,6 +729,12 @@ export default function PropertiesPage() {
     if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
     if (filters.min_car_spaces) params.append("min_car_spaces", filters.min_car_spaces);
     if (filters.max_car_spaces) params.append("max_car_spaces", filters.max_car_spaces);
+    if (filters.build_year_min) params.append("build_year_min", filters.build_year_min);
+    if (filters.build_year_max) params.append("build_year_max", filters.build_year_max);
+    if (filters.rv_min) params.append("rv_min", filters.rv_min);
+    if (filters.rv_max) params.append("rv_max", filters.rv_max);
+    if (filters.min_floor_area) params.append("min_floor_area", filters.min_floor_area);
+    if (filters.market_premium) params.append("market_premium", filters.market_premium);
     if (propertyFilter === 'house') params.append("standalone_only", "true");
     if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
 
@@ -713,7 +758,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, showLikedOnly],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -733,7 +778,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, showLikedOnly, currentPage],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated",
@@ -880,22 +925,51 @@ export default function PropertiesPage() {
     }
   };
 
+  const handleBuildYearPreset = (preset: string) => {
+    setBuildYearPreset(preset);
+    const currentYear = new Date().getFullYear();
+    switch (preset) {
+      case '<5':
+        setFilters((prev) => ({ ...prev, build_year_min: (currentYear - 5 + 1).toString(), build_year_max: '' }));
+        break;
+      case '5-10':
+        setFilters((prev) => ({ ...prev, build_year_min: (currentYear - 10).toString(), build_year_max: (currentYear - 5).toString() }));
+        break;
+      case '10-20':
+        setFilters((prev) => ({ ...prev, build_year_min: (currentYear - 20).toString(), build_year_max: (currentYear - 10 - 1).toString() }));
+        break;
+      case '20+':
+        setFilters((prev) => ({ ...prev, build_year_min: '', build_year_max: (currentYear - 20 - 1).toString() }));
+        break;
+      case 'all':
+        setFilters((prev) => ({ ...prev, build_year_min: '', build_year_max: '' }));
+        break;
+    }
+  };
+
   const handleClearFilters = () => {
     setAddressInput("");
     setShowLikedOnly(false);
     setLastSoldPreset('5-10');
+    setBuildYearPreset('all');
     setFilters({
       region: "Auckland",
       city: "North Shore City",
       suburb: "",
       last_sold_min_years: "5",
       last_sold_max_years: "10",
+      build_year_min: "",
+      build_year_max: "",
       min_bedrooms: "",
       max_bedrooms: "",
       min_bathrooms: "",
       max_bathrooms: "",
       min_car_spaces: "",
       max_car_spaces: "",
+      rv_min: "",
+      rv_max: "",
+      min_floor_area: "",
+      market_premium: "",
       search: "",
     });
   };
@@ -1304,6 +1378,46 @@ export default function PropertiesPage() {
           </div>
         </div>
 
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Built Year
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            {(['all', '<5', '5-10', '10-20', '20+'] as const).map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleBuildYearPreset(preset)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: buildYearPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
+                  color: buildYearPreset === preset ? 'white' : '#4a5568',
+                  border: buildYearPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: buildYearPreset === preset ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: buildYearPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (buildYearPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (buildYearPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {preset === 'all' ? 'All' : preset === '<5' ? '< 5 years' : preset === '5-10' ? '★ 5-10 years' : preset === '10-20' ? '10-20 years' : '20+ years'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end", marginBottom: "16px" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
@@ -1441,6 +1555,96 @@ export default function PropertiesPage() {
                     boxSizing: "border-box",
                   }}
                 />
+              </div>
+              <div style={{ width: "100%", height: "1px", backgroundColor: "#e2e8f0", margin: "4px 0" }} />
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Min RV ($)
+                </label>
+                <input
+                  type="number"
+                  value={filters.rv_min}
+                  onChange={(e) => handleFilterChange("rv_min", e.target.value)}
+                  min="0"
+                  placeholder="0"
+                  style={{
+                    width: "110px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Max RV ($)
+                </label>
+                <input
+                  type="number"
+                  value={filters.rv_max}
+                  onChange={(e) => handleFilterChange("rv_max", e.target.value)}
+                  min="0"
+                  placeholder="No Max"
+                  style={{
+                    width: "110px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Min Floor Area (m²)
+                </label>
+                <input
+                  type="number"
+                  value={filters.min_floor_area}
+                  onChange={(e) => handleFilterChange("min_floor_area", e.target.value)}
+                  min="0"
+                  placeholder="0"
+                  style={{
+                    width: "110px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: "#2D3748",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
+                  Market Premium
+                </label>
+                <select
+                  value={filters.market_premium}
+                  onChange={(e) => handleFilterChange("market_premium", e.target.value)}
+                  style={{
+                    width: "120px",
+                    padding: "8px 14px",
+                    border: "2px solid #e2e8f0",
+                    borderRadius: "10px",
+                    fontSize: "0.95rem",
+                    backgroundColor: "white",
+                    color: filters.market_premium ? "#2D3748" : "#9ca3af",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="">Any</option>
+                  <option value="100">Sale &gt; RV (&gt;100%)</option>
+                  <option value="110">Sale &gt; 110% of RV</option>
+                </select>
               </div>
             </>
           )}

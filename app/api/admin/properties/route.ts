@@ -16,12 +16,18 @@ export async function GET(request: Request) {
   const lastSoldMinYears = searchParams.get('last_sold_min_years');
   const lastSoldMaxYears = searchParams.get('last_sold_max_years');
   const lastSoldNone = searchParams.get('last_sold_none');
+  const buildYearMin = searchParams.get('build_year_min');
+  const buildYearMax = searchParams.get('build_year_max');
   const minBedrooms = searchParams.get('min_bedrooms');
   const maxBedrooms = searchParams.get('max_bedrooms');
   const minBathrooms = searchParams.get('min_bathrooms');
   const maxBathrooms = searchParams.get('max_bathrooms');
   const minCarSpaces = searchParams.get('min_car_spaces');
   const maxCarSpaces = searchParams.get('max_car_spaces');
+  const rvMin = searchParams.get('rv_min');
+  const rvMax = searchParams.get('rv_max');
+  const minFloorArea = searchParams.get('min_floor_area');
+  const marketPremium = searchParams.get('market_premium');
   const city = searchParams.get('city');
   const region = searchParams.get('region');
   const search = searchParams.get('search');
@@ -179,6 +185,43 @@ export async function GET(request: Request) {
   if (maxCarSpaces) {
     query += ` AND p.car_spaces <= $${paramIndex}`;
     params.push(parseInt(maxCarSpaces));
+    paramIndex++;
+  }
+
+  if (buildYearMin) {
+    query += ` AND p.year_built >= $${paramIndex}`;
+    params.push(parseInt(buildYearMin));
+    paramIndex++;
+  }
+
+  if (buildYearMax) {
+    query += ` AND p.year_built <= $${paramIndex}`;
+    params.push(parseInt(buildYearMax));
+    paramIndex++;
+  }
+
+  if (rvMin) {
+    query += ` AND p.capital_value >= $${paramIndex}`;
+    params.push(parseInt(rvMin));
+    paramIndex++;
+  }
+
+  if (rvMax) {
+    query += ` AND p.capital_value <= $${paramIndex}`;
+    params.push(parseInt(rvMax));
+    paramIndex++;
+  }
+
+  if (minFloorArea) {
+    query += ` AND CASE WHEN p.floor_size ~ '^\\d+(\\.\\d+)?$' THEN p.floor_size::NUMERIC ELSE NULL END >= $${paramIndex}`;
+    params.push(parseFloat(minFloorArea));
+    paramIndex++;
+  }
+
+  if (marketPremium) {
+    const premiumVal = parseFloat(marketPremium) / 100.0;
+    query += ` AND p.last_sold_price IS NOT NULL AND p.capital_value IS NOT NULL AND p.capital_value > 0 AND (p.last_sold_price * 1.0 / p.capital_value) > $${paramIndex}`;
+    params.push(premiumVal);
     paramIndex++;
   }
 

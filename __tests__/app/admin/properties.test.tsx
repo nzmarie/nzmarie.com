@@ -852,3 +852,166 @@ describe('Properties Page - Dual Pagination Mode', () => {
     });
   });
 });
+
+describe('Properties Page - Built Year Filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ liked_ids: [] }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders built year filter buttons', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const allBtns = screen.getAllByText('All');
+    expect(allBtns.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('< 5 years')).toBeDefined();
+    expect(screen.getByText('★ 5-10 years')).toBeDefined();
+    expect(screen.getByText('10-20 years')).toBeDefined();
+    expect(screen.getByText('20+ years')).toBeDefined();
+  });
+
+  it('switches built year preset buttons when clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('< 5 years'));
+    fireEvent.click(screen.getByText('★ 5-10 years'));
+    fireEvent.click(screen.getByText('10-20 years'));
+    fireEvent.click(screen.getByText('20+ years'));
+  });
+
+  it('selects < 5 years preset and verifies button exists', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const btn = screen.getByText('< 5 years');
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(screen.getByText('< 5 years')).toBeDefined();
+    });
+  });
+});
+
+describe('Properties Page - Stacked Property Metrics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ liked_ids: [] }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('displays floor size as F: value m²', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('F: 220 m²')).toBeDefined();
+    });
+  });
+
+  it('displays land size as L: value m²', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('L: 801 m²')).toBeDefined();
+    });
+  });
+
+  it('shows stacked layout with both F and L values', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      const fText = screen.getByText('F: 220 m²');
+      const lText = screen.getByText('L: 801 m²');
+      expect(fText).toBeDefined();
+      expect(lText).toBeDefined();
+    });
+  });
+});
+
+describe('Properties Page - Extended Advanced Filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ liked_ids: [] }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows extended filters when + More Filter Criteria is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.queryByText('Min RV ($)')).toBeNull();
+    expect(screen.queryByText('Max RV ($)')).toBeNull();
+    expect(screen.queryByText('Min Floor Area (m²)')).toBeNull();
+    expect(screen.queryByText('Market Premium')).toBeNull();
+
+    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Min RV ($)')).toBeDefined();
+      expect(screen.getByText('Max RV ($)')).toBeDefined();
+      expect(screen.getByText('Min Floor Area (m²)')).toBeDefined();
+      expect(screen.getByText('Market Premium')).toBeDefined();
+    });
+  });
+
+  it('hides extended filters when Hide is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+    await waitFor(() => {
+      expect(screen.getByText('Min RV ($)')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('− Hide'));
+    await waitFor(() => {
+      expect(screen.queryByText('Min RV ($)')).toBeNull();
+    });
+  });
+
+  it('renders RV min/max inputs', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Min RV ($)')).toBeDefined();
+      expect(screen.getByText('Max RV ($)')).toBeDefined();
+    });
+  });
+
+  it('renders Market Premium dropdown with options', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('+ More Filter Criteria'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Market Premium')).toBeDefined();
+    });
+  });
+});
