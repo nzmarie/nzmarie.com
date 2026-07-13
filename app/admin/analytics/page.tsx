@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { SkeletonAnalytics } from '@/components/admin/Skeleton';
 import MarketTrendsChart from '@/components/admin/MarketTrendsChart';
 import ExcelUploadForm from '@/components/admin/ExcelUploadForm';
+import MonthlyDataTable from '@/components/admin/MonthlyDataTable';
 import { isSuperAdmin } from '@/lib/permissions';
 import type { MonthlyDataPoint } from '@/lib/market-data-aggregator';
 const CARD_BADGE_STYLES = {
@@ -63,6 +64,8 @@ export default function AnalyticsPage() {
   const [chartNeedsMigration, setChartNeedsMigration] = useState(false);
   const [availableSuburbs, setAvailableSuburbs] = useState<string[]>(FALLBACK_SUBURBS);
   const [showDistrict, setShowDistrict] = useState(true);
+  const [activeFocusSuburb, setActiveFocusSuburb] = useState<string>('Oteha');
+  const [tableDataMode, setTableDataMode] = useState<DataMode>('monthly');
 
   const chartReqIdRef = React.useRef(0);
 
@@ -82,6 +85,14 @@ export default function AnalyticsPage() {
       // fallback stays
     }
   }, []);
+
+  useEffect(() => {
+    if (availableSuburbs.length > 0) {
+      setActiveFocusSuburb(prev =>
+        prev !== 'North Shore City' && !availableSuburbs.includes(prev) ? availableSuburbs[0] : prev
+      );
+    }
+  }, [availableSuburbs]);
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && !isSuperAdmin(session.user.email)) {
@@ -153,7 +164,20 @@ export default function AnalyticsPage() {
     setSelectedSuburbs(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
     );
+    setActiveFocusSuburb(s);
   };
+
+  useEffect(() => {
+    setActiveFocusSuburb(prev => {
+      if (selectedSuburbs.length > 0 && !selectedSuburbs.includes(prev)) {
+        return selectedSuburbs[0];
+      }
+      if (selectedSuburbs.length === 0) {
+        return 'North Shore City';
+      }
+      return prev;
+    });
+  }, [selectedSuburbs]);
 
   const runMigration = async () => {
     setMigrationStatus('running');
@@ -434,48 +458,14 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Market Data Table */}
-      {(() => {
-        const activeData = dataMode === 'monthly' ? monthlyData : quarterlyData;
-        return activeData.length > 0 && selectedSuburbs.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{dataMode === 'monthly' ? 'Monthly' : 'Quarterly'} Data</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Period</th>
-                    {selectedSuburbs.map(s => (
-                      <th key={s} className="text-right py-2 px-3 font-medium text-gray-600">{s} Median</th>
-                    ))}
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">North Shore City Median</th>
-                    {selectedSuburbs.map(s => (
-                      <th key={`sales-${s}`} className="text-right py-2 px-3 font-medium text-gray-600">{s} Sales</th>
-                    ))}
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Avg Days</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeData.map((row) => (
-                    <tr key={row.period} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2 px-3 font-medium">{row.period}</td>
-                      {selectedSuburbs.map(s => (
-                        <td key={s} className="text-right py-2 px-3">
-                          {row.suburbs[s]?.median != null ? `$${row.suburbs[s]!.median!.toLocaleString()}` : 'N/A'}
-                        </td>
-                      ))}
-                      <td className="text-right py-2 px-3">{row.cityMedian ? `$${row.cityMedian.toLocaleString()}` : 'N/A'}</td>
-                      {selectedSuburbs.map(s => (
-                        <td key={`sales-${s}`} className="text-right py-2 px-3">{row.suburbs[s]?.sales ?? 0}</td>
-                      ))}
-                      <td className="text-right py-2 px-3">{row.cityDays ?? 'N/A'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })()}
+      <MonthlyDataTable
+        monthlyData={monthlyData}
+        dataMode={tableDataMode}
+        onModeChange={setTableDataMode}
+        activeFocusSuburb={activeFocusSuburb}
+        availableSuburbs={availableSuburbs}
+        onFocusChange={setActiveFocusSuburb}
+      />
 
       {/* Excel Upload Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

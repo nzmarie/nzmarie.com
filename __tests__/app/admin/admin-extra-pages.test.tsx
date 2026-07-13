@@ -61,6 +61,30 @@ describe('Extra admin pages', () => {
           })
         }) as any;
       }
+      if (url.includes('/api/admin/analytics/available-suburbs')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ availableSuburbs: ['Oteha', 'Albany', 'Browns Bay', 'Torbay'] }),
+        }) as any;
+      }
+      if (url.includes('/api/admin/analytics/chart-data')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: {
+              monthlyData: [
+                { period: '2025-01', periodRaw: '2025-01-01', cityMedian: 900000, citySales: 50, cityDays: 35, suburbs: { Oteha: { median: 1000000, sales: 10, days: 30 }, Albany: { median: 950000, sales: 8, days: 28 } } },
+                { period: '2025-02', periodRaw: '2025-02-01', cityMedian: 920000, citySales: 55, cityDays: 33, suburbs: { Oteha: { median: 1100000, sales: 12, days: 28 }, Albany: { median: 960000, sales: 9, days: 26 } } },
+                { period: '2025-03', periodRaw: '2025-03-01', cityMedian: 910000, citySales: 45, cityDays: 34, suburbs: { Oteha: { median: 1050000, sales: 8, days: 32 }, Albany: { median: 940000, sales: 7, days: 30 } } },
+              ],
+              quarterlyData: [
+                { period: '2025-Q1', periodRaw: '2025-Q1', cityMedian: 910000, citySales: 150, cityDays: 34, suburbs: { Oteha: { median: 1050000, sales: 30, days: 30 }, Albany: { median: 950000, sales: 24, days: 28 } } },
+              ],
+            },
+          }),
+        }) as any;
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as any;
     }) as any;
   });
@@ -80,6 +104,23 @@ describe('Extra admin pages', () => {
     render(<AnalyticsPage />);
     expect(await screen.findByText('Analytics')).toBeTruthy();
     expect(screen.getByText('Conversion Rate')).toBeTruthy();
+  });
+
+  it('renders Monthly Data section with suburb buttons', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText('Monthly Data')).toBeTruthy();
+    expect(screen.getAllByText('Oteha').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Albany').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows focus suburb median column header', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText('Oteha Median')).toBeTruthy();
+  });
+
+  it('renders North Shore City button in monthly data section', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText(/North Shore/)).toBeTruthy();
   });
 
   it('renders downloads content for super admins', async () => {
