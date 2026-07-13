@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useInfiniteQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   FaBed,
   FaBath,
@@ -551,6 +551,8 @@ export default function PropertiesPage() {
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
+  const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -568,8 +570,141 @@ export default function PropertiesPage() {
     return () => clearTimeout(timer);
   }, [addressInput]);
 
+  const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
+    if (showLikedOnly) {
+      const params = new URLSearchParams({
+        status: 'liked',
+        page: pageNum.toString(),
+        limit: '18',
+      });
+      if (filters.suburb) params.append('suburb', filters.suburb);
+      if (filters.city) params.append('city', filters.city);
+      if (filters.region) params.append('region', filters.region);
+      if (filters.search) params.append('search', filters.search);
+
+      const response = await fetch(`/api/admin/outreach?${params}`);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to fetch liked properties');
+
+      let mapped: Property[] = result.data.map((item: Record<string, unknown>) => ({
+        id: (item.joined_property_id as string) || ((item.property_id as string) ? (item.property_id as string).replace(/-/g, '') : (item.id as string)),
+        address: item.property_address || '',
+        suburb: item.suburb || '',
+        city: item.city || '',
+        region: item.region || '',
+        bedrooms: item.bedrooms ?? null,
+        bathrooms: item.bathrooms ?? null,
+        garages: item.car_spaces ?? null,
+        rv: item.capital_value ?? null,
+        last_sold_price: item.last_sold_price ?? null,
+        last_sold_date: item.last_sold_date ?? null,
+        build_year: item.build_year ?? null,
+        land_area: item.land_area ?? null,
+        floor_area: item.floor_area ?? null,
+        image_url: item.image_url || '',
+        property_url: item.property_url || '',
+        realestate_url: item.realestate_url || null,
+        description: item.description || null,
+        property_type: item.property_type || null,
+      }));
+
+      if (propertyFilter === 'house') {
+        mapped = mapped.filter(p => {
+          if (!p.property_type) return true;
+          const t = p.property_type.toLowerCase();
+          return !['townhouse', 'unit', 'apartment'].includes(t);
+        });
+      } else if (propertyFilter === 'townhouse') {
+        mapped = mapped.filter(p => {
+          if (!p.property_type) return false;
+          const t = p.property_type.toLowerCase();
+          return ['townhouse', 'unit'].includes(t);
+        });
+      }
+
+      if (lastSoldPreset === 'none') {
+        mapped = mapped.filter(p => !p.last_sold_date);
+      } else {
+        const minYears = filters.last_sold_min_years ? parseInt(filters.last_sold_min_years) : 0;
+        const maxYears = filters.last_sold_max_years ? parseInt(filters.last_sold_max_years) : 999;
+        if (minYears > 0 || maxYears < 999) {
+          const now = new Date();
+          mapped = mapped.filter(p => {
+            if (!p.last_sold_date) return false;
+            const sold = new Date(p.last_sold_date);
+            if (isNaN(sold.getTime())) return false;
+            const years = (now.getTime() - sold.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+            return years >= minYears && years <= maxYears;
+          });
+        }
+      }
+
+      if (filters.min_bedrooms) {
+        const min = parseInt(filters.min_bedrooms);
+        mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms >= min);
+      }
+      if (filters.max_bedrooms) {
+        const max = parseInt(filters.max_bedrooms);
+        mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms <= max);
+      }
+      if (filters.min_bathrooms) {
+        const min = parseInt(filters.min_bathrooms);
+        mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms >= min);
+      }
+      if (filters.max_bathrooms) {
+        const max = parseInt(filters.max_bathrooms);
+        mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms <= max);
+      }
+      if (filters.min_car_spaces) {
+        const min = parseInt(filters.min_car_spaces);
+        mapped = mapped.filter(p => p.garages !== null && p.garages >= min);
+      }
+      if (filters.max_car_spaces) {
+        const max = parseInt(filters.max_car_spaces);
+        mapped = mapped.filter(p => p.garages !== null && p.garages <= max);
+      }
+
+      return { properties: mapped, total: result.pagination.total };
+    }
+
+    const params = new URLSearchParams({
+      page: pageNum.toString(),
+      limit: "18",
+    });
+
+    if (filters.suburb) {
+      params.append("suburb", filters.suburb);
+    }
+    if (filters.city) params.append("city", filters.city);
+    if (filters.region) params.append("region", filters.region);
+    if (filters.search) params.append("search", filters.search);
+    if (lastSoldPreset === 'none') {
+      params.append("last_sold_none", "true");
+    } else {
+      if (filters.last_sold_min_years) params.append("last_sold_min_years", filters.last_sold_min_years);
+      if (filters.last_sold_max_years) params.append("last_sold_max_years", filters.last_sold_max_years);
+    }
+    if (filters.min_bedrooms) params.append("min_bedrooms", filters.min_bedrooms);
+    if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
+    if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
+    if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
+    if (filters.min_car_spaces) params.append("min_car_spaces", filters.min_car_spaces);
+    if (filters.max_car_spaces) params.append("max_car_spaces", filters.max_car_spaces);
+    if (propertyFilter === 'house') params.append("standalone_only", "true");
+    if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
+
+    const response = await fetch(`/api/admin/properties?${params}`);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to fetch properties");
+    }
+
+    return { properties: result.properties, total: result.pagination.total };
+  };
+
   const {
-    data,
+    data: infiniteData,
     isFetchingNextPage,
     isLoading,
     isFetching,
@@ -578,142 +713,9 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, showLikedOnly],
     initialPageParam: 1,
-    queryFn: async ({ pageParam }) => {
-      const pageNum = (pageParam as number) || 1;
-
-      if (showLikedOnly) {
-        const params = new URLSearchParams({
-          status: 'liked',
-          page: pageNum.toString(),
-          limit: '18',
-        });
-        if (filters.suburb) params.append('suburb', filters.suburb);
-        if (filters.city) params.append('city', filters.city);
-        if (filters.region) params.append('region', filters.region);
-        if (filters.search) params.append('search', filters.search);
-
-        const response = await fetch(`/api/admin/outreach?${params}`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error || 'Failed to fetch liked properties');
-
-        let mapped: Property[] = result.data.map((item: Record<string, unknown>) => ({
-          id: (item.joined_property_id as string) || ((item.property_id as string) ? (item.property_id as string).replace(/-/g, '') : (item.id as string)),
-          address: item.property_address || '',
-          suburb: item.suburb || '',
-          city: item.city || '',
-          region: item.region || '',
-          bedrooms: item.bedrooms ?? null,
-          bathrooms: item.bathrooms ?? null,
-          garages: item.car_spaces ?? null,
-          rv: item.capital_value ?? null,
-          last_sold_price: item.last_sold_price ?? null,
-          last_sold_date: item.last_sold_date ?? null,
-          build_year: item.build_year ?? null,
-          land_area: item.land_area ?? null,
-          floor_area: item.floor_area ?? null,
-          image_url: item.image_url || '',
-          property_url: item.property_url || '',
-          realestate_url: item.realestate_url || null,
-          description: item.description || null,
-          property_type: item.property_type || null,
-        }));
-
-        if (propertyFilter === 'house') {
-          mapped = mapped.filter(p => {
-            if (!p.property_type) return true;
-            const t = p.property_type.toLowerCase();
-            return !['townhouse', 'unit', 'apartment'].includes(t);
-          });
-        } else if (propertyFilter === 'townhouse') {
-          mapped = mapped.filter(p => {
-            if (!p.property_type) return false;
-            const t = p.property_type.toLowerCase();
-            return ['townhouse', 'unit'].includes(t);
-          });
-        }
-
-        if (lastSoldPreset === 'none') {
-          mapped = mapped.filter(p => !p.last_sold_date);
-        } else {
-          const minYears = filters.last_sold_min_years ? parseInt(filters.last_sold_min_years) : 0;
-          const maxYears = filters.last_sold_max_years ? parseInt(filters.last_sold_max_years) : 999;
-          if (minYears > 0 || maxYears < 999) {
-            const now = new Date();
-            mapped = mapped.filter(p => {
-              if (!p.last_sold_date) return false;
-              const sold = new Date(p.last_sold_date);
-              if (isNaN(sold.getTime())) return false;
-              const years = (now.getTime() - sold.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-              return years >= minYears && years <= maxYears;
-            });
-          }
-        }
-
-        if (filters.min_bedrooms) {
-          const min = parseInt(filters.min_bedrooms);
-          mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms >= min);
-        }
-        if (filters.max_bedrooms) {
-          const max = parseInt(filters.max_bedrooms);
-          mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms <= max);
-        }
-        if (filters.min_bathrooms) {
-          const min = parseInt(filters.min_bathrooms);
-          mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms >= min);
-        }
-        if (filters.max_bathrooms) {
-          const max = parseInt(filters.max_bathrooms);
-          mapped = mapped.filter(p => p.bathrooms !== null && p.bathrooms <= max);
-        }
-        if (filters.min_car_spaces) {
-          const min = parseInt(filters.min_car_spaces);
-          mapped = mapped.filter(p => p.garages !== null && p.garages >= min);
-        }
-        if (filters.max_car_spaces) {
-          const max = parseInt(filters.max_car_spaces);
-          mapped = mapped.filter(p => p.garages !== null && p.garages <= max);
-        }
-
-        return { properties: mapped, total: result.pagination.total };
-      }
-
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "18",
-      });
-
-      if (filters.suburb) {
-        params.append("suburb", filters.suburb);
-      }
-      if (filters.city) params.append("city", filters.city);
-      if (filters.region) params.append("region", filters.region);
-      if (filters.search) params.append("search", filters.search);
-      if (lastSoldPreset === 'none') {
-        params.append("last_sold_none", "true");
-      } else {
-        if (filters.last_sold_min_years) params.append("last_sold_min_years", filters.last_sold_min_years);
-        if (filters.last_sold_max_years) params.append("last_sold_max_years", filters.last_sold_max_years);
-      }
-      if (filters.min_bedrooms) params.append("min_bedrooms", filters.min_bedrooms);
-      if (filters.max_bedrooms) params.append("max_bedrooms", filters.max_bedrooms);
-      if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
-      if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
-      if (filters.min_car_spaces) params.append("min_car_spaces", filters.min_car_spaces);
-      if (filters.max_car_spaces) params.append("max_car_spaces", filters.max_car_spaces);
-      if (propertyFilter === 'house') params.append("standalone_only", "true");
-      if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
-
-      const response = await fetch(`/api/admin/properties?${params}`);
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch properties");
-      }
-
-      return { properties: result.properties, total: result.pagination.total };
-    },
+    queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage && lastPage.properties.length === 18) {
         return allPages.length + 1;
@@ -721,20 +723,41 @@ export default function PropertiesPage() {
       return undefined;
     },
     placeholderData: keepPreviousData,
-    enabled: status === "authenticated",
+    enabled: paginationMode === 'infinite' && status === "authenticated",
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const propertiesData = data as { pages: { properties: Property[]; total: number }[] } | undefined;
-  const properties: Property[] = propertiesData
-    ? propertiesData.pages.flatMap((page) => page.properties)
-    : [];
-  const totalProperties = propertiesData?.pages[0]?.total || 0;
+  const {
+    data: classicData,
+    isLoading: classicLoading,
+    isFetching: classicFetching,
+  } = useQuery<{ properties: Property[]; total: number }, Error>({
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, showLikedOnly, currentPage],
+    queryFn: async () => fetchPageData(currentPage),
+    placeholderData: keepPreviousData,
+    enabled: paginationMode === 'classic' && status === "authenticated",
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const [likedPropertyIds, setLikedPropertyIds] = useState<Set<string>>(new Set());
-
+  const isClassic = paginationMode === 'classic';
+  const propertiesData = infiniteData as { pages: { properties: Property[]; total: number }[] } | undefined;
+  const allInfiniteProperties: Property[] = propertiesData ? propertiesData.pages.flatMap((page) => page.properties) : [];
+  const properties: Property[] = isClassic ? (classicData?.properties ?? []) : allInfiniteProperties;
   const displayProperties = properties;
+  const [likedPropertyIds, setLikedPropertyIds] = useState<Set<string>>(new Set());
+  const totalProperties = isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total || 0);
+  const totalPages = Math.max(1, Math.ceil(totalProperties / 18));
+
+  useEffect(() => {
+    if (isClassic) return;
+    if (!propertiesData) return;
+    setCurrentPage(propertiesData.pages.length);
+  }, [isClassic, propertiesData]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, propertyFilter, lastSoldPreset, showLikedOnly]);
 
   const propertyIds = !showLikedOnly ? properties.map(p => p.id).filter(Boolean).join(',') : '';
 
@@ -790,6 +813,7 @@ export default function PropertiesPage() {
   };
 
   useEffect(() => {
+    if (isClassic) return;
     const currentElement = lastPropertyElementRef.current;
     if (!currentElement) return;
 
@@ -805,7 +829,7 @@ export default function PropertiesPage() {
     return () => {
       observer.disconnect();
     };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData]);
+  }, [isClassic, hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData]);
 
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
 
@@ -938,20 +962,8 @@ export default function PropertiesPage() {
       if (!result.success) {
         throw new Error(result.error || 'Failed to update property');
       }
-      const updatedProperty = result.property;
-      if (updatedProperty) {
-        queryClient.setQueryData(["admin-properties", filters, propertyFilter, lastSoldPreset, showLikedOnly], (oldData: { pages: { properties: Property[] }[] } | undefined) => {
-          if (!oldData) return oldData;
-          return {
-            ...oldData,
-            pages: oldData.pages.map((page: { properties: Property[] }) => ({
-              ...page,
-              properties: page.properties.map((p: Property) =>
-                p.id === updatedProperty.id ? updatedProperty : p
-              ),
-            })),
-          };
-        });
+      if (result.property) {
+        queryClient.invalidateQueries({ queryKey: ["admin-properties"] });
       }
       showNotification('success', 'Property updated successfully');
       setEditingProperty(null);
@@ -1013,7 +1025,7 @@ export default function PropertiesPage() {
             Search Filters
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            Displaying {displayProperties.length} of {totalProperties} properties • Scroll to load more
+            Displaying {displayProperties.length} of {totalProperties} properties
           </p>
         </div>
         
@@ -1534,25 +1546,148 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "12px" }}>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              onClick={handleClearFilters}
+              style={{
+                padding: "12px 24px",
+                backgroundColor: "#e2e8f0",
+                color: "#4a5568",
+                borderRadius: "10px",
+                border: "none",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "0.95rem",
+                transition: "all 0.2s",
+              }}
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+        <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
+          {isClassic
+            ? `Displaying ${Math.max(1, (currentPage - 1) * 18 + 1)} to ${Math.min(currentPage * 18, totalProperties)} of ${totalProperties} properties`
+            : `Displaying 1 to ${displayProperties.length} of ${totalProperties} properties`}
+        </span>
+        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
           <button
-            onClick={handleClearFilters}
+            onClick={() => setPaginationMode('infinite')}
             style={{
-              padding: "12px 24px",
-              backgroundColor: "#e2e8f0",
-              color: "#4a5568",
-              borderRadius: "10px",
-              border: "none",
+              padding: "8px 18px",
+              backgroundColor: !isClassic ? '#3b82f6' : 'white',
+              color: !isClassic ? 'white' : '#4a5568',
+              border: 'none',
               cursor: "pointer",
+              fontSize: "0.9rem",
               fontWeight: "600",
-              fontSize: "0.95rem",
               transition: "all 0.2s",
             }}
           >
-            Clear All
+            Infinite Scroll
+          </button>
+          <button
+            onClick={() => setPaginationMode('classic')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: isClassic ? '#3b82f6' : 'white',
+              color: isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Classic Pages
           </button>
         </div>
       </div>
+
+      {isClassic && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input
+              type="number"
+              value={currentPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                  setCurrentPage(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                    setCurrentPage(v);
+                  }
+                }
+              }}
+              style={{
+                width: "52px",
+                padding: "4px 6px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                color: "#2D3748",
+                textAlign: "center",
+                outline: "none",
+                MozAppearance: "textfield",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1}
+              max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≫</button>
+        </div>
+      )}
 
       {isError && (
         <div style={{
@@ -1573,13 +1708,13 @@ export default function PropertiesPage() {
         gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
         gap: "30px",
         marginBottom: "32px",
-        opacity: isFetching && !isFetchingNextPage ? 0.6 : 1,
+        opacity: isClassic ? (classicFetching && !isFetchingNextPage ? 0.6 : 1) : (isFetching && !isFetchingNextPage ? 0.6 : 1),
         transition: "opacity 0.2s ease-in-out",
       }}>
         {displayProperties.map((property, index) => {
           const isLast = index === displayProperties.length - 1;
           return (
-            <div key={`${property.id}-${index}`} ref={isLast ? lastPropertyElementRef : null}>
+            <div key={`${property.id}-${index}`} ref={(!isClassic && isLast) ? lastPropertyElementRef : null}>
               <PropertyCard 
                 property={property}
                 isLiked={showLikedOnly || likedPropertyIds.has(property.id)}
@@ -1590,8 +1725,100 @@ export default function PropertiesPage() {
         })}
       </div>
 
-      {/* Loading More Indicator */}
-      {isFetchingNextPage && (
+      {isClassic && displayProperties.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+          <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+            {Math.max(1, (currentPage - 1) * 18 + 1)}–{Math.min(currentPage * 18, totalProperties)} of {totalProperties}
+          </span>
+          <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input
+              type="number"
+              value={currentPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                  setCurrentPage(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                    setCurrentPage(v);
+                  }
+                }
+              }}
+              style={{
+                width: "52px",
+                padding: "4px 6px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                color: "#2D3748",
+                textAlign: "center",
+                outline: "none",
+                MozAppearance: "textfield",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1}
+              max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+            style={{
+              padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px",
+              backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568',
+              cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
+              transition: "all 0.15s", lineHeight: "1",
+            }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≫</button>
+        </div>
+      )}
+
+      {classicFetching && isClassic && (
+        <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>
+          Loading...
+        </div>
+      )}
+
+      {!isClassic && isFetchingNextPage && (
         <div style={{
           textAlign: "center",
           padding: "30px",
@@ -1609,8 +1836,7 @@ export default function PropertiesPage() {
         </div>
       )}
 
-      {/* No More Data Indicator */}
-      {!hasNextPage && displayProperties.length > 0 && !isFetchingNextPage && (
+      {!isClassic && !hasNextPage && displayProperties.length > 0 && !isFetchingNextPage && (
         <div style={{
           textAlign: "center",
           padding: "30px",
@@ -1622,7 +1848,7 @@ export default function PropertiesPage() {
         </div>
       )}
 
-      {!hasNextPage && displayProperties.length > 0 && (
+      {!isClassic && !hasNextPage && displayProperties.length > 0 && (
         <div style={{
           textAlign: "center",
           padding: "30px",
@@ -1634,7 +1860,7 @@ export default function PropertiesPage() {
       )}
 
       {/* Empty State */}
-      {displayProperties.length === 0 && !isLoading && (
+      {displayProperties.length === 0 && !isLoading && !classicLoading && (
         <div style={{
           textAlign: "center",
           padding: "80px 30px",

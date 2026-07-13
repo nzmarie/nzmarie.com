@@ -61,20 +61,22 @@ const defaultProperties = [
   }
 ];
 
-const { mockUseInfiniteQuery } = vi.hoisted(() => {
-  const fn = vi.fn(() => ({
+const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
+  const iq = vi.fn(() => ({
     data: { pages: [{ properties: defaultProperties, total: 45 }] },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: vi.fn(),
   }));
-  return { mockUseInfiniteQuery: fn };
+  const uq = vi.fn(() => ({ data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false }));
+  return { mockUseInfiniteQuery: iq, mockUseQuery: uq };
 });
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ setQueryData: mockSetQueryData }),
+  useQueryClient: () => ({ setQueryData: mockSetQueryData, invalidateQueries: vi.fn() }),
   useInfiniteQuery: (...args: unknown[]) => mockUseInfiniteQuery(...args),
+  useQuery: (...args: unknown[]) => mockUseQuery(...args),
   keepPreviousData: vi.fn(),
 }));
 
@@ -645,6 +647,208 @@ describe('Properties Page - Infinite Scroll', () => {
 
     await waitFor(() => {
       expect(fetchNextPage).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('Properties Page - Dual Pagination Mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLikeFetch();
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    intersectionCallback = null;
+    intersectionOptions = null;
+  });
+
+  it('renders segmented control with Infinite Scroll and Classic Pages buttons', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Infinite Scroll')).toBeDefined();
+      expect(screen.getByText('Classic Pages')).toBeDefined();
+    });
+  });
+
+  it('shows counter text showing record range in infinite mode', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Displaying 1 to 2 of 45 properties/)).toBeDefined();
+    });
+  });
+
+  it('switches to classic mode when Classic Pages button is clicked', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Infinite Scroll')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const classicBtns = buttons.filter(b => b.textContent === 'Classic Pages');
+      expect(classicBtns.length).toBeGreaterThanOrEqual(1);
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('renders classic pagination controls (first, prev, page input, next, last) in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const lastBtns = buttons.filter(b => b.textContent === '≫');
+      expect(lastBtns.length).toBeGreaterThanOrEqual(2);
+      const nextBtns = buttons.filter(b => b.textContent === '›');
+      expect(nextBtns.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('disables prev/first buttons on page 1 in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const allButtons = screen.getAllByRole('button');
+      const firstBtns = allButtons.filter(b => b.textContent === '≪');
+      const prevBtns = allButtons.filter(b => b.textContent === '‹');
+      expect(firstBtns.length).toBeGreaterThanOrEqual(2);
+      expect(prevBtns.length).toBeGreaterThanOrEqual(2);
+      firstBtns.forEach(b => expect(b.disabled).toBe(true));
+      prevBtns.forEach(b => expect(b.disabled).toBe(true));
+    });
+  });
+
+  it('displays counter text with correct range in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Displaying 1 to 18 of 45 properties/)).toBeDefined();
+    });
+  });
+
+  it('shows bottom pagination with range info in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getByText('1–18 of 45')).toBeDefined();
+    });
+  });
+
+  it('shows loading text in classic mode when isFetching is true', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: true,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Loading...')).toBeDefined();
+    });
+  });
+
+  it('switches back to infinite mode when Infinite Scroll button is clicked', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button');
+      const prevBtns = buttons.filter(b => b.textContent === '‹');
+      expect(prevBtns.length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getByText('Infinite Scroll'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Displaying 1 to 2 of 45 properties/)).toBeDefined();
+    });
+  });
+
+  it('does not render IntersectionObserver sentinel in classic mode', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(intersectionOptions).toEqual({ threshold: 0, rootMargin: '200px' });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(mockDisconnect).toHaveBeenCalled();
     });
   });
 });
