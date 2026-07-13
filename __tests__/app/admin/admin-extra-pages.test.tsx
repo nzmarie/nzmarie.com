@@ -116,8 +116,8 @@ describe('Extra admin pages', () => {
   it('shows new rich table column headers', async () => {
     render(<AnalyticsPage />);
     expect(await screen.findByText('Analysis Data')).toBeTruthy();
-    expect(screen.getByText('Sub-Market Heat')).toBeTruthy();
-    expect(screen.getByText('Price Gap')).toBeTruthy();
+    expect(screen.getByText('Median Price')).toBeTruthy();
+    expect(screen.getByText('List vs Sold')).toBeTruthy();
   });
 
   it('renders North Shore City button in monthly data section', async () => {

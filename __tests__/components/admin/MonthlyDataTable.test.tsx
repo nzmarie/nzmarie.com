@@ -138,11 +138,17 @@ describe('MonthlyDataTable', () => {
     );
 
     expect(screen.getByText('Period')).toBeDefined();
-    expect(screen.getByText('Sub-Market Heat')).toBeDefined();
-    expect(screen.getByText('Price Gap')).toBeDefined();
-    expect(screen.getByText('Valuation')).toBeDefined();
-    expect(screen.getByText('Liquidity')).toBeDefined();
+    expect(screen.getByText('Median Price')).toBeDefined();
+    expect(screen.getByText('List vs Sold')).toBeDefined();
+    expect(screen.getByText('Sale / CV %')).toBeDefined();
+    expect(screen.getByText('Volume / Pace')).toBeDefined();
     expect(screen.getByText('Market Size')).toBeDefined();
+    expect(screen.getByText('(Month/Qtr)')).toBeDefined();
+    expect(screen.getByText('MoM / YoY Trend')).toBeDefined();
+    expect(screen.getByText('Market Gap %')).toBeDefined();
+    expect(screen.getByText('(vs Valuation)')).toBeDefined();
+    expect(screen.getByText('Sales | Days')).toBeDefined();
+    expect(screen.getByText('Total Volume')).toBeDefined();
   });
 
   it('formats prices with $ and commas', () => {

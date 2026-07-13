@@ -255,21 +255,29 @@ export default function MonthlyDataTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Period</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-600 whitespace-nowrap">
-                Sub-Market Heat
+              <th className="text-left py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Period</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">(Month/Qtr)</div>
               </th>
-              <th className="text-right py-2 px-2 font-medium text-gray-600 whitespace-nowrap">
-                Price Gap
+              <th className="text-right py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Median Price</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">MoM / YoY Trend</div>
               </th>
-              <th className="text-right py-2 px-2 font-medium text-gray-600 whitespace-nowrap">
-                Valuation
+              <th className="text-right py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">List vs Sold</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">Market Gap %</div>
               </th>
-              <th className="text-right py-2 px-2 font-medium text-gray-600 whitespace-nowrap">
-                Liquidity
+              <th className="text-right py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Sale / CV %</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">(vs Valuation)</div>
               </th>
-              <th className="text-right py-2 px-2 font-medium text-gray-600 whitespace-nowrap">
-                Market Size
+              <th className="text-right py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Volume / Pace</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">Sales | Days</div>
+              </th>
+              <th className="text-right py-2 px-2 whitespace-nowrap">
+                <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Market Size</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">Total Volume</div>
               </th>
             </tr>
           </thead>
