@@ -45,7 +45,7 @@ describe('aggregateToQuarterly', () => {
     expect(result[1].period).toBe('2025-Q2');
   });
 
-  it('calculates AVG for medians and days, SUM for sales', () => {
+  it('sums medians, sales, and days across quarter', () => {
     const monthly = [
       makeMonthly('2025-01', { Oteha: 1000000 }, { Oteha: 10 }, { Oteha: 30 }, 900000, 50, 35),
       makeMonthly('2025-02', { Oteha: 1100000 }, { Oteha: 12 }, { Oteha: 28 }, 920000, 55, 33),
@@ -54,12 +54,12 @@ describe('aggregateToQuarterly', () => {
 
     const result = aggregateToQuarterly(monthly);
 
-    expect(result[0].suburbs['Oteha'].median).toBe(1050000);
+    expect(result[0].suburbs['Oteha'].median).toBe(3150000);
     expect(result[0].suburbs['Oteha'].sales).toBe(30);
-    expect(result[0].suburbs['Oteha'].days).toBe(30);
-    expect(result[0].cityMedian).toBe(910000);
+    expect(result[0].suburbs['Oteha'].days).toBe(90);
+    expect(result[0].cityMedian).toBe(2730000);
     expect(result[0].citySales).toBe(150);
-    expect(result[0].cityDays).toBe(34);
+    expect(result[0].cityDays).toBe(102);
   });
 
   it('handles null values (Low Vol.)', () => {
@@ -104,8 +104,8 @@ describe('aggregateToQuarterly', () => {
 
     const result = aggregateToQuarterly(monthly);
 
-    expect(result[0].suburbs['Oteha'].median).toBe(1050000);
-    expect(result[0].suburbs['Albany'].median).toBe(925000);
+    expect(result[0].suburbs['Oteha'].median).toBe(2100000);
+    expect(result[0].suburbs['Albany'].median).toBe(1850000);
     expect(result[0].suburbs['Albany'].sales).toBe(18);
   });
 

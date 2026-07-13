@@ -464,7 +464,12 @@ export default function AnalyticsPage() {
         onModeChange={setTableDataMode}
         activeFocusSuburb={activeFocusSuburb}
         availableSuburbs={availableSuburbs}
-        onFocusChange={setActiveFocusSuburb}
+        onFocusChange={(suburb) => {
+          setActiveFocusSuburb(suburb);
+          if (suburb !== 'North Shore City' && !selectedSuburbs.includes(suburb)) {
+            setSelectedSuburbs(prev => [...prev, suburb]);
+          }
+        }}
       />
 
       {/* Excel Upload Section */}

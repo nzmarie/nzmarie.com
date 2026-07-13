@@ -108,14 +108,16 @@ describe('Extra admin pages', () => {
 
   it('renders Monthly Data section with suburb buttons', async () => {
     render(<AnalyticsPage />);
-    expect(await screen.findByText('Monthly Data')).toBeTruthy();
+    expect(await screen.findByText('Analysis Data')).toBeTruthy();
     expect(screen.getAllByText('Oteha').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Albany').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows focus suburb median column header', async () => {
+  it('shows new rich table column headers', async () => {
     render(<AnalyticsPage />);
-    expect(await screen.findByText('Oteha Median')).toBeTruthy();
+    expect(await screen.findByText('Analysis Data')).toBeTruthy();
+    expect(screen.getByText('Sub-Market Heat')).toBeTruthy();
+    expect(screen.getByText('Price Gap')).toBeTruthy();
   });
 
   it('renders North Shore City button in monthly data section', async () => {

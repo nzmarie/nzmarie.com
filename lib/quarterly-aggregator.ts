@@ -36,26 +36,43 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
         }
       }
 
+      const sumField = (arr: (number | null | undefined)[]): number | null => {
+        const nums = arr.filter((v): v is number => v != null);
+        return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) : null;
+      };
+
       suburbs[sn] = {
-        median: medians.length > 0 ? Math.round(medians.reduce((a, b) => a + b, 0) / medians.length) : null,
+        median: medians.length > 0 ? medians.reduce((a, b) => a + b, 0) : null,
         sales: salesSum,
-        days: days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : null,
+        days: days.length > 0 ? days.reduce((a, b) => a + b, 0) : null,
+        priceDiffMomPct: sumField(months.map(m => m.suburbs[sn]?.priceDiffMomPct)),
+        priceDiff1yrPct: sumField(months.map(m => m.suburbs[sn]?.priceDiff1yrPct)),
+        medianListPrice: sumField(months.map(m => m.suburbs[sn]?.medianListPrice)),
+        saleToValuationPct: sumField(months.map(m => m.suburbs[sn]?.saleToValuationPct)),
+        listToValuationPct: sumField(months.map(m => m.suburbs[sn]?.listToValuationPct)),
+        totalVolume: sumField(months.map(m => m.suburbs[sn]?.totalVolume)),
+        medianPrice1yrPrior: sumField(months.map(m => m.suburbs[sn]?.medianPrice1yrPrior)),
+        medianPrice3yrsPrior: sumField(months.map(m => m.suburbs[sn]?.medianPrice3yrsPrior)),
+        priceDiff3yrsPct: sumField(months.map(m => m.suburbs[sn]?.priceDiff3yrsPct)),
+        housePriceIndex: sumField(months.map(m => m.suburbs[sn]?.housePriceIndex)),
       };
     }
 
     const cityMedians = months.map(m => m.cityMedian).filter((v): v is number => v !== null);
     const cityDays = months.map(m => m.cityDays).filter((v): v is number => v !== null);
 
+    const cityFirst = months[0];
     result.push({
       period: key,
       periodRaw: key,
       cityMedian: cityMedians.length > 0
-        ? Math.round(cityMedians.reduce((a, b) => a + b, 0) / cityMedians.length)
+        ? cityMedians.reduce((a, b) => a + b, 0)
         : null,
       citySales: months.reduce((sum, m) => sum + m.citySales, 0),
       cityDays: cityDays.length > 0
-        ? Math.round(cityDays.reduce((a, b) => a + b, 0) / cityDays.length)
+        ? cityDays.reduce((a, b) => a + b, 0)
         : null,
+      cityDetail: cityFirst?.cityDetail ?? null,
       suburbs,
     });
   }

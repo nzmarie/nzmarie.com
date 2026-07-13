@@ -1,12 +1,29 @@
 import { query } from './db';
 
+export interface SuburbDetail {
+  median: number | null;
+  sales: number;
+  days: number | null;
+  priceDiffMomPct?: number | null;
+  priceDiff1yrPct?: number | null;
+  medianListPrice?: number | null;
+  saleToValuationPct?: number | null;
+  listToValuationPct?: number | null;
+  totalVolume?: number | null;
+  medianPrice1yrPrior?: number | null;
+  medianPrice3yrsPrior?: number | null;
+  priceDiff3yrsPct?: number | null;
+  housePriceIndex?: number | null;
+}
+
 export interface MonthlyDataPoint {
-  period: string;           // "2025-01"
-  periodRaw: string;        // "2025-01-01"
+  period: string;
+  periodRaw: string;
   cityMedian: number | null;
   citySales: number;
   cityDays: number | null;
-  suburbs: Record<string, { median: number | null; sales: number; days: number | null }>;
+  cityDetail: SuburbDetail | null;
+  suburbs: Record<string, SuburbDetail>;
 }
 
 interface RawMonthly {
@@ -15,6 +32,16 @@ interface RawMonthly {
   median_price: number | null;
   sales_count: number;
   days_to_sell: number | null;
+  price_diff_mom_pct?: number | null;
+  price_diff_1yr_pct?: number | null;
+  median_list_price?: number | null;
+  sale_to_valuation_pct?: number | null;
+  list_to_valuation_pct?: number | null;
+  total_volume?: number | null;
+  median_price_1yr_prior?: number | null;
+  median_price_3yrs_prior?: number | null;
+  price_diff_3yrs_pct?: number | null;
+  house_price_index?: number | null;
 }
 
 function quarterFromMonth(m: number): number {
@@ -30,7 +57,12 @@ export async function getMonthlyData(
   try {
     const params = [suburbNames, districtName, startDate, endDate];
     const result = await query<RawMonthly>(
-      `SELECT region_name, period_month::text, median_price, sales_count, days_to_sell
+      `SELECT region_name, period_month::text,
+              median_price, sales_count, days_to_sell,
+              price_diff_mom_pct, price_diff_1yr_pct,
+              median_list_price, sale_to_valuation_pct, list_to_valuation_pct,
+              total_volume, median_price_1yr_prior, median_price_3yrs_prior,
+              price_diff_3yrs_pct, house_price_index
        FROM market_monthly_snapshots
        WHERE (region_name = ANY($1::text[]) OR region_name = $2)
          AND period_month BETWEEN $3::date AND $4::date
@@ -40,6 +72,26 @@ export async function getMonthlyData(
 
     const rows = result.rows;
     if (rows.length === 0) return [];
+
+    const n = (v: unknown): number | null => v != null ? Number(v) : null;
+
+    function toDetail(r: RawMonthly): SuburbDetail {
+      return {
+        median: n(r.median_price),
+        sales: r.sales_count,
+        days: n(r.days_to_sell),
+        priceDiffMomPct: n(r.price_diff_mom_pct),
+        priceDiff1yrPct: n(r.price_diff_1yr_pct),
+        medianListPrice: n(r.median_list_price),
+        saleToValuationPct: n(r.sale_to_valuation_pct),
+        listToValuationPct: n(r.list_to_valuation_pct),
+        totalVolume: n(r.total_volume),
+        medianPrice1yrPrior: n(r.median_price_1yr_prior),
+        medianPrice3yrsPrior: n(r.median_price_3yrs_prior),
+        priceDiff3yrsPct: n(r.price_diff_3yrs_pct),
+        housePriceIndex: n(r.house_price_index),
+      };
+    }
 
     const districtRows = rows.filter(r => r.region_name === districtName);
 
@@ -54,13 +106,7 @@ export async function getMonthlyData(
       const suburbs: MonthlyDataPoint['suburbs'] = {};
       for (const sn of suburbNames) {
         const sr = rows.find(r => r.region_name === sn && r.period_month.startsWith(key));
-        if (sr) {
-          suburbs[sn] = {
-            median: sr.median_price,
-            sales: sr.sales_count,
-            days: sr.days_to_sell,
-          };
-        }
+        if (sr) suburbs[sn] = toDetail(sr);
       }
       merged.push({
         period: key,
@@ -68,6 +114,7 @@ export async function getMonthlyData(
         cityMedian: d?.median_price ?? null,
         citySales: d?.sales_count ?? 0,
         cityDays: d?.days_to_sell ?? null,
+        cityDetail: d ? toDetail(d) : null,
         suburbs,
       });
     }
@@ -85,8 +132,7 @@ export async function getQuarterlyComparison(
   startDate: string,
   endDate: string
 ): Promise<MonthlyDataPoint[]> {
-  // Try SQL-level aggregation first
-  try {
+    try {
     const result = await query<{
       region_name: string;
       year: number;
@@ -125,7 +171,6 @@ export async function getQuarterlyComparison(
     console.warn('SQL quarterly aggregation failed, falling back to JS aggregation:', sqlErr);
   }
 
-  // Fallback: fetch raw monthly and aggregate in JS
   try {
     const raw = await query<RawMonthly>(
       `SELECT region_name, period_month::text, median_price, sales_count, days_to_sell
@@ -175,6 +220,7 @@ function aggregateQuarterlyRows(
         cityMedian: d?.median ?? null,
         citySales: d?.sales ?? 0,
         cityDays: d?.days ?? null,
+        cityDetail: null,
         suburbs,
       });
     }
@@ -223,6 +269,7 @@ function aggregateRawToQuarterly(
       cityMedian: avg(dMedians),
       citySales: sum(groups.district.map(r => r.sales_count)),
       cityDays: avg(dDays),
+      cityDetail: null,
       suburbs,
     });
   }

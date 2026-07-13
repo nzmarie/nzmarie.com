@@ -436,7 +436,6 @@ export default function RealestatePage() {
 
   const {
     data: classicData,
-    isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ listings: Listing[]; total: number }, Error>({
     queryKey: ["admin-realestate", "classic", filters, currentPage],
