@@ -234,7 +234,8 @@ describe('Properties Page', () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    expect(screen.getByText('5-10 years')).toBeDefined();
+    const stars = screen.getAllByText('★ 5-10 years');
+    expect(stars.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('3-5 years')).toBeDefined();
     expect(screen.getByText('0-3 years')).toBeDefined();
     expect(screen.getByText('15+ years')).toBeDefined();
@@ -247,7 +248,7 @@ describe('Properties Page', () => {
     fireEvent.click(screen.getByText('3-5 years'));
     fireEvent.click(screen.getByText('0-3 years'));
     fireEvent.click(screen.getByText('15+ years'));
-    fireEvent.click(screen.getByText('5-10 years'));
+    fireEvent.click(screen.getAllByText('★ 5-10 years')[0]);
   });
 
   it('renders custom Min Years and Max Years inputs for Last Sold', async () => {
@@ -906,7 +907,8 @@ describe('Properties Page - Built Year Filter', () => {
     const allBtns = screen.getAllByText('All');
     expect(allBtns.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('< 5 years')).toBeDefined();
-    expect(screen.getByText('★ 5-10 years')).toBeDefined();
+    const stars2 = screen.getAllByText('★ 5-10 years');
+    expect(stars2.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('10-20 years')).toBeDefined();
     expect(screen.getByText('20+ years')).toBeDefined();
   });
@@ -916,7 +918,7 @@ describe('Properties Page - Built Year Filter', () => {
     render(<PropertiesPage />);
 
     fireEvent.click(screen.getByText('< 5 years'));
-    fireEvent.click(screen.getByText('★ 5-10 years'));
+    fireEvent.click(screen.getAllByText('★ 5-10 years')[1]);
     fireEvent.click(screen.getByText('10-20 years'));
     fireEvent.click(screen.getByText('20+ years'));
   });

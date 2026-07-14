@@ -1332,15 +1332,15 @@ export default function PropertiesPage() {
                 onClick={() => handleLastSoldPreset(preset)}
                 style={{
                   padding: '8px 18px',
-                  backgroundColor: lastSoldPreset === preset ? '#3b82f6' : 'white',
+                  backgroundColor: lastSoldPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
                   color: lastSoldPreset === preset ? 'white' : '#4a5568',
-                  border: lastSoldPreset === preset ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  border: lastSoldPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
                   borderRadius: '10px',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
                   fontWeight: lastSoldPreset === preset ? '600' : '500',
                   transition: 'all 0.2s ease',
-                  boxShadow: lastSoldPreset === preset ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  boxShadow: lastSoldPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
                 }}
                 onMouseEnter={(e) => {
                   if (lastSoldPreset !== preset) {
@@ -1355,7 +1355,7 @@ export default function PropertiesPage() {
                   }
                 }}
               >
-                {preset === 'all' ? 'All' : preset === '5-10' ? '5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
               </button>
             ))}
             {lastSoldPreset !== 'none' && lastSoldPreset !== 'all' && (
