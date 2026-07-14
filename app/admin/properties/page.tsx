@@ -1031,6 +1031,9 @@ export default function PropertiesPage() {
       case '0-3':
         setFilters((prev) => ({ ...prev, last_sold_min_years: '0', last_sold_max_years: '3' }));
         break;
+      case '10-15':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '10', last_sold_max_years: '15' }));
+        break;
       case '15+':
         setFilters((prev) => ({ ...prev, last_sold_min_years: '15', last_sold_max_years: '' }));
         break;
@@ -1457,7 +1460,7 @@ export default function PropertiesPage() {
             Last Sold
           </label>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
-            {(['all', '5-10', '3-5', '0-3', '15+', 'none'] as const).map((preset) => (
+            {(['all', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
               <button
                 key={preset}
                 onClick={() => handleLastSoldPreset(preset)}
@@ -1486,7 +1489,7 @@ export default function PropertiesPage() {
                   }
                 }}
               >
-                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
               </button>
             ))}
             {lastSoldPreset !== 'none' && lastSoldPreset !== 'all' && (

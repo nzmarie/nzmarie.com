@@ -303,6 +303,7 @@ describe('Properties Page', () => {
     expect(stars.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('3-5 years')).toBeDefined();
     expect(screen.getByText('0-3 years')).toBeDefined();
+    expect(screen.getByText('10-15 years')).toBeDefined();
     expect(screen.getByText('15+ years')).toBeDefined();
   });
 
