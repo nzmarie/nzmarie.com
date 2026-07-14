@@ -263,6 +263,8 @@ export async function GET(request: Request) {
     query += ` AND re.id IS NOT NULL`;
   } else if (!search && marketStatus === 'for_rent') {
     query += ` AND rer.id IS NOT NULL`;
+  } else if (!search && marketStatus === 'rented') {
+    query += ` AND p.has_rental_history = true`;
   } else if (!search && marketStatus === 'not_listed') {
     query += ` AND re.id IS NULL AND rer.id IS NULL`;
   }

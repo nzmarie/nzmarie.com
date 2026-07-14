@@ -165,6 +165,21 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     expect(hasNotListedFilter).toBe(true);
   });
 
+  it('filters rented via SQL AND p.has_rental_history = true', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow({ has_rental_history: 't' })] });
+
+    const req = new Request('http://localhost/api/admin/properties?market_status=rented');
+    const res = await GET(req);
+    await res.json();
+
+    const sqlCalls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const queries = sqlCalls.map(c => c[0]);
+    const hasRentedFilter = queries.some(q => q.includes('AND p.has_rental_history = true'));
+    expect(hasRentedFilter).toBe(true);
+  });
+
   it('uses address+suburb JOIN instead of address_fingerprint', async () => {
     mockQuery.mockResolvedValue({
       rows: [makeDefaultRow()],

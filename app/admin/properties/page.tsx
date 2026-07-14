@@ -331,6 +331,30 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             To Rent{property.rent_price ? ` ${property.rent_price}` : ''}
           </div>
         )}
+
+        {/* Rented Badge (has rental history) */}
+        {property.has_rental_history && (
+          <div style={{
+            position: "absolute",
+            top: (() => {
+              let count = 0;
+              if (property.build_year) count++;
+              if (property.on_market_sale) count++;
+              if (property.on_market_rent) count++;
+              return `${16 + count * 36}px`;
+            })(),
+            left: "16px",
+            backgroundColor: "rgba(245, 158, 11, 0.9)",
+            color: "white",
+            padding: "4px 10px",
+            borderRadius: "12px",
+            fontSize: "0.75rem",
+            fontWeight: "600",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+            Rented
+          </div>
+        )}
         
         {/* Years Since Last Sold Badge */}
         {property.last_sold_date && (() => {
@@ -607,7 +631,7 @@ export default function PropertiesPage() {
   });
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
-  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'not_listed'>('all');
+  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'not_listed'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
@@ -1419,21 +1443,21 @@ export default function PropertiesPage() {
               Market Status
             </label>
             <div style={{ display: "flex", gap: "8px" }}>
-              {(['all', 'for_sale', 'for_rent', 'not_listed'] as const).map((status) => (
+              {(['all', 'for_sale', 'for_rent', 'rented', 'not_listed'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setMarketStatus(status)}
                   style={{
                     padding: '8px 18px',
-                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
                     color: marketStatus === status ? 'white' : '#4a5568',
-                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
                     borderRadius: '10px',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
                     fontWeight: marketStatus === status ? '600' : '500',
                     transition: 'all 0.2s ease',
-                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
                   }}
                   onMouseEnter={(e) => {
                     if (marketStatus !== status) {
@@ -1448,7 +1472,7 @@ export default function PropertiesPage() {
                     }
                   }}
                 >
-                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : 'Not Listed'}
+                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : 'Not Listed'}
                 </button>
               ))}
             </div>

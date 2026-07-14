@@ -72,6 +72,29 @@ const defaultProperties = [
     on_market_rent: true,
     rent_listing_status: 'To Rent',
     rent_price: '$650/week',
+  },
+  {
+    id: 'prop-3',
+    address: '42 Sunrise Avenue',
+    suburb: 'Browns Bay',
+    city: 'North Shore City',
+    bedrooms: 3,
+    bathrooms: 1,
+    garages: 1,
+    rv: 850000,
+    last_sold_price: 780000,
+    last_sold_date: '2019-08-10',
+    image_url: 'https://example.com/image3.jpg',
+    property_url: 'https://example.com/prop3',
+    has_rental_history: true,
+    is_currently_rented: false,
+    on_market_sale: false,
+    sale_listing_status: null,
+    sale_price: null,
+    sale_agent: null,
+    on_market_rent: false,
+    rent_listing_status: null,
+    rent_price: null,
   }
 ];
 
@@ -179,10 +202,10 @@ describe('Properties Page', () => {
     render(<PropertiesPage />);
 
     const startMarkers = screen.getAllByText(/\[AI-DATA-START\]/);
-    expect(startMarkers.length).toBe(2);
+    expect(startMarkers.length).toBe(3);
 
     const endMarkers = screen.getAllByText(/\[AI-DATA-END\]/);
-    expect(endMarkers.length).toBe(2);
+    expect(endMarkers.length).toBe(3);
 
     expect(screen.getByText(/Address: 15 Marine Parade/)).toBeDefined();
     expect(screen.getByText(/Bedrooms: 4/)).toBeDefined();
@@ -194,11 +217,11 @@ describe('Properties Page', () => {
     expect(screen.getByText(/Coordinates: -36\.7061/)).toBeDefined();
 
     expect(screen.getByText(/Address: 2\/910 East Coast Road/)).toBeDefined();
-    expect(screen.getByText(/Bedrooms: 3/)).toBeDefined();
-    expect(screen.getByText(/Car Spaces: 1/)).toBeDefined();
+    expect(screen.getAllByText(/Bedrooms: 3/).length).toBe(2);
+    expect(screen.getAllByText(/Car Spaces: 1/).length).toBe(2);
 
     expect(screen.getAllByText(/Capital Value \(RV\)/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/Bathrooms:/).length).toBe(2);
+    expect(screen.getAllByText(/Bathrooms:/).length).toBe(3);
     expect(screen.getAllByText(/Estimated Value/).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -206,8 +229,8 @@ describe('Properties Page', () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const noDesc = screen.getByText('No description');
-    expect(noDesc).toBeDefined();
+    const noDesc = screen.getAllByText('No description');
+    expect(noDesc.length).toBe(2);
   });
 
   it('renders House type button selected by default', async () => {
@@ -251,9 +274,10 @@ describe('Properties Page', () => {
     expect(screen.getByText('Market Status')).toBeDefined();
     const allBtns = screen.getAllByText('All');
     expect(allBtns.length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('For Sale')).toBeDefined();
-    expect(screen.getByText('To Rent')).toBeDefined();
-    expect(screen.getByText('Not Listed')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'For Sale' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'To Rent' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Rented' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Not Listed' })).toBeDefined();
   });
 
   it('shows For Sale badge on properties with on_market_sale=true', async () => {
@@ -272,6 +296,14 @@ describe('Properties Page', () => {
     expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows Rented badge on properties with has_rental_history=true', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const badges = await screen.findAllByText('Rented');
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('includes market status info in AI data chamber', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
@@ -285,13 +317,16 @@ describe('Properties Page', () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const forSaleBtn = screen.getByText('For Sale');
+    const forSaleBtn = screen.getByRole('button', { name: 'For Sale' });
     fireEvent.click(forSaleBtn);
 
-    const toRentBtn = screen.getByText('To Rent');
+    const toRentBtn = screen.getByRole('button', { name: 'To Rent' });
     fireEvent.click(toRentBtn);
 
-    const notListedBtn = screen.getByText('Not Listed');
+    const rentedBtn = screen.getByRole('button', { name: 'Rented' });
+    fireEvent.click(rentedBtn);
+
+    const notListedBtn = screen.getByRole('button', { name: 'Not Listed' });
     fireEvent.click(notListedBtn);
   });
 
@@ -343,7 +378,7 @@ describe('Properties Page - Edit Functionality', () => {
 
     await waitFor(() => {
       const editButtons = screen.getAllByText('Edit');
-      expect(editButtons.length).toBe(2);
+      expect(editButtons.length).toBe(3);
     });
   });
 
@@ -595,7 +630,7 @@ describe('Properties Page - Like Icon', () => {
     render(<PropertiesPage />);
 
     const likeButtons = await screen.findAllByTitle('Like');
-    expect(likeButtons.length).toBe(2);
+    expect(likeButtons.length).toBe(3);
   });
 
   it('calls like API when like button is clicked', async () => {
@@ -629,7 +664,7 @@ describe('Properties Page - Like Icon', () => {
     render(<PropertiesPage />);
 
     const likeButtons = await screen.findAllByTitle('Like');
-    expect(likeButtons.length).toBe(2);
+    expect(likeButtons.length).toBe(3);
     fireEvent.click(likeButtons[0]);
 
     await waitFor(() => {
@@ -785,7 +820,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     render(<PropertiesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Displaying 1 to 2 of 45 properties/)).toBeDefined();
+      expect(screen.getByText(/Displaying 1 to 3 of 45 properties/)).toBeDefined();
     });
   });
 
@@ -929,7 +964,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Infinite Scroll'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Displaying 1 to 2 of 45 properties/)).toBeDefined();
+      expect(screen.getByText(/Displaying 1 to 3 of 45 properties/)).toBeDefined();
     });
   });
 
