@@ -67,6 +67,43 @@ describe('Extra admin pages', () => {
           json: () => Promise.resolve({ availableSuburbs: ['Oteha', 'Albany', 'Browns Bay', 'Torbay'] }),
         }) as any;
       }
+      if (url.includes('/api/admin/analytics/last-sold-data')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            suburbs: [
+              { suburb: 'Albany', total: 12, buckets: [
+                { range: '0-3', count: 2, percentage: 17 },
+                { range: '3-5', count: 3, percentage: 25 },
+                { range: '5-10', count: 4, percentage: 33 },
+                { range: '10-15', count: 2, percentage: 17 },
+                { range: '15+', count: 1, percentage: 8 },
+                { range: 'no_data', count: 0, percentage: 0 },
+              ]},
+              { suburb: 'Oteha', total: 8, buckets: [
+                { range: '0-3', count: 1, percentage: 13 },
+                { range: '3-5', count: 2, percentage: 25 },
+                { range: '5-10', count: 3, percentage: 38 },
+                { range: '10-15', count: 1, percentage: 13 },
+                { range: '15+', count: 1, percentage: 13 },
+                { range: 'no_data', count: 0, percentage: 0 },
+              ]},
+            ],
+            northShore: {
+              total: 20,
+              buckets: [
+                { range: '0-3', count: 3, percentage: 15 },
+                { range: '3-5', count: 5, percentage: 25 },
+                { range: '5-10', count: 7, percentage: 35 },
+                { range: '10-15', count: 3, percentage: 15 },
+                { range: '15+', count: 2, percentage: 10 },
+                { range: 'no_data', count: 0, percentage: 0 },
+              ],
+            },
+          }),
+        }) as any;
+      }
       if (url.includes('/api/admin/analytics/chart-data')) {
         return Promise.resolve({
           ok: true,
@@ -135,5 +172,31 @@ describe('Extra admin pages', () => {
     render(<PDFManagerPage />);
     expect(await screen.findByText('Suburb PDF Manager')).toBeTruthy();
     expect(screen.getByText('Uploaded Reports')).toBeTruthy();
+  });
+
+  it('renders Last Sold Data For Sale table with suburb rows', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText('Last Sold Data For Sale')).toBeTruthy();
+    const albanyElements = screen.getAllByText('Albany');
+    expect(albanyElements.length).toBeGreaterThanOrEqual(2);
+    const otehaElements = screen.getAllByText('Oteha');
+    expect(otehaElements.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('North Shore Total')).toBeTruthy();
+  });
+
+  it('highlights max percentage bucket in green for each suburb row', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText('Last Sold Data For Sale')).toBeTruthy();
+    expect(screen.getByText('(33%)')).toBeTruthy();
+    expect(screen.getByText('(38%)')).toBeTruthy();
+  });
+
+  it('shows Active column with total counts', async () => {
+    render(<AnalyticsPage />);
+    expect(await screen.findByText('Active')).toBeTruthy();
+    const twelves = screen.getAllByText('12');
+    expect(twelves.length).toBeGreaterThanOrEqual(1);
+    const eights = screen.getAllByText('8');
+    expect(eights.length).toBeGreaterThanOrEqual(1);
   });
 });

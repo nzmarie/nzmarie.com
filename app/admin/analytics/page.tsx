@@ -67,6 +67,18 @@ export default function AnalyticsPage() {
   const [activeFocusSuburb, setActiveFocusSuburb] = useState<string>('Oteha');
   const [tableDataMode, setTableDataMode] = useState<DataMode>('monthly');
 
+  const [lastSoldData, setLastSoldData] = useState<{
+    suburbs: Array<{
+      suburb: string;
+      total: number;
+      buckets: Array<{ range: string; count: number; percentage: number }>;
+    }>;
+    northShore: {
+      total: number;
+      buckets: Array<{ range: string; count: number; percentage: number }>;
+    };
+  } | null>(null);
+
   const chartReqIdRef = React.useRef(0);
 
   const fetchAvailableSuburbs = useCallback(async () => {
@@ -100,6 +112,19 @@ export default function AnalyticsPage() {
     }
   }, [status, session, router]);
 
+  const fetchLastSoldData = useCallback(async (suburb: string | null) => {
+    try {
+      const params = suburb ? `?suburb=${encodeURIComponent(suburb)}` : '';
+      const res = await fetch(`/api/admin/analytics/last-sold-data${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setLastSoldData(data);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
       fetchAvailableSuburbs();
@@ -129,8 +154,10 @@ export default function AnalyticsPage() {
           }
         })
         .catch(() => undefined);
+
+      fetchLastSoldData(null);
     }
-  }, [status, session, fetchAvailableSuburbs]);
+  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData]);
 
   const fetchChartData = useCallback(async (suburbs: string[]) => {
     const reqId = ++chartReqIdRef.current;
@@ -471,6 +498,77 @@ export default function AnalyticsPage() {
           }
         }}
       />
+
+      {/* Last Sold Data For Sale */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Last Sold Data For Sale</h2>
+        </div>
+        {!lastSoldData ? (
+          <div className="text-gray-400 py-4">Loading...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-semibold text-gray-700">Suburb</th>
+                  <th className="text-right py-2 px-3 font-semibold text-gray-700">Active</th>
+                  {lastSoldData.northShore.buckets.filter(b => b.range !== 'no_data').map(b => (
+                    <th key={b.range} className="text-right py-2 px-3 font-semibold text-gray-700 whitespace-nowrap">
+                      {b.range} yrs
+                    </th>
+                  ))}
+                  <th className="text-right py-2 px-3 font-semibold text-gray-700">No Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lastSoldData.suburbs.map((row) => {
+                  const displayBuckets = row.buckets.filter(b => b.range !== 'no_data');
+                  const maxPct = Math.max(...displayBuckets.map(b => b.percentage));
+                  return (
+                    <tr
+                      key={row.suburb}
+                      className="border-b border-gray-100 hover:bg-gray-50"
+                    >
+                      <td className="py-2 px-3 font-medium text-gray-800">{row.suburb}</td>
+                      <td className="text-right py-2 px-3 text-gray-600">{row.total}</td>
+                      {displayBuckets.map(b => (
+                        <td
+                          key={b.range}
+                          className={`text-right py-2 px-3 ${
+                            b.percentage > 0 && b.percentage === maxPct
+                              ? 'bg-green-100 font-semibold'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          {b.count}
+                          <span className="text-xs ml-1">({b.percentage}%)</span>
+                        </td>
+                      ))}
+                      <td className="text-right py-2 px-3 text-gray-400">
+                        {row.buckets.find(b => b.range === 'no_data')?.count || 0}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-gray-50 font-semibold">
+                  <td className="py-2 px-3 text-gray-800">North Shore Total</td>
+                  <td className="text-right py-2 px-3 text-gray-800">{lastSoldData.northShore.total}</td>
+                  {lastSoldData.northShore.buckets.filter(b => b.range !== 'no_data').map(b => (
+                    <td key={b.range} className="text-right py-2 px-3 text-gray-800">
+                      {b.count}
+                      <span className="text-xs ml-1">({b.percentage}%)</span>
+                    </td>
+                  ))}
+                  <td className="text-right py-2 px-3 text-gray-400">
+                    {lastSoldData.northShore.buckets.find(b => b.range === 'no_data')?.count || 0}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Excel Upload Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
