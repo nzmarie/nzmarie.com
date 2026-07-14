@@ -648,6 +648,21 @@ export default function PropertiesPage() {
     }
   }, [addressInput]);
 
+  // When Market Status is For Sale/To Rent/Not Listed, reset Last Sold and Built Year to All
+  useEffect(() => {
+    if (marketStatus !== 'all') {
+      setLastSoldPreset('all');
+      setBuildYearPreset('all');
+      setFilters((prev) => ({
+        ...prev,
+        last_sold_min_years: '',
+        last_sold_max_years: '',
+        build_year_min: '',
+        build_year_max: '',
+      }));
+    }
+  }, [marketStatus]);
+
   const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
     if (showLikedOnly) {
       const params = new URLSearchParams({
