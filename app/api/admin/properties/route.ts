@@ -145,19 +145,21 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (lastSoldNone === 'true') {
-    query += ` AND p.last_sold_date IS NULL`;
-  } else {
-    if (lastSoldMinYears) {
-      const years = parseInt(lastSoldMinYears);
-      if (!isNaN(years) && years > 0) {
-        query += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+  if (!search) {
+    if (lastSoldNone === 'true') {
+      query += ` AND p.last_sold_date IS NULL`;
+    } else {
+      if (lastSoldMinYears) {
+        const years = parseInt(lastSoldMinYears);
+        if (!isNaN(years) && years > 0) {
+          query += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+        }
       }
-    }
-    if (lastSoldMaxYears) {
-      const years = parseInt(lastSoldMaxYears);
-      if (!isNaN(years) && years > 0) {
-        query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+      if (lastSoldMaxYears) {
+        const years = parseInt(lastSoldMaxYears);
+        if (!isNaN(years) && years > 0) {
+          query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+        }
       }
     }
   }
@@ -198,16 +200,18 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (buildYearMin) {
-    query += ` AND p.year_built >= $${paramIndex}`;
-    params.push(parseInt(buildYearMin));
-    paramIndex++;
-  }
+  if (!search) {
+    if (buildYearMin) {
+      query += ` AND p.year_built >= $${paramIndex}`;
+      params.push(parseInt(buildYearMin));
+      paramIndex++;
+    }
 
-  if (buildYearMax) {
-    query += ` AND p.year_built <= $${paramIndex}`;
-    params.push(parseInt(buildYearMax));
-    paramIndex++;
+    if (buildYearMax) {
+      query += ` AND p.year_built <= $${paramIndex}`;
+      params.push(parseInt(buildYearMax));
+      paramIndex++;
+    }
   }
 
   if (rvMin) {
@@ -247,19 +251,19 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (standaloneOnly === 'true') {
+  if (!search && standaloneOnly === 'true') {
     query += ` AND p.address NOT LIKE '%/%'`;
   }
 
-  if (townhouseOnly === 'true') {
+  if (!search && townhouseOnly === 'true') {
     query += ` AND p.address LIKE '%/%'`;
   }
 
-  if (marketStatus === 'for_sale') {
+  if (!search && marketStatus === 'for_sale') {
     query += ` AND re.id IS NOT NULL`;
-  } else if (marketStatus === 'for_rent') {
+  } else if (!search && marketStatus === 'for_rent') {
     query += ` AND rer.id IS NOT NULL`;
-  } else if (marketStatus === 'not_listed') {
+  } else if (!search && marketStatus === 'not_listed') {
     query += ` AND re.id IS NULL AND rer.id IS NULL`;
   }
 

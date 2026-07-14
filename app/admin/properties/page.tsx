@@ -631,6 +631,23 @@ export default function PropertiesPage() {
     return () => clearTimeout(timer);
   }, [addressInput]);
 
+  // When address search is active, reset Property Type, Market Status, Last Sold, Built Year to "All"
+  useEffect(() => {
+    if (addressInput.trim()) {
+      setPropertyFilter('all');
+      setMarketStatus('all');
+      setLastSoldPreset('all');
+      setBuildYearPreset('all');
+      setFilters((prev) => ({
+        ...prev,
+        last_sold_min_years: '',
+        last_sold_max_years: '',
+        build_year_min: '',
+        build_year_max: '',
+      }));
+    }
+  }, [addressInput]);
+
   const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
     if (showLikedOnly) {
       const params = new URLSearchParams({

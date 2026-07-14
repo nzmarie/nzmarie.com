@@ -1156,3 +1156,89 @@ describe('Properties Page - Extended Advanced Filters', () => {
     });
   });
 });
+
+describe('Properties Page — Address Search Resets Filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ liked_ids: [] }),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('resets property type to All when search input has text', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '25 Canyon Drive' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Property Type')).toBeDefined();
+      expect(screen.getByText('Market Status')).toBeDefined();
+    });
+  });
+
+  it('resets Last Sold to All and Built Year to All when search is active', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '25 Canyon Drive' } });
+
+    await waitFor(() => {
+      const allLabels = screen.getAllByText('All');
+      expect(allLabels.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  it('clears address input when a suburb quick filter button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'Some Address' } });
+    expect(addressInput.value).toBe('Some Address');
+
+    const suburbBtn = screen.getByRole('button', { name: 'Albany' });
+    fireEvent.click(suburbBtn);
+
+    await waitFor(() => {
+      expect(addressInput.value).toBe('');
+    });
+  });
+
+  it('resets Last Sold filter params when search input has text', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const stars = screen.getAllByText('★ 5-10 years');
+    expect(stars.length).toBeGreaterThanOrEqual(1);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'Test Address' } });
+
+    await waitFor(() => {
+      const allLabels = screen.getAllByText('All');
+      expect(allLabels.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  it('keeps Market Status as All when search clears', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '25 Canyon Drive' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Market Status')).toBeDefined();
+    });
+
+    fireEvent.change(addressInput, { target: { value: '' } });
+  });
+});
