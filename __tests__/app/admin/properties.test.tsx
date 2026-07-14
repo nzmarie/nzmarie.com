@@ -44,6 +44,13 @@ const defaultProperties = [
     is_currently_rented: false,
     latitude: -36.7061,
     longitude: 174.7297,
+    on_market_sale: true,
+    sale_listing_status: 'Under Offer',
+    sale_price: '$1,150,000',
+    sale_agent: 'Mike Pero',
+    on_market_rent: false,
+    rent_listing_status: null,
+    rent_price: null,
   },
   {
     id: 'prop-2',
@@ -58,6 +65,13 @@ const defaultProperties = [
     last_sold_date: '2022-11-20',
     image_url: 'https://example.com/image2.jpg',
     property_url: 'https://example.com/prop2',
+    on_market_sale: false,
+    sale_listing_status: null,
+    sale_price: null,
+    sale_agent: null,
+    on_market_rent: true,
+    rent_listing_status: 'To Rent',
+    rent_price: '$650/week',
   }
 ];
 
@@ -228,6 +242,57 @@ describe('Properties Page', () => {
 
     expect(screen.getByText('15 Marine Parade')).toBeDefined();
     expect(screen.getByText('2/910 East Coast Road')).toBeDefined();
+  });
+
+  it('renders Market Status filter buttons next to Property Type', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.getByText('Market Status')).toBeDefined();
+    const allBtns = screen.getAllByText('All');
+    expect(allBtns.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('For Sale')).toBeDefined();
+    expect(screen.getByText('To Rent')).toBeDefined();
+    expect(screen.getByText('Not Listed')).toBeDefined();
+  });
+
+  it('shows For Sale badge on properties with on_market_sale=true', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const badge = await screen.findByText(/For Sale \$1,150,000/);
+    expect(badge).toBeDefined();
+  });
+
+  it('shows To Rent badge on properties with on_market_rent=true', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const badges = await screen.findAllByText(/To Rent \$650\/week/);
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('includes market status info in AI data chamber', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    expect(screen.getByText(/For Sale: Under Offer/)).toBeDefined();
+    expect(screen.getByText(/For Rent: To Rent/)).toBeDefined();
+    expect(screen.getByText(/Mike Pero/)).toBeDefined();
+  });
+
+  it('switches market status filter when a button is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const forSaleBtn = screen.getByText('For Sale');
+    fireEvent.click(forSaleBtn);
+
+    const toRentBtn = screen.getByText('To Rent');
+    fireEvent.click(toRentBtn);
+
+    const notListedBtn = screen.getByText('Not Listed');
+    fireEvent.click(notListedBtn);
   });
 
   it('renders Last Sold preset buttons with 5-10 years selected by default', async () => {

@@ -35,6 +35,7 @@ export async function GET(request: Request) {
   const search = searchParams.get('search');
   const standaloneOnly = searchParams.get('standalone_only');
   const townhouseOnly = searchParams.get('townhouse_only');
+  const marketStatus = searchParams.get('market_status');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
@@ -84,10 +85,17 @@ export async function GET(request: Request) {
       p.images,
       p.latitude,
       p.longitude,
-      p.created_at
+      p.created_at,
+      CASE WHEN re.id IS NOT NULL THEN true ELSE false END as on_market_sale,
+      re.status as sale_listing_status,
+      re.price_display as sale_price,
+      re.agent_name as sale_agent,
+      CASE WHEN rer.id IS NOT NULL THEN true ELSE false END as on_market_rent,
+      rer.status as rent_listing_status,
+      rer.price_display as rent_price
     FROM properties p
-    LEFT JOIN real_estate re ON p.address_fingerprint = re.address_fingerprint
-    LEFT JOIN real_estate_rent rer ON p.address_fingerprint = rer.address_fingerprint
+    LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
+    LEFT JOIN real_estate_rent rer ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(rer.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(rer.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
     WHERE 1=1
   `;
 
@@ -247,6 +255,14 @@ export async function GET(request: Request) {
     query += ` AND p.address LIKE '%/%'`;
   }
 
+  if (marketStatus === 'for_sale') {
+    query += ` AND re.id IS NOT NULL`;
+  } else if (marketStatus === 'for_rent') {
+    query += ` AND rer.id IS NOT NULL`;
+  } else if (marketStatus === 'not_listed') {
+    query += ` AND re.id IS NULL AND rer.id IS NULL`;
+  }
+
   // Get total count
   const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
   const countResult = await marieQuery<{ total: string }>(countQuery, params);
@@ -311,6 +327,13 @@ export async function GET(request: Request) {
       latitude: string | null;
       longitude: string | null;
       created_at: string | null;
+      on_market_sale: boolean;
+      sale_listing_status: string | null;
+      sale_price: string | null;
+      sale_agent: string | null;
+      on_market_rent: boolean;
+      rent_listing_status: string | null;
+      rent_price: string | null;
     }>(query, params);
 
     const properties = result.rows.map(row => ({
@@ -355,6 +378,13 @@ export async function GET(request: Request) {
       latitude: row.latitude !== null ? Number(row.latitude) : null,
       longitude: row.longitude !== null ? Number(row.longitude) : null,
       created_at: row.created_at ?? null,
+      on_market_sale: row.on_market_sale,
+      sale_listing_status: row.sale_listing_status ?? null,
+      sale_price: row.sale_price ?? null,
+      sale_agent: row.sale_agent ?? null,
+      on_market_rent: row.on_market_rent,
+      rent_listing_status: row.rent_listing_status ?? null,
+      rent_price: row.rent_price ?? null,
     }));
 
     return NextResponse.json({

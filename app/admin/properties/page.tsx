@@ -59,6 +59,13 @@ interface Property {
   latitude?: number | null;
   longitude?: number | null;
   created_at?: string | null;
+  on_market_sale?: boolean;
+  sale_listing_status?: string | null;
+  sale_price?: string | null;
+  sale_agent?: string | null;
+  on_market_rent?: boolean;
+  rent_listing_status?: string | null;
+  rent_price?: string | null;
 }
 
 interface Filters {
@@ -144,6 +151,9 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
     property.latitude != null && property.longitude != null
       ? `Coordinates: ${property.latitude}, ${property.longitude}` : null,
     property.property_url ? `Property URL: ${property.property_url}` : null,
+    property.realestate_url ? `Realestate URL: ${property.realestate_url}` : null,
+    property.on_market_sale ? `For Sale: ${property.sale_listing_status || 'Yes'}${property.sale_price ? ` ${property.sale_price}` : ''}${property.sale_agent ? ` (${property.sale_agent})` : ''}` : null,
+    property.on_market_rent ? `For Rent: ${property.rent_listing_status || 'Yes'}${property.rent_price ? ` ${property.rent_price}` : ''}` : null,
     property.description ? `Description: ${property.description}` : null,
     '[AI-DATA-END]',
   ].filter(Boolean).join('\n');
@@ -281,6 +291,44 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           }}>
             Built {property.build_year}
+          </div>
+        )}
+
+        {/* For Sale Badge */}
+        {property.on_market_sale && (
+          <div style={{
+            position: "absolute",
+            top: property.build_year ? "52px" : "16px",
+            left: "16px",
+            backgroundColor: "rgba(34, 197, 94, 0.9)",
+            color: "white",
+            padding: "4px 10px",
+            borderRadius: "12px",
+            fontSize: "0.75rem",
+            fontWeight: "600",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+            For Sale{property.sale_price ? ` ${property.sale_price}` : ''}
+          </div>
+        )}
+
+        {/* For Rent Badge */}
+        {property.on_market_rent && (
+          <div style={{
+            position: "absolute",
+            top: property.on_market_sale
+              ? (property.build_year ? "88px" : "52px")
+              : (property.build_year ? "52px" : "16px"),
+            left: "16px",
+            backgroundColor: "rgba(139, 92, 246, 0.9)",
+            color: "white",
+            padding: "4px 10px",
+            borderRadius: "12px",
+            fontSize: "0.75rem",
+            fontWeight: "600",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+            To Rent{property.rent_price ? ` ${property.rent_price}` : ''}
           </div>
         )}
         
@@ -559,6 +607,7 @@ export default function PropertiesPage() {
   });
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
+  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'not_listed'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
@@ -618,6 +667,13 @@ export default function PropertiesPage() {
         realestate_url: item.realestate_url || null,
         description: item.description || null,
         property_type: item.property_type || null,
+        on_market_sale: item.on_market_sale ?? false,
+        on_market_rent: item.on_market_rent ?? false,
+        sale_listing_status: item.sale_listing_status ?? null,
+        sale_price: item.sale_price ?? null,
+        sale_agent: item.sale_agent ?? null,
+        rent_listing_status: item.rent_listing_status ?? null,
+        rent_price: item.rent_price ?? null,
       }));
 
       if (propertyFilter === 'house') {
@@ -757,6 +813,7 @@ export default function PropertiesPage() {
     if (filters.market_premium) params.append("market_premium", filters.market_premium);
     if (propertyFilter === 'house') params.append("standalone_only", "true");
     if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
+    if (marketStatus !== 'all') params.append("market_status", marketStatus);
 
     const response = await fetch(`/api/admin/properties?${params}`);
     const result = await response.json();
@@ -778,7 +835,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -798,7 +855,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated",
@@ -981,6 +1038,7 @@ export default function PropertiesPage() {
     setShowLikedOnly(false);
     setLastSoldPreset('5-10');
     setBuildYearPreset('all');
+    setMarketStatus('all');
     setFilters({
       region: "Auckland",
       city: "North Shore City",
@@ -1031,7 +1089,7 @@ export default function PropertiesPage() {
         floor_size: prop.floor_area || '',
         land_area: prop.land_area?.toString() || '',
         last_sold_price: prop.last_sold_price?.toString() || '',
-        last_sold_date: prop.last_sold_date || '',
+        last_sold_date: prop.last_sold_date ? prop.last_sold_date.split('T')[0] : '',
         capital_value: prop.rv?.toString() || '',
         property_url: prop.property_url || '',
         cover_image_url: prop.image_url || '',
@@ -1281,43 +1339,84 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
-            Property Type
-          </label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {(['house', 'all', 'townhouse'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setPropertyFilter(type)}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
-                  color: propertyFilter === type ? 'white' : '#4a5568',
-                  border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: propertyFilter === type ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                  boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (propertyFilter !== type) {
-                    e.currentTarget.style.backgroundColor = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (propertyFilter !== type) {
-                    e.currentTarget.style.backgroundColor = 'white';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }
-                }}
-              >
-                {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
-              </button>
-            ))}
+        <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+              Property Type
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(['house', 'all', 'townhouse'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setPropertyFilter(type)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
+                    color: propertyFilter === type ? 'white' : '#4a5568',
+                    border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: propertyFilter === type ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (propertyFilter !== type) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (propertyFilter !== type) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px", textAlign: "right" }}>
+              Market Status
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(['all', 'for_sale', 'for_rent', 'not_listed'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setMarketStatus(status)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                    color: marketStatus === status ? 'white' : '#4a5568',
+                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: marketStatus === status ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : 'Not Listed'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

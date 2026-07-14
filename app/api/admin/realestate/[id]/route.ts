@@ -15,10 +15,12 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
+  const tableName = body.listing_type === 'rent' ? 'real_estate_rent' : 'real_estate';
+
   const allowedColumns = [
     'price_display', 'agent_name', 'status',
-    'address', 'region', 'bedroom_count', 'bathroom_count',
-    'land_area', 'floor_area', 'property_url', 'cover_image_url',
+    'address', 'region', 'suburb', 'city', 'bedroom_count', 'bathroom_count',
+    'land_area', 'floor_area', 'car_spaces', 'property_url', 'cover_image_url',
     'property_type', 'description', 'listing_number',
   ];
 
@@ -39,7 +41,7 @@ export async function PATCH(
   }
 
   values.push(id);
-  const sql = `UPDATE real_estate SET ${updates.join(', ')} WHERE id = $${idx}`;
+  const sql = `UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${idx}`;
 
   try {
     await marieQuery(sql, values);

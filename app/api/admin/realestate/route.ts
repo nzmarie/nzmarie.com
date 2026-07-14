@@ -3,60 +3,74 @@ import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
-export async function GET(request: Request) {
-  const session = await auth();
+const COLUMNS = `
+  r.id,
+  r.address,
+  r.status,
+  r.data,
+  r.listing_date,
+  r.listing_date_raw,
+  r.price_display,
+  r.agent_name,
+  r.bedroom_count,
+  r.bathroom_count,
+  r.land_area,
+  r.floor_area,
+  r.car_spaces,
+  r.property_url,
+  r.original_link,
+  r.region,
+  r.suburb,
+  r.city,
+  r.latitude,
+  r.longitude,
+  r.cover_image_url,
+  r.images,
+  r.normalized_lead_address,
+  r.address_fingerprint,
+  r.property_type,
+  r.description,
+  r.listing_number,
+  r.listing_date_parsed
+`;
 
-  if (!session?.user?.email || !isAdmin(session.user.email)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+function buildQuery(
+  listingType: string,
+  columns: string,
+  params: unknown[],
+  search: string | null,
+  region: string | null,
+  city: string | null,
+  suburb: string | null,
+  minBedrooms: string | null,
+  maxBedrooms: string | null,
+  minBathrooms: string | null,
+  maxBathrooms: string | null,
+  propertyType: string | null,
+  limit: number,
+  offset: number
+) {
+  let paramIndex = 1;
+
+  let fromClause: string;
+  if (listingType === 'all') {
+    const rentColumns = columns.replace(/\br\./g, '');
+    fromClause = `(
+      SELECT ${rentColumns}, 'sale' AS listing_type FROM real_estate
+      UNION ALL
+      SELECT ${rentColumns}, 'rent' AS listing_type FROM real_estate_rent
+    ) r`;
+  } else if (listingType === 'rent') {
+    fromClause = `real_estate_rent r`;
+  } else {
+    fromClause = `real_estate r`;
   }
 
-  const { searchParams } = new URL(request.url);
-  const search = searchParams.get('search');
-  const region = searchParams.get('region');
-  const city = searchParams.get('city');
-  const suburb = searchParams.get('suburb');
-  const minBedrooms = searchParams.get('min_bedrooms');
-  const maxBedrooms = searchParams.get('max_bedrooms');
-  const minBathrooms = searchParams.get('min_bathrooms');
-  const maxBathrooms = searchParams.get('max_bathrooms');
-  const propertyType = searchParams.get('property_type');
-  const page = parseInt(searchParams.get('page') || '1');
-  const limit = parseInt(searchParams.get('limit') || '18');
-  const offset = (page - 1) * limit;
+  const listingTypeSelect = listingType !== 'all'
+    ? `, '${listingType}' AS listing_type`
+    : ', r.listing_type';
 
-  let query = `
-    SELECT
-      r.id,
-      r.address,
-      r.status,
-      r.data,
-      r.listing_date,
-      r.listing_date_raw,
-      r.price_display,
-      r.agent_name,
-      r.bedroom_count,
-      r.bathroom_count,
-      r.land_area,
-      r.floor_area,
-      r.property_url,
-      r.original_link,
-      r.region,
-      r.latitude,
-      r.longitude,
-      r.cover_image_url,
-      r.images,
-      r.normalized_lead_address,
-      r.address_fingerprint,
-      r.property_type,
-      r.description,
-      r.listing_number,
-      r.listing_date_parsed
-    FROM real_estate r
-    WHERE 1=1
-  `;
-
-  const params: unknown[] = [];
-  let paramIndex = 1;
+  let query = `SELECT${columns}${listingTypeSelect}\n  FROM ${fromClause}\n  WHERE 1=1`;
 
   if (search) {
     query += ` AND r.address ILIKE $${paramIndex}`;
@@ -71,13 +85,13 @@ export async function GET(request: Request) {
   }
 
   if (city) {
-    query += ` AND r.address ILIKE $${paramIndex}`;
+    query += ` AND LOWER(r.city) LIKE LOWER($${paramIndex})`;
     params.push(`%${city}%`);
     paramIndex++;
   }
 
   if (suburb) {
-    query += ` AND r.address ILIKE $${paramIndex}`;
+    query += ` AND LOWER(r.suburb) LIKE LOWER($${paramIndex})`;
     params.push(`%${suburb}%`);
     paramIndex++;
   }
@@ -124,14 +138,151 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
-  const countResult = await marieQuery<{ total: string }>(countQuery, params);
-  const total = parseInt(countResult.rows[0]?.total || '0');
-
   query += ` ORDER BY r.listing_date DESC NULLS LAST, r.address ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
 
+  return { query, paramIndex };
+}
+
+function buildCountQuery(
+  listingType: string,
+  columns: string,
+  params: unknown[],
+  search: string | null,
+  region: string | null,
+  city: string | null,
+  suburb: string | null,
+  minBedrooms: string | null,
+  maxBedrooms: string | null,
+  minBathrooms: string | null,
+  maxBathrooms: string | null,
+  propertyType: string | null
+) {
+  let paramIndex = 1;
+
+  let fromClause: string;
+  if (listingType === 'all') {
+    const rentColumns = columns.replace(/\br\./g, '');
+    fromClause = `(
+      SELECT ${rentColumns}, 'sale' AS listing_type FROM real_estate
+      UNION ALL
+      SELECT ${rentColumns}, 'rent' AS listing_type FROM real_estate_rent
+    ) r`;
+  } else if (listingType === 'rent') {
+    fromClause = `real_estate_rent r`;
+  } else {
+    fromClause = `real_estate r`;
+  }
+
+  let query = `SELECT COUNT(*) as total FROM ${fromClause} WHERE 1=1`;
+
+  if (search) {
+    query += ` AND r.address ILIKE $${paramIndex}`;
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  if (region) {
+    query += ` AND LOWER(r.region) LIKE LOWER($${paramIndex})`;
+    params.push(`%${region}%`);
+    paramIndex++;
+  }
+
+  if (city) {
+    query += ` AND LOWER(r.city) LIKE LOWER($${paramIndex})`;
+    params.push(`%${city}%`);
+    paramIndex++;
+  }
+
+  if (suburb) {
+    query += ` AND LOWER(r.suburb) LIKE LOWER($${paramIndex})`;
+    params.push(`%${suburb}%`);
+    paramIndex++;
+  }
+
+  if (minBedrooms) {
+    const val = parseInt(minBedrooms);
+    if (!isNaN(val)) {
+      query += ` AND r.bedroom_count >= $${paramIndex}`;
+      params.push(val);
+      paramIndex++;
+    }
+  }
+
+  if (maxBedrooms) {
+    const val = parseInt(maxBedrooms);
+    if (!isNaN(val)) {
+      query += ` AND r.bedroom_count <= $${paramIndex}`;
+      params.push(val);
+      paramIndex++;
+    }
+  }
+
+  if (minBathrooms) {
+    const val = parseInt(minBathrooms);
+    if (!isNaN(val)) {
+      query += ` AND r.bathroom_count >= $${paramIndex}`;
+      params.push(val);
+      paramIndex++;
+    }
+  }
+
+  if (maxBathrooms) {
+    const val = parseInt(maxBathrooms);
+    if (!isNaN(val)) {
+      query += ` AND r.bathroom_count <= $${paramIndex}`;
+      params.push(val);
+      paramIndex++;
+    }
+  }
+
+  if (propertyType) {
+    query += ` AND LOWER(r.property_type) = LOWER($${paramIndex})`;
+    params.push(propertyType);
+    paramIndex++;
+  }
+
+  return query;
+}
+
+export async function GET(request: Request) {
+  const session = await auth();
+
+  if (!session?.user?.email || !isAdmin(session.user.email)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const search = searchParams.get('search');
+  const region = searchParams.get('region');
+  const city = searchParams.get('city');
+  const suburb = searchParams.get('suburb');
+  const minBedrooms = searchParams.get('min_bedrooms');
+  const maxBedrooms = searchParams.get('max_bedrooms');
+  const minBathrooms = searchParams.get('min_bathrooms');
+  const maxBathrooms = searchParams.get('max_bathrooms');
+  const propertyType = searchParams.get('property_type');
+  const listingType = searchParams.get('type') || 'sale';
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '18');
+  const offset = (page - 1) * limit;
+
+  const dataParams: unknown[] = [];
+  const { query } = buildQuery(
+    listingType, COLUMNS, dataParams,
+    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType, limit, offset
+  );
+
+  const countParams: unknown[] = [];
+  const countQuery = buildCountQuery(
+    listingType, COLUMNS, countParams,
+    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType
+  );
+
   try {
+    const countResult = await marieQuery<{ total: string }>(countQuery, countParams);
+    const total = parseInt(countResult.rows[0]?.total || '0');
+
     const result = await marieQuery<{
       id: string;
       address: string;
@@ -145,9 +296,12 @@ export async function GET(request: Request) {
       bathroom_count: string | null;
       land_area: string | null;
       floor_area: string | null;
+      car_spaces: string | null;
       property_url: string | null;
       original_link: string | null;
       region: string | null;
+      suburb: string | null;
+      city: string | null;
       latitude: string | null;
       longitude: string | null;
       cover_image_url: string | null;
@@ -158,7 +312,8 @@ export async function GET(request: Request) {
       description: string | null;
       listing_number: string | null;
       listing_date_parsed: string | null;
-    }>(query, params);
+      listing_type: string;
+    }>(query, dataParams);
 
     const listings = result.rows.map(row => ({
       id: row.id,
@@ -173,9 +328,12 @@ export async function GET(request: Request) {
       bathroom_count: row.bathroom_count !== null ? Number(row.bathroom_count) : null,
       land_area: row.land_area !== null ? Number(row.land_area) : null,
       floor_area: row.floor_area !== null ? Number(row.floor_area) : null,
+      car_spaces: row.car_spaces !== null ? Number(row.car_spaces) : null,
       property_url: row.property_url ?? null,
       original_link: row.original_link ?? null,
       region: row.region ?? null,
+      suburb: row.suburb ?? null,
+      city: row.city ?? null,
       latitude: row.latitude !== null ? Number(row.latitude) : null,
       longitude: row.longitude !== null ? Number(row.longitude) : null,
       cover_image_url: row.cover_image_url ?? null,
@@ -186,6 +344,7 @@ export async function GET(request: Request) {
       description: row.description ?? null,
       listing_number: row.listing_number ?? null,
       listing_date_parsed: row.listing_date_parsed ?? null,
+      listing_type: row.listing_type,
     }));
 
     return NextResponse.json({

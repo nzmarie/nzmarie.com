@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, keepPreviousData, useQuery } from "@tanstack/react-query";
-import { FaBed, FaBath, FaMapMarkerAlt, FaRulerCombined, FaUser, FaExpand } from "react-icons/fa";
+import { FaBed, FaBath, FaMapMarkerAlt, FaRulerCombined, FaUser, FaCar } from "react-icons/fa";
 import Image from "next/image";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
@@ -22,11 +22,14 @@ interface Listing {
   agent_name: string | null;
   bedroom_count: number | null;
   bathroom_count: number | null;
+  car_spaces: number | null;
   land_area: number | null;
   floor_area: number | null;
   property_url: string | null;
   original_link: string | null;
   region: string | null;
+  suburb: string | null;
+  city: string | null;
   latitude: number | null;
   longitude: number | null;
   cover_image_url: string | null;
@@ -37,6 +40,7 @@ interface Listing {
   description: string | null;
   listing_number: string | null;
   listing_date_parsed: string | null;
+  listing_type: string | null;
 }
 
 interface Filters {
@@ -49,6 +53,7 @@ interface Filters {
   min_bathrooms: string;
   max_bathrooms: string;
   property_type: string;
+  type: string;
 }
 
 const ListingCard = ({ listing }: { listing: Listing }) => {
@@ -83,6 +88,8 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
     listing.bathroom_count != null ? `Bathrooms: ${listing.bathroom_count}` : null,
     listing.land_area != null ? `Land Area: ${listing.land_area}m²` : null,
     listing.floor_area != null ? `Floor Area: ${listing.floor_area}m²` : null,
+    listing.suburb ? `Suburb: ${listing.suburb}` : null,
+    listing.city ? `City: ${listing.city}` : null,
     listing.region ? `Region: ${listing.region}` : null,
     listing.listing_number ? `Listing Number: ${listing.listing_number}` : null,
     listing.description ? `Description: ${listing.description}` : null,
@@ -169,7 +176,11 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
               ? 'rgba(239, 68, 68, 0.9)'
               : listing.status.toLowerCase().includes('under') || listing.status.toLowerCase().includes('offer')
                 ? 'rgba(245, 158, 11, 0.9)'
-                : 'rgba(34, 197, 94, 0.9)',
+                : listing.status.toLowerCase().includes('rent')
+                  ? 'rgba(139, 92, 246, 0.9)'
+                  : listing.status.toLowerCase().includes('to rent')
+                    ? 'rgba(139, 92, 246, 0.9)'
+                    : 'rgba(34, 197, 94, 0.9)',
             color: "white", padding: "6px 12px", borderRadius: "20px",
             fontSize: "0.85rem", fontWeight: "600",
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
@@ -178,15 +189,14 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
           </div>
         )}
 
-        {listing.region && (
+        {(listing.suburb || listing.city) && (
           <div style={{
             position: "absolute", bottom: "16px", left: "16px",
             backgroundColor: "rgba(34, 197, 94, 0.9)", color: "white",
             padding: "6px 12px", borderRadius: "20px", fontSize: "0.85rem",
             fontWeight: "600", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-            textTransform: "capitalize",
           }}>
-            {listing.region}
+            {listing.suburb || listing.city}
           </div>
         )}
 
@@ -225,12 +235,19 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
 
       <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-          <h3 style={{
-            margin: 0, fontSize: "1.3rem", fontWeight: "700", color: "#2D3748",
-            lineHeight: "1.3", flex: 1,
-          }}>
-            {listing.address}
-          </h3>
+          <div style={{ flex: 1 }}>
+            <h3 style={{
+              margin: 0, fontSize: "1.3rem", fontWeight: "700", color: "#2D3748",
+              lineHeight: "1.3",
+            }}>
+              {listing.address}
+            </h3>
+            {listing.suburb && (
+              <div style={{ fontSize: "0.85rem", color: "#718096", fontWeight: "500", marginTop: "4px" }}>
+                {listing.suburb}{listing.city ? `, ${listing.city}` : ''}
+              </div>
+            )}
+          </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -254,7 +271,7 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", color: "#718096", fontSize: "0.95rem" }}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <FaMapMarkerAlt style={{ marginRight: "8px", fontSize: "1rem" }} />
-            <span>{listing.region ? listing.region.charAt(0).toUpperCase() + listing.region.slice(1) : ''}</span>
+            <span>{listing.suburb ? listing.suburb : listing.city ? listing.city : listing.region ? listing.region.charAt(0).toUpperCase() + listing.region.slice(1) : ''}</span>
           </div>
           {listing.listing_date_raw && (
             <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
@@ -293,21 +310,23 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
-              <FaRulerCombined style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
+              <FaCar style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
               <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
-                {listing.floor_area != null ? listing.floor_area : "-"}
+                {listing.car_spaces != null ? listing.car_spaces : "-"}
               </span>
             </div>
-            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>Floor</div>
+            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>Cars</div>
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
-              <FaExpand style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
-              <span style={{ fontWeight: "600", color: "#2D3748", fontSize: "1.1rem" }}>
-                {listing.land_area != null ? listing.land_area : "-"}
-              </span>
+              <FaRulerCombined style={{ marginRight: "6px", color: "#718096", fontSize: "1.1rem" }} />
             </div>
-            <div style={{ fontSize: "0.8rem", color: "#718096", fontWeight: "500" }}>Land</div>
+            <div style={{ fontWeight: "600", color: "#2D3748", fontSize: "0.9rem", lineHeight: "1.3" }}>
+              F: {listing.floor_area != null ? listing.floor_area : "-"} m²
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "#718096", fontWeight: "500", lineHeight: "1.3" }}>
+              L: {listing.land_area != null ? listing.land_area : "-"} m²
+            </div>
           </div>
         </div>
 
@@ -354,6 +373,7 @@ const DEFAULT_FILTERS: Filters = {
   min_bathrooms: "",
   max_bathrooms: "",
   property_type: "House",
+  type: "sale",
 };
 
 export default function RealestatePage() {
@@ -397,6 +417,7 @@ export default function RealestatePage() {
     if (filters.min_bathrooms) params.append("min_bathrooms", filters.min_bathrooms);
     if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
     if (filters.property_type && filters.property_type !== 'All') params.append("property_type", filters.property_type);
+    if (filters.type) params.append("type", filters.type);
 
     const response = await fetch(`/api/admin/realestate?${params}`);
     const result = await response.json();
@@ -507,6 +528,8 @@ export default function RealestatePage() {
       setEditingListing(detail);
       setEditFormData({
         address: detail.address || '',
+        suburb: detail.suburb || '',
+        city: detail.city || '',
         region: detail.region || '',
         status: detail.status || '',
         price_display: detail.price_display || '',
@@ -515,6 +538,7 @@ export default function RealestatePage() {
         cover_image_url: detail.cover_image_url || '',
         bedroom_count: detail.bedroom_count?.toString() || '',
         bathroom_count: detail.bathroom_count?.toString() || '',
+        car_spaces: detail.car_spaces?.toString() || '',
         land_area: detail.land_area?.toString() || '',
         floor_area: detail.floor_area?.toString() || '',
         property_type: detail.property_type || '',
@@ -535,7 +559,7 @@ export default function RealestatePage() {
     setSaving(true);
 
     const body: Record<string, string> = {};
-    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'region', 'bedroom_count', 'bathroom_count', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number'] as const) {
+    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'suburb', 'city', 'region', 'bedroom_count', 'bathroom_count', 'car_spaces', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number'] as const) {
       const val = editFormData[key];
       if (typeof val === 'string' && val !== '' && val !== (editingListing as unknown as Record<string, string>)[key]?.toString()) {
         body[key] = val;
@@ -547,6 +571,8 @@ export default function RealestatePage() {
       setEditingListing(null);
       return;
     }
+
+    body.listing_type = editingListing.listing_type || 'sale';
 
     try {
       const res = await fetch(`/api/admin/realestate/${editingListing.id}`, {
@@ -616,11 +642,64 @@ export default function RealestatePage() {
           <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748", margin: 0 }}>
             Search Filters
           </h2>
-          <p style={{ fontSize: "0.9rem", color: "#718096", margin: 0 }}>
-            {isClassic
-  ? `Displaying ${Math.max(1, (currentPage - 1) * 18 + 1)} to ${Math.min(currentPage * 18, totalListings)} of ${totalListings} listings`
-  : `Displaying 1 to ${listings.length} of ${totalListings} listings`}
-          </p>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+              <button
+                onClick={() => handleFilterChange("type", "sale")}
+                style={{
+                  padding: "8px 20px",
+                  backgroundColor: filters.type === 'sale' ? '#3b82f6' : 'white',
+                  color: filters.type === 'sale' ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: filters.type === 'sale' ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Selling
+              </button>
+              <button
+                onClick={() => handleFilterChange("type", "rent")}
+                style={{
+                  padding: "8px 20px",
+                  backgroundColor: filters.type === 'rent' ? '#8b5cf6' : 'white',
+                  color: filters.type === 'rent' ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: filters.type === 'rent' ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Rent
+              </button>
+            </div>
+            <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+              <button
+                onClick={() => { setPaginationMode('infinite'); }}
+                style={{
+                  padding: "8px 18px",
+                  backgroundColor: !isClassic ? '#3b82f6' : 'white',
+                  color: !isClassic ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: !isClassic ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Infinite Scroll
+              </button>
+              <button
+                onClick={() => { setPaginationMode('classic'); }}
+                style={{
+                  padding: "8px 18px",
+                  backgroundColor: isClassic ? '#3b82f6' : 'white',
+                  color: isClassic ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: isClassic ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Classic Pages
+              </button>
+            </div>
+          </div>
         </div>
 
         <div style={{ marginBottom: "20px" }}>
@@ -644,6 +723,76 @@ export default function RealestatePage() {
             }}
             placeholder="Search by address..."
           />
+        </div>
+
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
+            Quick Filter by Suburb
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
+              <button
+                key={suburb}
+                onClick={() => {
+                  setAddressInput('');
+                  setFilters(prev => ({
+                    ...prev,
+                    search: '',
+                    suburb: prev.suburb === suburb ? '' : suburb,
+                  }));
+                }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: filters.suburb === suburb ? '#3b82f6' : 'white',
+                  color: filters.suburb === suburb ? 'white' : '#4a5568',
+                  border: filters.suburb === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: filters.suburb === suburb ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: filters.suburb === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (filters.suburb !== suburb) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (filters.suburb !== suburb) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {suburb}
+              </button>
+            ))}
+            {filters.suburb && (
+              <button
+                onClick={() => {
+                  setAddressInput('');
+                  setFilters(prev => ({ ...prev, search: '', suburb: '' }));
+                }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: '#fef2f2',
+                  color: '#dc2626',
+                  border: '2px solid #fecaca',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fee2e2'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.borderColor = '#fecaca'; }}
+              >
+                Clear suburb filter
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
@@ -858,38 +1007,9 @@ export default function RealestatePage() {
             ? `Displaying ${Math.max(1, (currentPage - 1) * 18 + 1)} to ${Math.min(currentPage * 18, totalListings)} of ${totalListings} listings`
             : `Displaying 1 to ${listings.length} of ${totalListings} listings`}
         </span>
-        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
-          <button
-            onClick={() => setPaginationMode('infinite')}
-            style={{
-              padding: "8px 18px",
-              backgroundColor: !isClassic ? '#3b82f6' : 'white',
-              color: !isClassic ? 'white' : '#4a5568',
-              border: 'none',
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "600",
-              transition: "all 0.2s",
-            }}
-          >
-            Infinite Scroll
-          </button>
-          <button
-            onClick={() => setPaginationMode('classic')}
-            style={{
-              padding: "8px 18px",
-              backgroundColor: isClassic ? '#3b82f6' : 'white',
-              color: isClassic ? 'white' : '#4a5568',
-              border: 'none',
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "600",
-              transition: "all 0.2s",
-            }}
-          >
-            Classic Pages
-          </button>
-        </div>
+        <span style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
+          {filters.type === 'rent' ? 'Rentals' : 'For Sale'}
+        </span>
       </div>
 
       {isClassic && (
@@ -1085,14 +1205,17 @@ export default function RealestatePage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
               {[
                 { key: 'address', label: 'Address', type: 'text' },
+                { key: 'suburb', label: 'Suburb', type: 'text' },
+                { key: 'city', label: 'City', type: 'text' },
                 { key: 'region', label: 'Region', type: 'text' },
-                { key: 'status', label: 'Status', type: 'select', options: ['', 'for Sale', 'under Offer', 'sold', 'withdrawn'] },
+                { key: 'status', label: 'Status', type: 'select', options: ['', 'for Sale', 'under Offer', 'sold', 'withdrawn', 'for Rent', 'To Rent', 'Leased'] },
                 { key: 'price_display', label: 'Price Display', type: 'text' },
                 { key: 'agent_name', label: 'Agent Name', type: 'text' },
                 { key: 'property_url', label: 'Property URL', type: 'text' },
                 { key: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
                 { key: 'bedroom_count', label: 'Bedrooms', type: 'number' },
                 { key: 'bathroom_count', label: 'Bathrooms', type: 'number' },
+                { key: 'car_spaces', label: 'Car Spaces', type: 'number' },
                 { key: 'land_area', label: 'Land Area (m²)', type: 'number' },
                 { key: 'floor_area', label: 'Floor Area (m²)', type: 'number' },
                 { key: 'property_type', label: 'Property Type', type: 'select', options: ['', 'House', 'Townhouse', 'Unit', 'Apartment', 'Retirement Living'] },

@@ -145,11 +145,11 @@ describe('GET /api/admin/realestate', () => {
       (call[0] as string).includes('FROM real_estate') && !(call[0] as string).includes('COUNT(*)')
     );
     expect(dataCalls.length).toBeGreaterThan(0);
-    expect((dataCalls[0][0] as string).includes('r.address ILIKE')).toBe(true);
+    expect((dataCalls[0][0] as string).includes('LOWER(r.city) LIKE')).toBe(true);
     expect(dataCalls[0][1]).toContain('%North Shore City%');
   });
 
-  it('filters by suburb via address ILIKE', async () => {
+  it('filters by suburb via suburb column', async () => {
     const req = new Request('http://localhost/api/admin/realestate?suburb=Albany');
     const res = await GET(req);
 
@@ -158,7 +158,7 @@ describe('GET /api/admin/realestate', () => {
       (call[0] as string).includes('FROM real_estate') && !(call[0] as string).includes('COUNT(*)')
     );
     expect(dataCalls.length).toBeGreaterThan(0);
-    expect((dataCalls[0][0] as string).includes('r.address ILIKE')).toBe(true);
+    expect((dataCalls[0][0] as string).includes('LOWER(r.suburb) LIKE')).toBe(true);
     expect(dataCalls[0][1]).toContain('%Albany%');
   });
 

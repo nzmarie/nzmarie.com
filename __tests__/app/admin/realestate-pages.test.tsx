@@ -189,7 +189,7 @@ describe('Realestate Page', () => {
     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
     render(<RealestatePage />);
 
-    expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Displaying 1 to 2 of 45 listings/)).toBeDefined();
   });
 
   it('renders region, city, and suburb dropdowns', async () => {
@@ -480,7 +480,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
     render(<RealestatePage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/Displaying 1 to 2 of 45 listings/)).toBeDefined();
     });
   });
 
@@ -535,7 +535,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 18 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/Displaying 1 to 18 of 45 listings/)).toBeDefined();
     });
   });
 
@@ -559,7 +559,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Infinite Scroll'));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 2 of 45 listings/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/Displaying 1 to 2 of 45 listings/)).toBeDefined();
     });
   });
 
