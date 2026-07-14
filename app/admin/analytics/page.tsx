@@ -78,6 +78,7 @@ export default function AnalyticsPage() {
       buckets: Array<{ range: string; count: number; percentage: number }>;
     };
   } | null>(null);
+  const [lastSoldFilterType, setLastSoldFilterType] = useState<'all' | 'house' | 'townhouse'>('all');
 
   const chartReqIdRef = React.useRef(0);
 
@@ -112,10 +113,10 @@ export default function AnalyticsPage() {
     }
   }, [status, session, router]);
 
-  const fetchLastSoldData = useCallback(async (suburb: string | null) => {
+  const fetchLastSoldData = useCallback(async (type: 'all' | 'house' | 'townhouse') => {
     try {
-      const params = suburb ? `?suburb=${encodeURIComponent(suburb)}` : '';
-      const res = await fetch(`/api/admin/analytics/last-sold-data${params}`);
+      const params = new URLSearchParams({ type });
+      const res = await fetch(`/api/admin/analytics/last-sold-data?${params}`);
       const data = await res.json();
       if (data.success) {
         setLastSoldData(data);
@@ -155,9 +156,9 @@ export default function AnalyticsPage() {
         })
         .catch(() => undefined);
 
-      fetchLastSoldData(null);
+      fetchLastSoldData(lastSoldFilterType);
     }
-  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData]);
+  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData, lastSoldFilterType]);
 
   const fetchChartData = useCallback(async (suburbs: string[]) => {
     const reqId = ++chartReqIdRef.current;
@@ -503,9 +504,26 @@ export default function AnalyticsPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="text-xl font-bold text-gray-900">Last Sold Data For Sale</h2>
+          <div className="inline-flex rounded-lg overflow-hidden border border-gray-200">
+            {(['all', 'house', 'townhouse'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setLastSoldFilterType(type)}
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                  lastSoldFilterType === type
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {type === 'all' ? 'All' : type === 'house' ? 'House' : 'Townhouse/Unit'}
+              </button>
+            ))}
+          </div>
         </div>
         {!lastSoldData ? (
           <div className="text-gray-400 py-4">Loading...</div>
+        ) : !lastSoldData.suburbs || lastSoldData.suburbs.length === 0 ? (
+          <div className="text-gray-400 py-4">No data available for the selected filter.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -524,7 +542,10 @@ export default function AnalyticsPage() {
               <tbody>
                 {lastSoldData.suburbs.map((row) => {
                   const displayBuckets = row.buckets.filter(b => b.range !== 'no_data');
-                  const maxPct = Math.max(...displayBuckets.map(b => b.percentage));
+                  const recentBuckets = displayBuckets.filter(b => b.range === '0-3' || b.range === '3-5');
+                  const lifecycleBuckets = displayBuckets.filter(b => b.range === '5-10' || b.range === '10-15' || b.range === '15+');
+                  const recentMax = recentBuckets.length > 0 ? Math.max(...recentBuckets.map(b => b.percentage)) : -1;
+                  const lifecycleMax = lifecycleBuckets.length > 0 ? Math.max(...lifecycleBuckets.map(b => b.percentage)) : -1;
                   return (
                     <tr
                       key={row.suburb}
@@ -532,19 +553,24 @@ export default function AnalyticsPage() {
                     >
                       <td className="py-2 px-3 font-medium text-gray-800">{row.suburb}</td>
                       <td className="text-right py-2 px-3 text-gray-600">{row.total}</td>
-                      {displayBuckets.map(b => (
-                        <td
-                          key={b.range}
-                          className={`text-right py-2 px-3 ${
-                            b.percentage > 0 && b.percentage === maxPct
-                              ? 'bg-green-100 font-semibold'
-                              : 'text-gray-600'
-                          }`}
-                        >
-                          {b.count}
-                          <span className="text-xs ml-1">({b.percentage}%)</span>
-                        </td>
-                      ))}
+                      {displayBuckets.map(b => {
+                        const isRecent = b.range === '0-3' || b.range === '3-5';
+                        const isLifecycle = b.range === '5-10' || b.range === '10-15' || b.range === '15+';
+                        const isRecentMax = isRecent && b.percentage > 10 && b.percentage === recentMax;
+                        const isLifecycleMax = isLifecycle && b.percentage > 10 && b.percentage === lifecycleMax;
+                        let cellClass = 'text-right py-2 px-3 text-gray-600';
+                        if (isRecentMax) {
+                          cellClass = 'text-right py-2 px-3 bg-blue-50 text-blue-700 font-semibold border border-blue-100 rounded';
+                        } else if (isLifecycleMax) {
+                          cellClass = 'text-right py-2 px-3 bg-green-50 text-green-700 font-semibold border border-green-100 rounded';
+                        }
+                        return (
+                          <td key={b.range} className={cellClass}>
+                            {b.count}
+                            <span className="text-xs ml-1">({b.percentage}%)</span>
+                          </td>
+                        );
+                      })}
                       <td className="text-right py-2 px-3 text-gray-400">
                         {row.buckets.find(b => b.range === 'no_data')?.count || 0}
                       </td>

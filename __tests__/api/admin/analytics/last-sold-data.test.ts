@@ -119,19 +119,72 @@ describe('GET /api/admin/analytics/last-sold-data', () => {
     expect(res.status).toBe(403);
   });
 
-  it('filters by suburb when suburb param is provided', async () => {
+  it('filters by type=all returns all listings (no additional WHERE)', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        { suburb: 'Albany', address: '1 Test, Albany', last_sold_date: '2024-01-15' },
+        { suburb: 'Oteha', address: '2 Test, Oteha', last_sold_date: null },
+      ],
+    });
+
+    const req = new Request('http://localhost/api/admin/analytics/last-sold-data?type=all');
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(json.success).toBe(true);
+    expect(json.suburbs).toHaveLength(2);
+  });
+
+  it('filters by type=house only includes house listings in SQL', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const req = new Request('http://localhost/api/admin/analytics/last-sold-data?type=house');
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(json.success).toBe(true);
+    expect(json.suburbs).toHaveLength(0);
+    expect(json.northShore.total).toBe(0);
+  });
+
+  it('filters by type=townhouse only includes townhouse/unit/apartment listings in SQL', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const req = new Request('http://localhost/api/admin/analytics/last-sold-data?type=townhouse');
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(json.success).toBe(true);
+    expect(json.suburbs).toHaveLength(0);
+    expect(json.northShore.total).toBe(0);
+  });
+
+  it('defaults to type=all when no type param provided', async () => {
     mockQuery.mockResolvedValue({
       rows: [
         { suburb: 'Albany', address: '1 Test, Albany', last_sold_date: '2024-01-15' },
       ],
     });
 
-    const req = new Request('http://localhost/api/admin/analytics/last-sold-data?suburb=Albany');
+    const req = new Request('http://localhost/api/admin/analytics/last-sold-data');
     const res = await GET(req);
     const json = await res.json();
 
     expect(json.success).toBe(true);
     expect(json.suburbs).toHaveLength(1);
     expect(json.suburbs[0].suburb).toBe('Albany');
+  });
+
+  it('generates valid SQL syntax (no stray AND after WHERE)', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    const req = new Request('http://localhost/api/admin/analytics/last-sold-data?type=all');
+    await GET(req);
+
+    const sqlArg = mockQuery.mock.calls[0][0] as string;
+    expect(sqlArg).not.toContain('WHERE  AND');
+    expect(sqlArg).not.toContain('WHERE AND');
+    expect(sqlArg).toMatch(/WHERE\s+\S/);
+    expect(sqlArg).toMatch(/\n  AND /);
   });
 });

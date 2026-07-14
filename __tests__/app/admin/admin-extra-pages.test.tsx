@@ -184,7 +184,7 @@ describe('Extra admin pages', () => {
     expect(screen.getByText('North Shore Total')).toBeTruthy();
   });
 
-  it('highlights max percentage bucket in green for each suburb row', async () => {
+  it('applies dual-color highlighting (blue for recent, green for lifecycle)', async () => {
     render(<AnalyticsPage />);
     expect(await screen.findByText('Last Sold Data For Sale')).toBeTruthy();
     expect(screen.getByText('(33%)')).toBeTruthy();

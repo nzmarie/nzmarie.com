@@ -25,11 +25,23 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const suburbFilter = searchParams.get('suburb');
+  const typeFilter = searchParams.get('type') || 'all';
 
   try {
-    const params: unknown[] = suburbFilter ? [suburbFilter] : [];
-    const suburbWhere = suburbFilter ? ` AND LOWER(re.suburb) = LOWER($1)` : '';
+    const conditions: string[] = [
+      `re.city = 'North Shore City'`,
+      `LOWER(re.status) IN ('for sale', 'under offer')`,
+      `re.suburb IS NOT NULL`,
+    ];
+    const params: unknown[] = [];
+
+    if (typeFilter === 'house') {
+      conditions.push(`LOWER(re.property_type) IN ('house', 'standalone house')`);
+    } else if (typeFilter === 'townhouse') {
+      conditions.push(`LOWER(re.property_type) IN ('townhouse', 'unit', 'apartment')`);
+    }
+
+    const whereClause = conditions.join('\n  AND ');
 
     const result = await marieQuery<{
       suburb: string;
@@ -44,9 +56,8 @@ export async function GET(request: Request) {
       LEFT JOIN properties p
         ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g'))
         AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
-      WHERE re.city = 'North Shore City'
-        AND LOWER(re.status) IN ('for sale', 'under offer')
-        AND re.suburb IS NOT NULL${suburbWhere}
+      WHERE
+        ${whereClause}
       ORDER BY re.suburb`,
       params
     );
