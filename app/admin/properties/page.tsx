@@ -569,6 +569,25 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           </div>
         </div>
 
+        {property.has_rental_history && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            marginTop: "14px",
+            paddingTop: "10px",
+            borderTop: "1px solid #fef3c7",
+            backgroundColor: "rgba(245, 158, 11, 0.08)",
+            borderRadius: "8px",
+            padding: "8px 12px",
+          }}>
+            <span style={{ fontSize: "1rem" }}>📋</span>
+            <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400e" }}>
+              Rented · Has rental history
+            </span>
+          </div>
+        )}
+
         <div style={{
           width: "100%",
           marginTop: "16px",

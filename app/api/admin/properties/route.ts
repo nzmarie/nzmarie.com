@@ -313,8 +313,8 @@ export async function GET(request: Request) {
       postcode: string | null;
       land_value: string | null;
       improvement_value: string | null;
-      has_rental_history: string | null;
-      is_currently_rented: string | null;
+      has_rental_history: boolean | null;
+      is_currently_rented: boolean | null;
       status: string | null;
       property_history: string | null;
       normalized_address: string | null;
@@ -364,8 +364,8 @@ export async function GET(request: Request) {
       postcode: row.postcode ?? null,
       land_value: row.land_value !== null ? Number(row.land_value) : null,
       improvement_value: row.improvement_value !== null ? Number(row.improvement_value) : null,
-      has_rental_history: row.has_rental_history === null ? null : row.has_rental_history === 't',
-      is_currently_rented: row.is_currently_rented === null ? null : row.is_currently_rented === 't',
+      has_rental_history: row.has_rental_history === null ? null : row.has_rental_history === true,
+      is_currently_rented: row.is_currently_rented === null ? null : row.is_currently_rented === true,
       status: row.status ?? null,
       property_history: row.property_history ?? null,
       normalized_address: row.normalized_address ?? null,
