@@ -2,17 +2,54 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { generateChartImageUrl } from '@/lib/report-charts';
 
-async function fetchMarketTrends(suburbName: string, quarter: string) {
+interface TrendRow {
+  region_name: string;
+  region_type: string;
+  period_month: string;
+  median_price: number | null;
+  sales_count: number | null;
+  days_to_sell: number | null;
+  median_price_1yr_prior: number | null;
+  price_diff_1yr_pct: number | null;
+  median_valuation: number | null;
+  median_list_price: number | null;
+}
+
+interface LastSoldRow {
+  total: number;
+  no_data: number;
+  bucket_0_3: number;
+  bucket_3_5: number;
+  bucket_5_10: number;
+  bucket_10_15: number;
+  bucket_15_plus: number;
+}
+
+interface CampaignRow {
+  mailed: number;
+  downloads: number;
+  appraisals: number;
+  conversions: number;
+}
+
+const fmtM = (v: number | null | undefined): string => {
+  if (v == null) return '-';
+  return `$${(v / 1000000).toFixed(1)}M`;
+};
+
+async function fetchMarketTrends(suburbName: string, quarter: string): Promise<TrendRow[] | null> {
   const [yearStr, qStr] = quarter.split('-Q');
   if (!yearStr || !qStr) return null;
   const year = parseInt(yearStr);
   const qNum = parseInt(qStr);
   const startMonth = (qNum - 1) * 3 + 1;
   const startDate = `${year}-${String(startMonth).padStart(2, '0')}-01`;
-  const endDate = `${year + 1}-01-01`;
+  const endMonth = startMonth + 3;
+  const endDate = `${endMonth > 12 ? year + 1 : year}-${String(endMonth > 12 ? endMonth - 12 : endMonth).padStart(2, '0')}-01`;
 
-  const result = await marieQuery(
+  const result = await marieQuery<TrendRow>(
     `SELECT region_name, region_type, period_month, median_price, sales_count, days_to_sell,
             median_price_1yr_prior, price_diff_1yr_pct, median_valuation, median_list_price
      FROM market_monthly_snapshots
@@ -24,8 +61,8 @@ async function fetchMarketTrends(suburbName: string, quarter: string) {
   return result.rows;
 }
 
-async function fetchLastSoldData(suburbName: string) {
-  const result = await marieQuery(
+async function fetchLastSoldData(suburbName: string): Promise<LastSoldRow | null> {
+  const result = await marieQuery<LastSoldRow>(
     `SELECT
        COUNT(*) AS total,
        COUNT(*) FILTER (WHERE p.last_sold_date IS NULL) AS no_data,
@@ -42,8 +79,8 @@ async function fetchLastSoldData(suburbName: string) {
   return result.rows[0];
 }
 
-async function fetchCampaignStats(suburbName: string) {
-  const result = await marieQuery(
+async function fetchCampaignStats(suburbName: string): Promise<CampaignRow | null> {
+  const result = await marieQuery<CampaignRow>(
     `SELECT
        COUNT(DISTINCT da.id) AS mailed,
        COUNT(DISTINCT da.id) FILTER (WHERE da.has_downloaded = TRUE) AS downloads,
@@ -57,13 +94,23 @@ async function fetchCampaignStats(suburbName: string) {
   return result.rows[0];
 }
 
-function buildFourPageReport(
+function agg(arr: (number | null)[]): number | null {
+  const vals = arr.filter((v): v is number => v != null).map(v => Number(v));
+  return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+}
+
+function sum(arr: (number | null)[]): number {
+  return arr.filter((v): v is number => v != null).map(v => Number(v)).reduce((a, b) => a + b, 0);
+}
+
+function buildBlocks(
   suburbName: string,
   quarter: string,
-  marketTrends: any[] | null,
-  lastSold: any | null,
-  campaign: any | null
-) {
+  marketTrends: TrendRow[] | null,
+  lastSold: LastSoldRow | null,
+  campaign: CampaignRow | null,
+  chartImageUrl: string | null
+): unknown[] {
   const blocks: unknown[] = [];
 
   // Page 1: Cover
@@ -77,39 +124,82 @@ function buildFourPageReport(
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['REINZ Market Trends'] });
   blocks.push({ type: 'paragraph', content: [`Quarterly market data for ${suburbName} compared with North Shore City.`] });
 
+  if (chartImageUrl) {
+    blocks.push({ type: 'image', props: { url: chartImageUrl, caption: '', name: 'Median price trend chart', showPreview: true, previewWidth: 700, textAlignment: 'left', backgroundColor: 'default' } });
+    blocks.push({ type: 'paragraph', content: ['Chart: Median price trend — quarterly comparison.'] });
+  }
+
   if (marketTrends && marketTrends.length > 0) {
-    const suburbData = marketTrends.filter((r: any) => r.region_type === 'suburb');
-    const districtData = marketTrends.filter((r: any) => r.region_type !== 'suburb');
+    const suburbData = marketTrends.filter((r) => r.region_type === 'suburb');
+    const districtData = marketTrends.filter((r) => r.region_type !== 'suburb');
 
-    const months = [...new Set(marketTrends.map((r: any) => r.period_month))].sort();
-    blocks.push({ type: 'heading', props: { level: 3 }, content: ['Quarterly Comparison'] });
+    // Quarterly aggregation matching analytics SQL:
+    // AVG(median_price) as median, SUM(sales_count) as sales
+    const subMedian = agg(suburbData.map(r => r.median_price));
+    const subSales = sum(suburbData.map(r => r.sales_count));
+    const subDays = agg(suburbData.map(r => r.days_to_sell));
+    const distMedian = agg(districtData.map(r => r.median_price));
+    const distSales = sum(districtData.map(r => r.sales_count));
+    const distDays = agg(districtData.map(r => r.days_to_sell));
 
-    const tableRows: any[] = [];
-    const headerRow = { type: 'tableRow', content: [
-      { type: 'tableCell', content: [{ type: 'paragraph', content: ['Month'] }] },
-      { type: 'tableCell', content: [{ type: 'paragraph', content: [`${suburbName} Median`] }] },
-      { type: 'tableCell', content: [{ type: 'paragraph', content: [`${suburbName} Sales`] }] },
-      { type: 'tableCell', content: [{ type: 'paragraph', content: ['District Median'] }] },
-    ]};
-    tableRows.push(headerRow);
+    blocks.push({ type: 'heading', props: { level: 3 }, content: ['Quarterly Summary'] });
+    const qRows = [
+      { cells: [
+        ['Metric'],
+        [suburbName],
+        ['North Shore City'],
+      ]},
+      { cells: [
+        ['Median Price'],
+        [fmtM(subMedian)],
+        [fmtM(distMedian)],
+      ]},
+      { cells: [
+        ['Sales Count'],
+        [String(subSales)],
+        [String(distSales)],
+      ]},
+    ];
+    if (subDays != null) {
+      qRows.push({ cells: [
+        ['Avg Days to Sell'],
+        [String(subDays)],
+        [distDays != null ? String(distDays) : '-'],
+      ]});
+    }
+    blocks.push({ type: 'table', props: { width: 1 }, content: { type: 'tableContent', rows: qRows, headerRows: 1, columnWidths: [] } });
+
+    const monthStr = (d: unknown) => typeof d === 'string' ? d : new Date(d as string).toISOString().slice(0, 10);
+    const months = [...new Set(marketTrends.map((r) => monthStr(r.period_month)))].sort();
+    blocks.push({ type: 'heading', props: { level: 3 }, content: ['Monthly Breakdown'] });
+
+    const mRows = [
+      { cells: [
+        ['Month'],
+        [`${suburbName} Median`],
+        [`${suburbName} Sales`],
+        ['District Median'],
+      ]},
+    ];
 
     for (const month of months) {
-      const sub = suburbData.find((r: any) => r.period_month === month);
-      const dist = districtData.find((r: any) => r.period_month === month);
-      const fmt = (d: string) => new Date(d).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' });
-      tableRows.push({
-        type: 'tableRow', content: [
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [fmt(month)] }] },
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [sub ? `$${(sub.median_price || 0).toLocaleString()}` : '-'] }] },
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [sub ? String(sub.sales_count ?? 0) : '-'] }] },
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [dist ? `$${(dist.median_price || 0).toLocaleString()}` : '-'] }] },
+      const sub = suburbData.find((r) => monthStr(r.period_month) === month);
+      const dist = districtData.find((r) => monthStr(r.period_month) === month);
+      const dsp = (d: string) => new Date(d).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' });
+      mRows.push({
+        cells: [
+          [dsp(month)],
+          [fmtM(sub?.median_price)],
+          [sub ? String(sub.sales_count ?? 0) : '-'],
+          [fmtM(dist?.median_price)],
         ]
       });
     }
+    blocks.push({ type: 'table', props: { width: 1 }, content: { type: 'tableContent', rows: mRows, headerRows: 1, columnWidths: [] } });
 
     const lastSub = suburbData[suburbData.length - 1];
     if (lastSub && lastSub.price_diff_1yr_pct != null) {
-      blocks.push({ type: 'paragraph', content: [`${suburbName} median price is ${lastSub.price_diff_1yr_pct >= 0 ? 'up' : 'down'} ${Math.abs(lastSub.price_diff_1yr_pct).toFixed(1)}% year-on-year, with a median of $${(lastSub.median_price || 0).toLocaleString()}.`] });
+      blocks.push({ type: 'paragraph', content: [`${suburbName} median price is ${lastSub.price_diff_1yr_pct >= 0 ? 'up' : 'down'} ${Math.abs(lastSub.price_diff_1yr_pct).toFixed(1)}% year-on-year, with a median of ${fmtM(subMedian)}.`] });
       if (lastSub.days_to_sell != null) {
         blocks.push({ type: 'paragraph', content: [`Average days to sell: ${lastSub.days_to_sell} days.`] });
       }
@@ -120,51 +210,50 @@ function buildFourPageReport(
 
   blocks.push({ type: 'divider' });
 
-  // Page 3: Analysis Data & Last Sold Data
-  blocks.push({ type: 'heading', props: { level: 2 }, content: ['Analysis Data'] });
+  // Page 3: Sales Analysis
+  blocks.push({ type: 'heading', props: { level: 2 }, content: ['Sales Analysis'] });
 
   if (lastSold) {
-    const t = lastSold;
     blocks.push({ type: 'heading', props: { level: 3 }, content: ['Last Sold Data For Sale'] });
-    blocks.push({ type: 'paragraph', content: [`Active listings in ${suburbName}: ${t.total} properties`] });
-    const lsRows: any[] = [
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['Period'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['Count'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['%'] }] },
+    blocks.push({ type: 'paragraph', content: [`Active listings in ${suburbName}: ${lastSold.total} properties`] });
+    const lsRows = [
+      { cells: [
+        ['Period'],
+        ['Count'],
+        ['%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['0-3 years'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.bucket_0_3 ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.bucket_0_3 ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['0-3 years'],
+        [String(lastSold.bucket_0_3 ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.bucket_0_3 ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['3-5 years'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.bucket_3_5 ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.bucket_3_5 ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['3-5 years'],
+        [String(lastSold.bucket_3_5 ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.bucket_3_5 ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['5-10 years'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.bucket_5_10 ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.bucket_5_10 ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['5-10 years'],
+        [String(lastSold.bucket_5_10 ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.bucket_5_10 ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['10-15 years'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.bucket_10_15 ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.bucket_10_15 ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['10-15 years'],
+        [String(lastSold.bucket_10_15 ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.bucket_10_15 ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['15+ years'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.bucket_15_plus ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.bucket_15_plus ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['15+ years'],
+        [String(lastSold.bucket_15_plus ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.bucket_15_plus ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
-      { type: 'tableRow', content: [
-        { type: 'tableCell', content: [{ type: 'paragraph', content: ['No data'] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [String(t.no_data ?? 0)] }] },
-        { type: 'tableCell', content: [{ type: 'paragraph', content: [t.total > 0 ? `${((t.no_data ?? 0) / t.total * 100).toFixed(1)}%` : '0%'] }] },
+      { cells: [
+        ['No data'],
+        [String(lastSold.no_data ?? 0)],
+        [lastSold.total > 0 ? `${((lastSold.no_data ?? 0) / lastSold.total * 100).toFixed(1)}%` : '0%'],
       ]},
     ];
-    blocks.push({ type: 'table', props: { width: 1 }, content: lsRows });
+    blocks.push({ type: 'table', props: { width: 1 }, content: { type: 'tableContent', rows: lsRows, headerRows: 1, columnWidths: [] } });
   } else {
     blocks.push({ type: 'paragraph', content: ['Last sold data is not yet available for this suburb.'] });
   }
@@ -177,7 +266,7 @@ function buildFourPageReport(
 
   blocks.push({ type: 'divider' });
 
-  // Page 4: Marie's Introduction & Services
+  // Page 4: About Marie
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['About Marie Leulan'] });
   blocks.push({ type: 'paragraph', content: ['Marie Leulan is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.'] });
   blocks.push({ type: 'heading', props: { level: 3 }, content: ['Services Offered'] });
@@ -221,14 +310,15 @@ export async function POST(request: Request) {
     );
     const userId = adminResult.rows[0].id;
 
-    const [marketTrends, lastSold, campaign] = await Promise.all([
+    const [marketTrends, lastSold, campaign, chartImageUrl] = await Promise.all([
       fetchMarketTrends(suburb.name, quarter),
       fetchLastSoldData(suburb.name),
       fetchCampaignStats(suburb.name),
+      generateChartImageUrl(suburb.name, quarter).catch(() => null),
     ]);
 
     const title = `${suburb.name} ${quarter} Market Report`;
-    const content = buildFourPageReport(suburb.name, quarter, marketTrends, lastSold, campaign);
+    const content = buildBlocks(suburb.name, quarter, marketTrends, lastSold, campaign, chartImageUrl);
 
     const result = await marieQuery<{ id: string }>(
       `INSERT INTO report_documents (user_id, doc_type, suburb_id, quarter, title, content)

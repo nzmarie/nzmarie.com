@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useReportStore } from './stores/report-store';
 import ReportSidebar from './components/ReportSidebar';
+import DocumentViewer from './components/DocumentViewer';
 
 export default function ReportsLayout({ children }: { children: React.ReactNode }) {
-  const { setDocuments, setSuburbs } = useReportStore();
+  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId } = useReportStore();
+  const pathname = usePathname();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,6 +27,15 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
     };
     fetchData();
   }, [setDocuments, setSuburbs]);
+
+  useEffect(() => {
+    const match = pathname.match(/^\/admin\/reports\/([a-f0-9-]+)$/);
+    if (match) {
+      setSelectedDocId(match[1]);
+    } else if (pathname === '/admin/reports' || pathname === '/admin/reports/') {
+      setSelectedDocId(null);
+    }
+  }, [pathname, setSelectedDocId]);
 
   return (
     <>
@@ -49,7 +61,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
       }}>
         <ReportSidebar />
         <main style={{ flex: 1, overflowY: 'auto', background: 'white' }}>
-          {children}
+          {selectedDocId ? <DocumentViewer docId={selectedDocId} /> : children}
         </main>
       </div>
     </>

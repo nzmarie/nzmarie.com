@@ -30,3 +30,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ success: false, error: 'Failed to fetch document' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.email || !isAdmin(session.user.email)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { id } = await params;
+
+  try {
+    const result = await marieQuery(
+      `DELETE FROM report_documents WHERE id = $1 RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    return NextResponse.json({ success: false, error: 'Failed to delete document' }, { status: 500 });
+  }
+}

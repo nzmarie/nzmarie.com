@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
-const formatYAxis = (value: number) => `$${(value / 1000000).toFixed(1)}M`;
+const formatYAxis = (value: number) => `$${(value / 1000000).toFixed(2)}M`;
 
 const MONTH_SHORT: Record<string, string> = {
   '01': 'Jan','02': 'Feb','03': 'Mar','04': 'Apr','05': 'May','06': 'Jun',
@@ -80,8 +80,8 @@ export default function MarketTrendsChart({ data, suburbs, district, mode, subur
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="_label" />
-          <YAxis tickFormatter={formatYAxis} />
+          <XAxis dataKey="_label" angle={-20} textAnchor="end" height={60} interval="preserveStartEnd" />
+          <YAxis type="number" domain={['auto', 'auto']} tickFormatter={formatYAxis} tickCount={6} />
           <Tooltip
             formatter={(value, name) => {
               if (typeof value !== 'number') return [value, name];

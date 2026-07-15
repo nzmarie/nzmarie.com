@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import ConfirmModal from './ConfirmModal';
+import { useReportStore } from '../stores/report-store';
 
 interface SuburbDoc {
   id: string;
@@ -27,36 +29,65 @@ const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waia
 
 export default function ReportSidebar() {
   const router = useRouter();
-  const pathname = usePathname();
+  const setSelectedDocId = useReportStore(s => s.setSelectedDocId);
   const [suburbs, setSuburbs] = useState<SuburbEntry[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedSuburb, setSelectedSuburb] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const selectedDocId = useReportStore(s => s.selectedDocId);
 
   useEffect(() => {
     fetch('/api/admin/reports/overview')
       .then((r) => r.json())
       .then((data) => { if (data.success) setSuburbs(data.suburbs); })
       .catch(() => {});
-  }, []);
-
-  const currentDocId = pathname?.startsWith('/admin/reports/') ? pathname.split('/').pop() : null;
+  }, [refreshKey, selectedDocId]);
 
   const handleClick = (docId: string) => {
-    router.push(`/admin/reports/${docId}`);
+    setSelectedDocId(docId);
+    router.replace(`/admin/reports/${docId}`, { scroll: false });
   };
 
   const handleSuburbClick = (name: string, suburbs: SuburbEntry[]) => {
     const suburb = suburbs.find((s) => s.name === name);
+    let docId: string | null = null;
     if (suburb?.introDoc) {
-      router.push(`/admin/reports/${suburb.introDoc.id}`);
+      docId = suburb.introDoc.id;
     } else if (suburb?.letterDoc) {
-      router.push(`/admin/reports/${suburb.letterDoc.id}`);
+      docId = suburb.letterDoc.id;
     } else if (suburb?.reports[0]) {
-      router.push(`/admin/reports/${suburb.reports[0].id}`);
+      docId = suburb.reports[0].id;
     } else {
       setSelectedSuburb(selectedSuburb === name ? null : name);
-      window.location.hash = `#${name.replace(/\s+/g, '-')}`;
+    }
+    if (docId) {
+      setSelectedDocId(docId);
+      router.replace(`/admin/reports/${docId}`, { scroll: false });
+    }
+    setTimeout(() => {
+      const el = document.getElementById(`sidebar-${name.replace(/\s+/g, '-')}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+  };
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+
+  const handleDocDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch(`/api/admin/reports/documents/${deleteTarget.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setRefreshKey(k => k + 1);
+        if (selectedDocId === deleteTarget.id) {
+          setSelectedDocId(null);
+          router.push('/admin/reports');
+        }
+      }
+    } catch {} finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -66,7 +97,7 @@ export default function ReportSidebar() {
 
   return (
     <aside className="reports-sidebar" style={{
-      width: 240, minWidth: 240, height: '100vh', overflow: 'hidden',
+      width: 240, minWidth: 240, height: '100%', overflow: 'hidden',
       background: '#f7f6f3', borderRight: '1px solid #e8e7e4',
       display: 'flex', flexDirection: 'column',
     }}>
@@ -167,34 +198,62 @@ export default function ReportSidebar() {
               {allDocs.map((doc) => (
                 <div
                   key={doc.id}
+                  className="sidebar-doc-row"
                   onClick={() => handleClick(doc.id)}
                   style={{
                     padding: '2px 12px 2px 28px', cursor: 'pointer', fontSize: '0.78rem',
-                    color: currentDocId === doc.id ? '#1a73e8' : '#444',
-                    background: currentDocId === doc.id ? '#e8f0fe' : 'transparent',
+                    color: selectedDocId === doc.id ? '#1a73e8' : '#444',
+                    background: selectedDocId === doc.id ? '#e8f0fe' : 'transparent',
                     borderRadius: 4, margin: '0 6px',
                     display: 'flex', alignItems: 'center', gap: 4,
-                    transition: 'all 0.1s',
+                    transition: 'all 0.1s', position: 'relative',
                   }}
-                  onMouseEnter={(e) => { if (currentDocId !== doc.id) e.currentTarget.style.background = '#eee'; }}
-                  onMouseLeave={(e) => { if (currentDocId !== doc.id) e.currentTarget.style.background = 'transparent'; }}
+                  onMouseEnter={(e) => { if (selectedDocId !== doc.id) e.currentTarget.style.background = '#eee'; }}
+                  onMouseLeave={(e) => { if (selectedDocId !== doc.id) e.currentTarget.style.background = 'transparent'; }}
                 >
                   <span style={{ fontSize: '0.8rem' }}>{doc.icon}</span>
                   <span style={{
                     flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    fontWeight: currentDocId === doc.id ? 600 : 400,
+                    fontWeight: selectedDocId === doc.id ? 600 : 400,
                   }}>
                     {doc.title}
                   </span>
                   {doc.meta && (
                     <span style={{ fontSize: '0.6rem', color: '#999' }}>{doc.meta}</span>
                   )}
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: doc.id, title: doc.title }); }}
+                    style={{
+                      fontSize: '0.75rem', cursor: 'pointer', opacity: 0, padding: '2px 4px',
+                      borderRadius: 4, color: '#9ca3af',
+                    }}
+                    className="sidebar-delete-icon"
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                  >
+                    🗑️
+                  </span>
                 </div>
               ))}
             </div>
           );
         })}
       </div>
+
+      <style>{`
+        .sidebar-doc-row:hover .sidebar-delete-icon {
+          opacity: 1 !important;
+        }
+      `}</style>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title={`Delete "${deleteTarget?.title ?? ''}"?`}
+        message="Are you sure you want to delete this document? This action is permanent and cannot be undone."
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDocDelete}
+        confirmLabel="Confirm Delete"
+      />
     </aside>
   );
 }
