@@ -22,6 +22,7 @@ export function AdminNavbar() {
     { href: '/admin/outreach', label: '📬 Outreach', alwaysShow: true },
     { href: '/admin/realestate', label: '🏡 Realestate', alwaysShow: true },
     { href: '/admin/analytics', label: '📊 Analytics', alwaysShow: false },
+    { href: '/admin/reports', label: '📝 Reports', alwaysShow: false },
     { href: '/admin/downloads', label: '📥 Downloads', alwaysShow: false },
     { href: '/admin/pdf-manager', label: '☁️ Suburb PDF', alwaysShow: false },
   ];
