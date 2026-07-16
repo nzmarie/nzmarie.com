@@ -8,6 +8,13 @@ import { SkeletonOutreach } from '@/components/admin/Skeleton';
 import AddressAutocomplete from '@/components/property/AddressAutocomplete';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
+import {
+  FaBed,
+  FaBath,
+  FaCar,
+  FaRulerCombined,
+  FaMapMarkerAlt,
+} from 'react-icons/fa';
 
 interface OutreachProperty {
   id: string;
@@ -39,6 +46,14 @@ interface OutreachProperty {
   capital_value?: number | null;
   build_year?: number | null;
   pv_url?: string | null;
+  property_history?: string | null;
+  joined_property_id?: string | null;
+  has_rental_history?: boolean | null;
+  is_currently_rented?: boolean | null;
+  estimated_value_low?: number | null;
+  estimated_value_high?: number | null;
+  suburb_median_price?: number | null;
+  suburb_days_on_market?: number | null;
 }
 
 interface PaginationMeta {
@@ -63,6 +78,87 @@ const STATUS_COLORS: Record<string, string> = {
   interacted: 'bg-orange-50 text-orange-600 border-orange-200',
   converted: 'bg-green-50 text-green-600 border-green-200',
 };
+
+interface PropertyHistoryRecord {
+  date?: string;
+  type?: string;
+  price?: string;
+  agent?: string;
+  interval?: string;
+}
+
+function PropertyHistoryView({ raw }: { raw: string }) {
+  if (!raw || !raw.trim()) {
+    return (
+      <div style={{
+        padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px',
+        fontSize: '0.9rem', color: '#a0aec0', backgroundColor: '#f8fafc',
+      }}>
+        No property history available
+      </div>
+    );
+  }
+
+  let records: PropertyHistoryRecord[] = [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) records = parsed as PropertyHistoryRecord[];
+  } catch {
+    records = [];
+  }
+
+  if (records.length === 0) {
+    return (
+      <div style={{
+        padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px',
+        fontSize: '0.9rem', color: '#2D3748', whiteSpace: 'pre-wrap',
+        fontFamily: 'monospace', backgroundColor: '#f8fafc',
+      }}>
+        {raw}
+      </div>
+    );
+  }
+
+  const typeColor: Record<string, string> = {
+    SOLD: '#dc2626',
+    Listed: '#2563eb',
+    Rented: '#0891b2',
+    Built: '#16a34a',
+  };
+
+  return (
+    <div style={{
+      border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden',
+      fontSize: '0.85rem', backgroundColor: '#f8fafc',
+    }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '120px 90px 1fr',
+        backgroundColor: '#edf2f7', fontWeight: '700', color: '#4a5568',
+        padding: '8px 12px', borderBottom: '1px solid #e2e8f0',
+      }}>
+        <span>Date</span>
+        <span>Type</span>
+        <span>Price / Detail</span>
+      </div>
+      {records.map((rec, i) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: '120px 90px 1fr',
+          padding: '8px 12px', borderBottom: i < records.length - 1 ? '1px solid #edf2f7' : 'none',
+          color: '#2D3748',
+        }}>
+          <span style={{ fontFamily: 'monospace' }}>{rec.date || '—'}</span>
+          <span style={{ fontWeight: '600', color: typeColor[rec.type || ''] || '#4a5568' }}>
+            {rec.type || '—'}
+          </span>
+          <span style={{ fontFamily: 'monospace' }}>
+            {rec.price ? rec.price : '—'}
+            {rec.interval ? <span style={{ color: '#a0aec0', marginLeft: '8px', fontFamily: 'inherit' }}>({rec.interval})</span> : null}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function OutreachPage() {
   const { data: session, status } = useSession();
@@ -98,6 +194,65 @@ export default function OutreachPage() {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [availableStreets, setAvailableStreets] = useState<string[]>([]);
   const canMarkAsSent = isAdmin(session?.user?.email ?? '');
+
+  // Edit Property modal (edits the linked properties table record)
+  const [editingProperty, setEditingProperty] = useState<OutreachProperty | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
+  const [saving, setSaving] = useState(false);
+
+  const openEditModal = (prop: OutreachProperty) => {
+    setEditingProperty(prop);
+    setEditFormData({
+      address: prop.property_address || '',
+      suburb: prop.suburb || '',
+      city: prop.city || '',
+      region: prop.region || '',
+      bedrooms: prop.bedrooms?.toString() || '',
+      bathrooms: prop.bathrooms?.toString() || '',
+      car_spaces: prop.car_spaces?.toString() || '',
+      year_built: prop.build_year?.toString() || '',
+      floor_size: prop.floor_area || '',
+      land_area: prop.land_area?.toString() || '',
+      last_sold_price: prop.last_sold_price?.toString() || '',
+      last_sold_date: prop.last_sold_date ? prop.last_sold_date.split('T')[0] : '',
+      capital_value: prop.capital_value?.toString() || '',
+      property_url: prop.pv_url || prop.property_url || '',
+      cover_image_url: prop.image_url || '',
+      description: prop.description || '',
+      property_history: prop.property_history || '',
+    });
+  };
+
+  const handleEditFieldChange = (key: string, value: string) => {
+    setEditFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingProperty?.joined_property_id) {
+      showNotification('error', 'No linked property record to edit');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Record<string, string | number | boolean | null> = {};
+      for (const [key, value] of Object.entries(editFormData)) {
+        payload[key] = value === '' || value === undefined ? null : value;
+      }
+      const response = await fetch(`/api/admin/properties/${editingProperty.joined_property_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to update property');
+      showNotification('success', 'Property updated successfully');
+      setEditingProperty(null);
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Failed to update property');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const isClassic = paginationMode === 'classic';
   const displayItems = isClassic ? classicItems : items;
@@ -1009,36 +1164,36 @@ export default function OutreachPage() {
                     }}>
                       {prop.suburb}
                     </div>
-                    <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
-                      <span
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          border: '1px solid',
-                        }}
-                        className={`${STATUS_COLORS[prop.status]}`}
-                      >
-                        {STATUS_LABELS[prop.status] || prop.status}
-                      </span>
-                      {prop.build_year && (
-                        <div style={{
-                          backgroundColor: 'rgba(59, 130, 246, 0.9)',
-                          color: 'white',
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                        }}>
-                          Built {prop.build_year}
-                        </div>
-                      )}
-                      {activeTab === 'liked' && (
+                      <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            border: '1px solid',
+                          }}
+                          className={`${STATUS_COLORS[prop.status]}`}
+                        >
+                          {STATUS_LABELS[prop.status] || prop.status}
+                        </span>
+                        {prop.build_year && (
+                          <div style={{
+                            backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                            color: 'white',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                          }}>
+                            Built {prop.build_year}
+                          </div>
+                        )}
                         <button
                           onClick={async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            if (activeTab !== 'liked') return;
                             const itemId = prop.id;
                             setItems((prev) => prev.filter((item) => item.id !== itemId));
                             setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -1053,26 +1208,27 @@ export default function OutreachPage() {
                             }
                           }}
                           style={{
-                            background: 'rgba(239, 68, 68, 0.9)',
+                            background: activeTab === 'liked' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
                             border: 'none',
                             borderRadius: '50%',
-                            width: '28px',
-                            height: '28px',
+                            width: '32px',
+                            height: '32px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            color: 'white',
+                            cursor: activeTab === 'liked' ? 'pointer' : 'default',
+                            fontSize: '1.05rem',
+                            color: activeTab === 'liked' ? 'white' : '#64748b',
                             padding: 0,
                             lineHeight: 1,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            transition: 'all 0.2s ease',
                           }}
-                          title="Unlike"
+                          title={activeTab === 'liked' ? 'Unlike' : 'Like'}
                         >
-                          ♥
+                          {activeTab === 'liked' ? '♥' : '♡'}
                         </button>
-                      )}
-                    </div>
+                      </div>
                     {prop.last_sold_date && (() => {
                       const sold = new Date(prop.last_sold_date!);
                       if (!isNaN(sold.getTime())) {
@@ -1098,13 +1254,46 @@ export default function OutreachPage() {
                       return null;
                     })()}
                   </div></a>
-                  <div style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ fontWeight: '700', color: '#2D3748', fontSize: '1.1rem', marginBottom: '4px' }}>
-                      {prop.property_address}
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>
-                      {prop.suburb}, {prop.city}
-                    </div>
+                    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                        <h3 style={{
+                          margin: 0,
+                          fontSize: '1.15rem',
+                          fontWeight: '700',
+                          color: '#2D3748',
+                          lineHeight: '1.3',
+                          flex: 1,
+                        }}>
+                          {prop.property_address}
+                        </h3>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openEditModal(prop);
+                          }}
+                          style={{
+                            marginLeft: '12px',
+                            padding: '6px 14px',
+                            backgroundColor: '#f0fdf4',
+                            color: '#16a34a',
+                            border: '1px solid #bbf7d0',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            fontSize: '0.85rem',
+                            whiteSpace: 'nowrap',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>
+                        {prop.suburb}, {prop.city}
+                      </div>
 
                     {/* Price & RV Section */}
                     <div style={{
@@ -1154,47 +1343,48 @@ export default function OutreachPage() {
                       display: 'flex',
                       justifyContent: 'space-around',
                       textAlign: 'center',
-                      marginBottom: '12px',
+                      marginTop: 'auto',
                     }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                          <span style={{ marginRight: '4px', fontSize: '1.1rem', color: '#718096' }}>🛏️</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                          <FaBed style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
                           <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.bedrooms != null ? prop.bedrooms : '-'}
+                            {prop.bedrooms !== null ? prop.bedrooms : '-'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>Beds</div>
+                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Beds</div>
                       </div>
+
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                          <span style={{ marginRight: '4px', fontSize: '1.1rem', color: '#718096' }}>🚿</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                          <FaBath style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
                           <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.bathrooms != null ? prop.bathrooms : '-'}
+                            {prop.bathrooms !== null ? prop.bathrooms : '-'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>Baths</div>
+                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Baths</div>
                       </div>
+
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                          <span style={{ marginRight: '4px', fontSize: '1.1rem', color: '#718096' }}>🚗</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                          <FaCar style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
                           <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.car_spaces != null ? prop.car_spaces : '-'}
+                            {prop.car_spaces !== null ? prop.car_spaces : '-'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>Cars</div>
+                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Cars</div>
                       </div>
+
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                          <span style={{ marginRight: '4px', fontSize: '1.1rem', color: '#718096' }}>📐</span>
-                          <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {(() => {
-                              const area = prop.floor_area || prop.land_area;
-                              if (area && area !== '0' && area !== 0 && area !== '-') return area;
-                              return '-';
-                            })()}
-                          </span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                          <FaRulerCombined style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>m²</div>
+                        <div style={{ fontWeight: '600', color: '#2D3748', fontSize: '0.9rem', lineHeight: '1.3' }}>
+                          F: {prop.floor_area && prop.floor_area !== '-' ? prop.floor_area : '-'} m²
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#718096', fontWeight: '500', lineHeight: '1.3' }}>
+                          L: {prop.land_area && prop.land_area !== '-' && prop.land_area !== 0 ? prop.land_area : '-'} m²
+                        </div>
                       </div>
                     </div>
 
@@ -1350,7 +1540,7 @@ export default function OutreachPage() {
                         >
                           ⇨ Pending
                         </button>
-                      )}
+                        )}
                       {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
                         <button
                           onClick={async () => {
@@ -1426,6 +1616,14 @@ export default function OutreachPage() {
                         (prop.pv_url || prop.property_url) ? `Property URL: ${prop.pv_url || prop.property_url}` : null,
                         prop.description ? `Description: ${prop.description}` : null,
                         prop.realestate_url ? `RealEstate URL: ${prop.realestate_url}` : null,
+                        prop.property_history ? `Property History: ${prop.property_history}` : 'Property History: []',
+                        prop.has_rental_history != null ? `Has Rental History: ${prop.has_rental_history ? 'Yes' : 'No'}` : null,
+                        prop.is_currently_rented != null ? `Currently Rented: ${prop.is_currently_rented ? 'Yes' : 'No'}` : null,
+                        prop.estimated_value_low != null && prop.estimated_value_high != null
+                          ? `Estimated Value: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_low)} - ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_high)}`
+                          : null,
+                        prop.suburb_median_price != null ? `Suburb Median Price: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.suburb_median_price)}` : null,
+                        prop.suburb_days_on_market != null ? `Suburb Days On Market: ${prop.suburb_days_on_market}` : null,
                         '[AI-DATA-END]',
                       ].filter(Boolean).join('\n')}
                     </div>
@@ -1757,6 +1955,108 @@ export default function OutreachPage() {
         )}
         {classicLoading && isClassic && (
           <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>Loading...</div>
+        )}
+
+        {editingProperty && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 50,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            }} onClick={() => setEditingProperty(null)} />
+            <div style={{
+              position: 'relative', backgroundColor: 'white', borderRadius: '16px',
+              padding: '32px', maxWidth: '700px', width: '95%', maxHeight: '90vh',
+              overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+            }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2D3748', marginBottom: '8px' }}>
+                Edit Property
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '24px' }}>
+                {editingProperty.property_address} — edits are saved to the linked Properties record
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {[
+                  { key: 'address', label: 'Address', type: 'text' },
+                  { key: 'suburb', label: 'Suburb', type: 'text' },
+                  { key: 'city', label: 'City', type: 'text' },
+                  { key: 'region', label: 'Region', type: 'text' },
+                  { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
+                  { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
+                  { key: 'car_spaces', label: 'Car Spaces', type: 'number' },
+                  { key: 'year_built', label: 'Year Built', type: 'number' },
+                  { key: 'floor_size', label: 'Floor Size (m²)', type: 'text' },
+                  { key: 'land_area', label: 'Land Area', type: 'text' },
+                  { key: 'last_sold_price', label: 'Last Sold Price', type: 'number' },
+                  { key: 'last_sold_date', label: 'Last Sold Date', type: 'date' },
+                  { key: 'capital_value', label: 'Capital Value (RV)', type: 'number' },
+                  { key: 'property_url', label: 'Property URL', type: 'text' },
+                  { key: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
+                ].map(field => (
+                  <div key={field.key}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                      {field.label}
+                    </label>
+                    <input
+                      type={field.type}
+                      value={editFormData[field.key]?.toString() || ''}
+                      onChange={e => handleEditFieldChange(field.key, e.target.value)}
+                      style={{
+                        width: '100%', padding: '10px 12px',
+                        border: '2px solid #e2e8f0', borderRadius: '8px',
+                        fontSize: '0.9rem', color: '#2D3748',
+                      }}
+                    />
+                  </div>
+                ))}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                    Description
+                  </label>
+                  <textarea
+                    value={editFormData.description?.toString() || ''}
+                    onChange={e => handleEditFieldChange('description', e.target.value)}
+                    rows={3}
+                    style={{
+                      width: '100%', padding: '10px 12px',
+                      border: '2px solid #e2e8f0', borderRadius: '8px',
+                      fontSize: '0.9rem', color: '#2D3748', resize: 'vertical',
+                    }}
+                  />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                    Property History
+                  </label>
+                  <PropertyHistoryView raw={editFormData.property_history?.toString() || ''} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setEditingProperty(null)}
+                  style={{
+                    padding: '12px 24px', backgroundColor: '#f3f4f6', color: '#4a5568',
+                    borderRadius: '10px', border: 'none', cursor: 'pointer',
+                    fontWeight: '600', fontSize: '0.95rem',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                  style={{
+                    padding: '12px 24px', backgroundColor: saving ? '#9ca3af' : '#3b82f6',
+                    color: 'white', borderRadius: '10px', border: 'none',
+                    cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem',
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

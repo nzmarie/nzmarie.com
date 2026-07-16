@@ -46,7 +46,14 @@ export async function GET(request: Request) {
         p.year_built as build_year,
         p.property_url as pv_url,
         p.description,
-        COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url
+        p.has_rental_history,
+        p.is_currently_rented,
+        p.estimated_value_low,
+        p.estimated_value_high,
+        p.suburb_median_price,
+        p.suburb_days_on_market,
+        COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url,
+        p.property_history
       FROM outreach_properties op
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
       LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
