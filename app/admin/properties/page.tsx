@@ -752,17 +752,11 @@ export default function PropertiesPage() {
       }));
 
       if (propertyFilter === 'house') {
-        mapped = mapped.filter(p => {
-          if (!p.property_type) return true;
-          const t = p.property_type.toLowerCase();
-          return !['townhouse', 'unit', 'apartment'].includes(t);
-        });
+        // 独栋：地址不含 "/"（新西兰地址中 "/" 表示单元/联排，如 16/9 Georgia Terrace）
+        mapped = mapped.filter(p => !p.address || !p.address.includes('/'));
       } else if (propertyFilter === 'townhouse') {
-        mapped = mapped.filter(p => {
-          if (!p.property_type) return false;
-          const t = p.property_type.toLowerCase();
-          return ['townhouse', 'unit'].includes(t);
-        });
+        // 联排/单元：地址含 "/"
+        mapped = mapped.filter(p => !!p.address && p.address.includes('/'));
       }
 
       if (lastSoldPreset === 'none') {

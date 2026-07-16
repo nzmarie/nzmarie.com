@@ -251,6 +251,9 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
+  // properties.property_type 只有 Residential/Lifestyle/null，无 House/Townhouse/Unit，
+  // 无法用于过滤。新西兰地址中 "/"（如 16/9 Georgia Terrace）表示单元/联排（flat/unit/townhouse），
+  // 直接基于 address 是否含 "/" 区分独栋与联排/单元。
   if (!search && standaloneOnly === 'true') {
     query += ` AND p.address NOT LIKE '%/%'`;
   }
