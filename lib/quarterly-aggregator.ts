@@ -22,10 +22,27 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
     }
 
     const suburbs: MonthlyDataPoint['suburbs'] = {};
+    const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+    const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+    const avgField = (arr: (number | null | undefined)[]) => {
+      const nums = arr.filter((v): v is number => v != null);
+      return nums.length > 0 ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : null;
+    };
+
     for (const sn of suburbNames) {
       const medians: number[] = [];
       let salesSum = 0;
       const days: number[] = [];
+      const priceDiffMom: (number | null | undefined)[] = [];
+      const priceDiff1yr: (number | null | undefined)[] = [];
+      const medianListPrices: (number | null | undefined)[] = [];
+      const saleToValuation: (number | null | undefined)[] = [];
+      const listToValuation: (number | null | undefined)[] = [];
+      const totalVolumes: number[] = [];
+      const medianPrice1yr: (number | null | undefined)[] = [];
+      const medianPrice3yrs: (number | null | undefined)[] = [];
+      const priceDiff3yrs: (number | null | undefined)[] = [];
+      const housePriceIndexes: (number | null | undefined)[] = [];
 
       for (const m of months) {
         const sd = m.suburbs[sn];
@@ -33,28 +50,33 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
           if (sd.median != null) medians.push(sd.median);
           salesSum += sd.sales;
           if (sd.days != null) days.push(sd.days);
+          priceDiffMom.push(sd.priceDiffMomPct);
+          priceDiff1yr.push(sd.priceDiff1yrPct);
+          medianListPrices.push(sd.medianListPrice);
+          saleToValuation.push(sd.saleToValuationPct);
+          listToValuation.push(sd.listToValuationPct);
+          if (sd.totalVolume != null) totalVolumes.push(sd.totalVolume);
+          medianPrice1yr.push(sd.medianPrice1yrPrior);
+          medianPrice3yrs.push(sd.medianPrice3yrsPrior);
+          priceDiff3yrs.push(sd.priceDiff3yrsPct);
+          housePriceIndexes.push(sd.housePriceIndex);
         }
       }
 
-      const sumField = (arr: (number | null | undefined)[]): number | null => {
-        const nums = arr.filter((v): v is number => v != null);
-        return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) : null;
-      };
-
       suburbs[sn] = {
-        median: medians.length > 0 ? medians.reduce((a, b) => a + b, 0) : null,
+        median: avg(medians),
         sales: salesSum,
-        days: days.length > 0 ? days.reduce((a, b) => a + b, 0) : null,
-        priceDiffMomPct: sumField(months.map(m => m.suburbs[sn]?.priceDiffMomPct)),
-        priceDiff1yrPct: sumField(months.map(m => m.suburbs[sn]?.priceDiff1yrPct)),
-        medianListPrice: sumField(months.map(m => m.suburbs[sn]?.medianListPrice)),
-        saleToValuationPct: sumField(months.map(m => m.suburbs[sn]?.saleToValuationPct)),
-        listToValuationPct: sumField(months.map(m => m.suburbs[sn]?.listToValuationPct)),
-        totalVolume: sumField(months.map(m => m.suburbs[sn]?.totalVolume)),
-        medianPrice1yrPrior: sumField(months.map(m => m.suburbs[sn]?.medianPrice1yrPrior)),
-        medianPrice3yrsPrior: sumField(months.map(m => m.suburbs[sn]?.medianPrice3yrsPrior)),
-        priceDiff3yrsPct: sumField(months.map(m => m.suburbs[sn]?.priceDiff3yrsPct)),
-        housePriceIndex: sumField(months.map(m => m.suburbs[sn]?.housePriceIndex)),
+        days: avg(days),
+        priceDiffMomPct: avgField(priceDiffMom),
+        priceDiff1yrPct: avgField(priceDiff1yr),
+        medianListPrice: avgField(medianListPrices),
+        saleToValuationPct: avgField(saleToValuation),
+        listToValuationPct: avgField(listToValuation),
+        totalVolume: totalVolumes.length > 0 ? sum(totalVolumes) : null,
+        medianPrice1yrPrior: avgField(medianPrice1yr),
+        medianPrice3yrsPrior: avgField(medianPrice3yrs),
+        priceDiff3yrsPct: avgField(priceDiff3yrs),
+        housePriceIndex: avgField(housePriceIndexes),
       };
     }
 
@@ -65,13 +87,9 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
     result.push({
       period: key,
       periodRaw: key,
-      cityMedian: cityMedians.length > 0
-        ? cityMedians.reduce((a, b) => a + b, 0)
-        : null,
+      cityMedian: avg(cityMedians),
       citySales: months.reduce((sum, m) => sum + m.citySales, 0),
-      cityDays: cityDays.length > 0
-        ? cityDays.reduce((a, b) => a + b, 0)
-        : null,
+      cityDays: avg(cityDays),
       cityDetail: cityFirst?.cityDetail ?? null,
       suburbs,
     });

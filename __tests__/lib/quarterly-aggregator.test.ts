@@ -45,7 +45,7 @@ describe('aggregateToQuarterly', () => {
     expect(result[1].period).toBe('2025-Q2');
   });
 
-  it('sums medians, sales, and days across quarter', () => {
+  it('averages medians and days, sums sales across quarter', () => {
     const monthly = [
       makeMonthly('2025-01', { Oteha: 1000000 }, { Oteha: 10 }, { Oteha: 30 }, 900000, 50, 35),
       makeMonthly('2025-02', { Oteha: 1100000 }, { Oteha: 12 }, { Oteha: 28 }, 920000, 55, 33),
@@ -54,12 +54,12 @@ describe('aggregateToQuarterly', () => {
 
     const result = aggregateToQuarterly(monthly);
 
-    expect(result[0].suburbs['Oteha'].median).toBe(3150000);
+    expect(result[0].suburbs['Oteha'].median).toBe(1050000);
     expect(result[0].suburbs['Oteha'].sales).toBe(30);
-    expect(result[0].suburbs['Oteha'].days).toBe(90);
-    expect(result[0].cityMedian).toBe(2730000);
+    expect(result[0].suburbs['Oteha'].days).toBe(30);
+    expect(result[0].cityMedian).toBe(910000);
     expect(result[0].citySales).toBe(150);
-    expect(result[0].cityDays).toBe(102);
+    expect(result[0].cityDays).toBe(34);
   });
 
   it('handles null values (Low Vol.)', () => {
@@ -104,9 +104,25 @@ describe('aggregateToQuarterly', () => {
 
     const result = aggregateToQuarterly(monthly);
 
-    expect(result[0].suburbs['Oteha'].median).toBe(2100000);
-    expect(result[0].suburbs['Albany'].median).toBe(1850000);
+    expect(result[0].suburbs['Oteha'].median).toBe(1050000);
+    expect(result[0].suburbs['Albany'].median).toBe(925000);
     expect(result[0].suburbs['Albany'].sales).toBe(18);
+  });
+
+  it('averages percentage fields and sums total volume', () => {
+    const monthly = [
+      makeMonthly('2025-01', { Oteha: 1000000 }, { Oteha: 10 }, { Oteha: 30 }, 900000, 50, 35),
+      makeMonthly('2025-02', { Oteha: 1100000 }, { Oteha: 12 }, { Oteha: 28 }, 920000, 55, 33),
+    ];
+    monthly[0].suburbs['Oteha'].priceDiffMomPct = 1.0;
+    monthly[0].suburbs['Oteha'].totalVolume = 2000000;
+    monthly[1].suburbs['Oteha'].priceDiffMomPct = 3.0;
+    monthly[1].suburbs['Oteha'].totalVolume = 3000000;
+
+    const result = aggregateToQuarterly(monthly);
+
+    expect(result[0].suburbs['Oteha'].priceDiffMomPct).toBe(2);
+    expect(result[0].suburbs['Oteha'].totalVolume).toBe(5000000);
   });
 
   it('sorts quarters chronologically', () => {
