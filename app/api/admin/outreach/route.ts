@@ -22,10 +22,16 @@ export async function GET(request: Request) {
   const suburb = searchParams.get('suburb');
   const street = searchParams.get('street');
   const search = searchParams.get('search');
-  const sortOrder = searchParams.get('sortOrder') || 'asc'; // 'asc' or 'desc'
+  const sortOrder = searchParams.get('sortOrder') || 'asc';
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '100');
   const offset = (page - 1) * limit;
+  const lastSoldNone = searchParams.get('last_sold_none');
+  const lastSoldMinYears = searchParams.get('last_sold_min_years');
+  const lastSoldMaxYears = searchParams.get('last_sold_max_years');
+  const standaloneOnly = searchParams.get('standalone_only');
+  const townhouseOnly = searchParams.get('townhouse_only');
+  const marketStatus = searchParams.get('market_status');
 
   try {
     await marieDB.ensureOutreachTablesExist?.();
@@ -53,7 +59,14 @@ export async function GET(request: Request) {
         p.suburb_median_price,
         p.suburb_days_on_market,
         COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url,
-        p.property_history
+        p.property_history,
+        CASE WHEN re.id IS NOT NULL THEN true ELSE false END as on_market_sale,
+        re.status as sale_listing_status,
+        re.price_display as sale_price,
+        re.agent_name as sale_agent,
+        CASE WHEN rer.id IS NOT NULL THEN true ELSE false END as on_market_rent,
+        rer.status as rent_listing_status,
+        rer.price_display as rent_price
       FROM outreach_properties op
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
       LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
@@ -92,6 +105,41 @@ export async function GET(request: Request) {
       params.push(`%${search}%`);
     }
 
+    // Filters on the joined properties table
+    if (lastSoldNone === 'true') {
+      query += ` AND p.last_sold_date IS NULL`;
+    } else {
+      if (lastSoldMinYears) {
+        const years = parseInt(lastSoldMinYears);
+        if (!isNaN(years) && years > 0) {
+          query += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+        }
+      }
+      if (lastSoldMaxYears) {
+        const years = parseInt(lastSoldMaxYears);
+        if (!isNaN(years) && years > 0) {
+          query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+        }
+      }
+    }
+    if (standaloneOnly === 'true') {
+      query += ` AND p.address NOT LIKE '%/%'`;
+    }
+    if (townhouseOnly === 'true') {
+      query += ` AND p.address LIKE '%/%'`;
+    }
+    if (marketStatus === 'for_sale') {
+      query += ` AND re.id IS NOT NULL`;
+    } else if (marketStatus === 'for_rent') {
+      query += ` AND rer.id IS NOT NULL`;
+    } else if (marketStatus === 'rented') {
+      query += ` AND p.has_rental_history = true`;
+    } else if (marketStatus === 'never_rented') {
+      query += ` AND p.has_rental_history = false`;
+    } else if (marketStatus === 'not_listed') {
+      query += ` AND re.id IS NULL AND rer.id IS NULL`;
+    }
+
     // 智能排序：suburb → street → 录入日期 → 门牌号
     const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
     query += ` 
@@ -107,17 +155,54 @@ export async function GET(request: Request) {
     const result = await marieDB.query(query, params);
 
     // Count total
-    let countQuery = `SELECT COUNT(*) FROM outreach_properties WHERE 1=1`;
+    let countQuery = `SELECT COUNT(*) FROM outreach_properties op
+      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
+      LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
+      LEFT JOIN real_estate_rent rer ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(rer.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(rer.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
+      WHERE 1=1`;
     const countParams: unknown[] = [];
     let ci = 1;
 
-    if (status) { countQuery += ` AND status = $${ci++}`; countParams.push(status); }
-    if (campaign) { countQuery += ` AND campaign = $${ci++}`; countParams.push(campaign); }
-    if (region) { countQuery += ` AND region ILIKE $${ci++}`; countParams.push(region); }
-    if (city) { countQuery += ` AND city ILIKE $${ci++}`; countParams.push(city); }
-    if (suburb) { countQuery += ` AND suburb ILIKE $${ci++}`; countParams.push(suburb); }
-    if (street) { countQuery += ` AND street ILIKE $${ci++}`; countParams.push(street); }
-    if (search) { countQuery += ` AND property_address ILIKE $${ci++}`; countParams.push(`%${search}%`); }
+    if (status) { countQuery += ` AND op.status = $${ci++}`; countParams.push(status); }
+    if (campaign) { countQuery += ` AND op.campaign = $${ci++}`; countParams.push(campaign); }
+    if (region) { countQuery += ` AND op.region ILIKE $${ci++}`; countParams.push(region); }
+    if (city) { countQuery += ` AND op.city ILIKE $${ci++}`; countParams.push(city); }
+    if (suburb) { countQuery += ` AND op.suburb ILIKE $${ci++}`; countParams.push(suburb); }
+    if (street) { countQuery += ` AND op.street ILIKE $${ci++}`; countParams.push(street); }
+    if (search) { countQuery += ` AND op.property_address ILIKE $${ci++}`; countParams.push(`%${search}%`); }
+    if (lastSoldNone === 'true') {
+      countQuery += ` AND p.last_sold_date IS NULL`;
+    } else {
+      if (lastSoldMinYears) {
+        const years = parseInt(lastSoldMinYears);
+        if (!isNaN(years) && years > 0) {
+          countQuery += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+        }
+      }
+      if (lastSoldMaxYears) {
+        const years = parseInt(lastSoldMaxYears);
+        if (!isNaN(years) && years > 0) {
+          countQuery += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+        }
+      }
+    }
+    if (standaloneOnly === 'true') {
+      countQuery += ` AND p.address NOT LIKE '%/%'`;
+    }
+    if (townhouseOnly === 'true') {
+      countQuery += ` AND p.address LIKE '%/%'`;
+    }
+    if (marketStatus === 'for_sale') {
+      countQuery += ` AND re.id IS NOT NULL`;
+    } else if (marketStatus === 'for_rent') {
+      countQuery += ` AND rer.id IS NOT NULL`;
+    } else if (marketStatus === 'rented') {
+      countQuery += ` AND p.has_rental_history = true`;
+    } else if (marketStatus === 'never_rented') {
+      countQuery += ` AND p.has_rental_history = false`;
+    } else if (marketStatus === 'not_listed') {
+      countQuery += ` AND re.id IS NULL AND rer.id IS NULL`;
+    }
 
     const countResult = await marieDB.query(countQuery, countParams);
     const total = parseInt(countResult.rows[0].count);

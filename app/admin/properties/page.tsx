@@ -734,7 +734,7 @@ export default function PropertiesPage() {
   });
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
-  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'not_listed'>('all');
+  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
@@ -1541,38 +1541,38 @@ export default function PropertiesPage() {
               Market Status
             </label>
             <div style={{ display: "flex", gap: "8px" }}>
-              {(['all', 'for_sale', 'for_rent', 'rented', 'not_listed'] as const).map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setMarketStatus(status)}
-                  style={{
-                    padding: '8px 18px',
-                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
-                    color: marketStatus === status ? 'white' : '#4a5568',
-                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: marketStatus === status ? '600' : '500',
-                    transition: 'all 0.2s ease',
-                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (marketStatus !== status) {
-                      e.currentTarget.style.backgroundColor = '#f3f4f6';
-                      e.currentTarget.style.borderColor = '#9ca3af';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (marketStatus !== status) {
-                      e.currentTarget.style.backgroundColor = 'white';
-                      e.currentTarget.style.borderColor = '#e2e8f0';
-                    }
-                  }}
-                >
-                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : 'Not Listed'}
-                </button>
-              ))}
+{(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
+                 <button
+                   key={status}
+                   onClick={() => setMarketStatus(status)}
+                   style={{
+                     padding: '8px 18px',
+                     backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                     color: marketStatus === status ? 'white' : '#4a5568',
+                     border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                     borderRadius: '10px',
+                     cursor: 'pointer',
+                     fontSize: '0.9rem',
+                     fontWeight: marketStatus === status ? '600' : '500',
+                     transition: 'all 0.2s ease',
+                     boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                   }}
+                   onMouseEnter={(e) => {
+                     if (marketStatus !== status) {
+                       e.currentTarget.style.backgroundColor = '#f3f4f6';
+                       e.currentTarget.style.borderColor = '#9ca3af';
+                     }
+                   }}
+                   onMouseLeave={(e) => {
+                     if (marketStatus !== status) {
+                       e.currentTarget.style.backgroundColor = 'white';
+                       e.currentTarget.style.borderColor = '#e2e8f0';
+                     }
+                   }}
+                 >
+                   {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
+                 </button>
+               ))}
             </div>
           </div>
         </div>

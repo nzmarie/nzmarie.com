@@ -277,6 +277,7 @@ describe('Properties Page', () => {
     expect(screen.getByRole('button', { name: 'For Sale' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'To Rent' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Rented' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Never Rented' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Not Listed' })).toBeDefined();
   });
 
@@ -325,6 +326,9 @@ describe('Properties Page', () => {
 
     const rentedBtn = screen.getByRole('button', { name: 'Rented' });
     fireEvent.click(rentedBtn);
+
+    const neverRentedBtn = screen.getByRole('button', { name: 'Never Rented' });
+    fireEvent.click(neverRentedBtn);
 
     const notListedBtn = screen.getByRole('button', { name: 'Not Listed' });
     fireEvent.click(notListedBtn);

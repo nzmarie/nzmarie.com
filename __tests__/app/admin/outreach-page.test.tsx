@@ -332,3 +332,112 @@ describe('Outreach page - Dual Pagination Mode', () => {
     });
   });
 });
+
+describe('Outreach page - Liked icon on card image', () => {
+  const mockItems = [
+    {
+      id: 'out-1',
+      property_address: '15 Marine Parade',
+      suburb: 'Takapuna',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'liked',
+      created_at: '2026-07-01T10:00:00Z',
+      image_url: '/static/media/no-photo-available.png',
+    },
+  ];
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+    window.confirm = vi.fn().mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it('shows "No Image Available" placeholder when image_url is no-photo-available', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    expect(await screen.findByText('No Image Available')).toBeDefined();
+  });
+
+  it('does NOT render a standalone unlike (♥/♡) button on the image in liked tab', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    // The old standalone heart button with title "Unlike"/"Like" must be gone.
+    expect(screen.queryByTitle('Unlike')).toBeNull();
+    expect(screen.queryByTitle('Like')).toBeNull();
+
+    // Instead the liked icon is a pure red heart button.
+    expect(screen.getByTitle('取消喜欢 / Unlike')).toBeDefined();
+  });
+
+  it('clicking the liked icon removes the record via DELETE without full refresh', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    const likedIcon = screen.getByTitle('取消喜欢 / Unlike');
+    fireEvent.click(likedIcon);
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledWith('/api/admin/outreach/out-1', { method: 'DELETE' });
+    });
+
+    // After removal the property card text disappears (no page reload).
+    await waitFor(() => {
+      expect(screen.queryByText('15 Marine Parade')).toBeNull();
+    });
+  });
+
+  it('does not delete when confirmation is cancelled', async () => {
+    window.confirm = vi.fn().mockReturnValue(false);
+
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('取消喜欢 / Unlike'));
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled();
+    });
+
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/admin/outreach/out-1', { method: 'DELETE' });
+    // Item remains on the page.
+    expect(screen.getByText('15 Marine Parade')).toBeDefined();
+  });
+
+  it('rolls back the removal if the DELETE request fails', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+      })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Failed' }) });
+
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('取消喜欢 / Unlike'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/admin/outreach/out-1', { method: 'DELETE' });
+    });
+
+    // Item should be restored (rollback) since the request failed.
+    await waitFor(() => {
+      expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    });
+  });
+});

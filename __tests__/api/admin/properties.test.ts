@@ -180,6 +180,21 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     expect(hasRentedFilter).toBe(true);
   });
 
+  it('filters never_rented via SQL AND p.has_rental_history = false', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow({ has_rental_history: false })] });
+
+    const req = new Request('http://localhost/api/admin/properties?market_status=never_rented');
+    const res = await GET(req);
+    await res.json();
+
+    const sqlCalls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const queries = sqlCalls.map(c => c[0]);
+    const hasNeverRentedFilter = queries.some(q => q.includes('AND p.has_rental_history = false'));
+    expect(hasNeverRentedFilter).toBe(true);
+  });
+
   it('uses address+suburb JOIN instead of address_fingerprint', async () => {
     mockQuery.mockResolvedValue({
       rows: [makeDefaultRow()],

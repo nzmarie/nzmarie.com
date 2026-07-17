@@ -13,7 +13,6 @@ import {
   FaBath,
   FaCar,
   FaRulerCombined,
-  FaMapMarkerAlt,
 } from 'react-icons/fa';
 
 interface OutreachProperty {
@@ -54,6 +53,13 @@ interface OutreachProperty {
   estimated_value_high?: number | null;
   suburb_median_price?: number | null;
   suburb_days_on_market?: number | null;
+  on_market_sale?: boolean;
+  sale_listing_status?: string | null;
+  sale_price?: string | null;
+  sale_agent?: string | null;
+  on_market_rent?: boolean;
+  rent_listing_status?: string | null;
+  rent_price?: string | null;
 }
 
 interface PaginationMeta {
@@ -176,12 +182,27 @@ export default function OutreachPage() {
   const [classicPagination, setClassicPagination] = useState<PaginationMeta | null>(null);
   const [classicLoading, setClassicLoading] = useState(false);
 
+  // Tracks image load failures (e.g. /static/media/no-photo-available.png) so we can
+  // fall back to the "No Image Available" placeholder, matching the Properties page.
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const handleImageError = useCallback((id: string) => {
+    setImageErrors((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
   const [addressInput, setAddressInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
   const [streetFilter, setStreetFilter] = useState('');
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [lastSoldPreset, setLastSoldPreset] = useState('all');
+  const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
+  const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
@@ -284,6 +305,21 @@ export default function OutreachPage() {
     if (streetFilter) params.set('street', streetFilter);
     if (campaignFilter) params.set('campaign', campaignFilter);
     if (debouncedSearch) params.set('search', debouncedSearch);
+    if (propertyFilter === 'house') params.set('standalone_only', 'true');
+    if (propertyFilter === 'townhouse') params.set('townhouse_only', 'true');
+    if (marketStatus !== 'all') params.set('market_status', marketStatus);
+    if (lastSoldPreset === 'none') {
+      params.set('last_sold_none', 'true');
+    } else if (lastSoldPreset !== 'all') {
+      // Parse preset like '5-10', '3-5', '0-3', '10-15', '15+'
+      const parts = lastSoldPreset.split('-');
+      if (parts.length === 2) {
+        params.set('last_sold_min_years', parts[0]);
+        params.set('last_sold_max_years', parts[1]);
+      } else if (lastSoldPreset === '15+') {
+        params.set('last_sold_min_years', '15');
+      }
+    }
 
     const res = await fetch(`/api/admin/outreach?${params}`);
     const data = await res.json();
@@ -296,7 +332,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -500,6 +536,31 @@ export default function OutreachPage() {
     } catch {
       showNotification('error', 'Bulk update failed');
     }
+  };
+
+  // Remove a property from the Liked tab: confirm, DELETE the outreach record,
+  // and update the UI without a full page refresh (optimistic removal + rollback on error).
+  const removeFromLiked = async (prop: OutreachProperty) => {
+    if (activeTab !== 'liked') return;
+    if (!window.confirm(`确定取消喜欢 "${prop.property_address}"？\nAre you sure you want to remove this from Liked?`)) {
+      return;
+    }
+    const itemId = prop.id;
+    setItems((prev) => prev.filter((item) => item.id !== itemId));
+    setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
+    try {
+      const res = await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showNotification('success', '已从 Liked 移除 / Removed from Liked');
+    } catch {
+      setItems((prev) => [...prev, prop]);
+      setClassicItems((prev) => [...prev, prop]);
+      showNotification('error', '取消喜欢失败 / Failed to remove');
+    }
+  };
+
+  const handleLastSoldPreset = (preset: string) => {
+    setLastSoldPreset(preset);
   };
 
   const startNewCampaign = async () => {
@@ -831,7 +892,132 @@ export default function OutreachPage() {
             <option value="asc">📅 Time: Oldest First</option>
             <option value="desc">📅 Time: Newest First</option>
           </select>
-          
+        </div>
+
+        {/* Property Type & Market Status */}
+        <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+              Property Type
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(['house', 'all', 'townhouse'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setPropertyFilter(type)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
+                    color: propertyFilter === type ? 'white' : '#4a5568',
+                    border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: propertyFilter === type ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (propertyFilter !== type) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (propertyFilter !== type) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px", textAlign: "right" }}>
+              Market Status
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setMarketStatus(status)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                    color: marketStatus === status ? 'white' : '#4a5568',
+                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: marketStatus === status ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Last Sold */}
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Last Sold
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            {(['all', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleLastSoldPreset(preset)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: lastSoldPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
+                  color: lastSoldPreset === preset ? 'white' : '#4a5568',
+                  border: lastSoldPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: lastSoldPreset === preset ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: lastSoldPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">          
           <button
             onClick={() => { 
               setAddressInput(''); 
@@ -839,6 +1025,9 @@ export default function OutreachPage() {
               setStreetFilter('');
               setCampaignFilter(''); 
               setSortOrder('asc');
+              setLastSoldPreset('all');
+              setPropertyFilter('all');
+              setMarketStatus('all');
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
@@ -1079,7 +1268,7 @@ export default function OutreachPage() {
           </div>
         </div>
 
-        {loading ? (
+        {(loading || (isClassic && classicLoading)) ? (
           <SkeletonOutreach />
         ) : displayItems.length === 0 ? (
           <div className="p-12 text-center">
@@ -1113,7 +1302,7 @@ export default function OutreachPage() {
                 >
                   <a href={prop.pv_url || prop.property_url || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
                   <div style={{ position: 'relative', height: '220px', backgroundColor: '#f8fafc' }}>
-                    {prop.image_url ? (
+                    {prop.image_url && !prop.image_url.includes('no-photo-available') && !imageErrors.has(prop.id) ? (
                       <Image
                         src={getFixedImageUrl(prop.image_url) || prop.image_url}
                         alt={prop.property_address}
@@ -1121,20 +1310,34 @@ export default function OutreachPage() {
                         height={220}
                         unoptimized
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={() => {}}
+                        onError={() => handleImageError(prop.id)}
                       />
                     ) : (
                       <div style={{
                         height: '100%',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
                         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-                        color: '#94a3b8',
+                        color: '#4a5568',
                         fontSize: '0.9rem',
                         fontWeight: '500',
                       }}>
-                        No Image
+                        <div style={{
+                          backgroundColor: '#e2e8f0',
+                          width: '80%',
+                          height: '70%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '8px',
+                          border: '2px dashed #94a3b8',
+                        }}>
+                          <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>
+                            No Image Available
+                          </span>
+                        </div>
                       </div>
                     )}
                     <input
@@ -1164,70 +1367,136 @@ export default function OutreachPage() {
                     }}>
                       {prop.suburb}
                     </div>
+                      {/* For Sale Badge */}
+                      {prop.on_market_sale && (
+                        <div style={{
+                          position: 'absolute',
+                          top: prop.build_year ? '52px' : '16px',
+                          left: '16px',
+                          backgroundColor: 'rgba(34, 197, 94, 0.9)',
+                          color: 'white',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                        }}>
+                          For Sale{prop.sale_price ? ` ${prop.sale_price}` : ''}
+                        </div>
+                      )}
+                      {/* For Rent Badge */}
+                      {prop.on_market_rent && (
+                        <div style={{
+                          position: 'absolute',
+                          top: prop.on_market_sale
+                            ? (prop.build_year ? '88px' : '52px')
+                            : (prop.build_year ? '52px' : '16px'),
+                          left: '16px',
+                          backgroundColor: 'rgba(139, 92, 246, 0.9)',
+                          color: 'white',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                        }}>
+                          To Rent{prop.rent_price ? ` ${prop.rent_price}` : ''}
+                        </div>
+                      )}
+                      {/* Rented Badge */}
+                      {prop.has_rental_history && (
+                        <div style={{
+                          position: 'absolute',
+                          top: (() => {
+                            let count = 0;
+                            if (prop.build_year) count++;
+                            if (prop.on_market_sale) count++;
+                            if (prop.on_market_rent) count++;
+                            return `${16 + count * 36}px`;
+                          })(),
+                          left: '16px',
+                          backgroundColor: 'rgba(245, 158, 11, 0.9)',
+                          color: 'white',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                        }}>
+                          Rented
+                        </div>
+                      )}
                       <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: '600',
-                            border: '1px solid',
-                          }}
-                          className={`${STATUS_COLORS[prop.status]}`}
-                        >
-                          {STATUS_LABELS[prop.status] || prop.status}
-                        </span>
-                        {prop.build_year && (
-                          <div style={{
-                            backgroundColor: 'rgba(59, 130, 246, 0.9)',
-                            color: 'white',
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: '600',
-                          }}>
-                            Built {prop.build_year}
-                          </div>
+                        {activeTab === 'liked' ? (
+                          <>
+                            {prop.build_year && (
+                              <div style={{
+                                backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                                color: 'white',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                              }}>
+                                Built {prop.build_year}
+                              </div>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeFromLiked(prop);
+                              }}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.9)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '36px',
+                                height: '36px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                color: 'white',
+                                zIndex: 2,
+                                padding: 0,
+                                lineHeight: 1,
+                              }}
+                              title="取消喜欢 / Unlike"
+                            >
+                              ♥
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                                border: '1px solid',
+                              }}
+                              className={`${STATUS_COLORS[prop.status]}`}
+                            >
+                              {STATUS_LABELS[prop.status] || prop.status}
+                            </span>
+                            {prop.build_year && (
+                              <div style={{
+                                backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                                color: 'white',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                              }}>
+                                Built {prop.build_year}
+                              </div>
+                            )}
+                          </>
                         )}
-                        <button
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (activeTab !== 'liked') return;
-                            const itemId = prop.id;
-                            setItems((prev) => prev.filter((item) => item.id !== itemId));
-                            setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
-                            try {
-                              const res = await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
-                              if (!res.ok) throw new Error('Failed');
-                              showNotification('success', 'Removed from Liked');
-                            } catch {
-                              setItems((prev) => [...prev, prop]);
-                              setClassicItems((prev) => [...prev, prop]);
-                              showNotification('error', 'Failed to remove');
-                            }
-                          }}
-                          style={{
-                            background: activeTab === 'liked' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '32px',
-                            height: '32px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: activeTab === 'liked' ? 'pointer' : 'default',
-                            fontSize: '1.05rem',
-                            color: activeTab === 'liked' ? 'white' : '#64748b',
-                            padding: 0,
-                            lineHeight: 1,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                            transition: 'all 0.2s ease',
-                          }}
-                          title={activeTab === 'liked' ? 'Unlike' : 'Like'}
-                        >
-                          {activeTab === 'liked' ? '♥' : '♡'}
-                        </button>
                       </div>
                     {prop.last_sold_date && (() => {
                       const sold = new Date(prop.last_sold_date!);
@@ -1670,9 +1939,6 @@ export default function OutreachPage() {
             {!isClassic && hasMore && !loading && (
               <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
             )}
-            {classicLoading && isClassic && (
-              <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>Loading...</div>
-            )}
           </div>
         ) : (
           <div className="p-4 space-y-3">
@@ -1952,9 +2218,6 @@ export default function OutreachPage() {
         )}
         {!isClassic && viewMode === 'list' && hasMore && !loading && (
           <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
-        )}
-        {classicLoading && isClassic && (
-          <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>Loading...</div>
         )}
 
         {editingProperty && (
