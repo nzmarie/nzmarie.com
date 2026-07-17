@@ -790,6 +790,21 @@ export default function PropertiesPage() {
     }
   }, [marketStatus]);
 
+  // When Liked filter is active, reset property-type and last-sold to "all" so
+  // liked results match the outreach page's unfiltered view. The user can still
+  // re-apply these filters explicitly after entering liked-only mode.
+  useEffect(() => {
+    if (showLikedOnly) {
+      setPropertyFilter('all');
+      setLastSoldPreset('all');
+      setFilters((prev) => ({
+        ...prev,
+        last_sold_min_years: '',
+        last_sold_max_years: '',
+      }));
+    }
+  }, [showLikedOnly]);
+
   const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
     if (showLikedOnly) {
       const params = new URLSearchParams({
@@ -801,6 +816,23 @@ export default function PropertiesPage() {
       if (filters.city) params.append('city', filters.city);
       if (filters.region) params.append('region', filters.region);
       if (filters.search) params.append('search', filters.search);
+
+      // Delegate last-sold, property-type and market-status filtering to the
+      // outreach API (server-side SQL) so liked results are consistent.
+      if (lastSoldPreset === 'none') {
+        params.append('last_sold_none', 'true');
+      } else if (filters.last_sold_min_years || filters.last_sold_max_years) {
+        if (filters.last_sold_min_years) params.append('last_sold_min_years', filters.last_sold_min_years);
+        if (filters.last_sold_max_years) params.append('last_sold_max_years', filters.last_sold_max_years);
+      }
+      if (propertyFilter === 'house') {
+        params.append('standalone_only', 'true');
+      } else if (propertyFilter === 'townhouse') {
+        params.append('townhouse_only', 'true');
+      }
+      if (marketStatus !== 'all') {
+        params.append('market_status', marketStatus);
+      }
 
       const response = await fetch(`/api/admin/outreach?${params}`);
       const result = await response.json();
@@ -835,30 +867,8 @@ export default function PropertiesPage() {
         rent_price: item.rent_price ?? null,
       }));
 
-      if (propertyFilter === 'house') {
-        // 独栋：地址不含 "/"（新西兰地址中 "/" 表示单元/联排，如 16/9 Georgia Terrace）
-        mapped = mapped.filter(p => !p.address || !p.address.includes('/'));
-      } else if (propertyFilter === 'townhouse') {
-        // 联排/单元：地址含 "/"
-        mapped = mapped.filter(p => !!p.address && p.address.includes('/'));
-      }
-
-      if (lastSoldPreset === 'none') {
-        mapped = mapped.filter(p => !p.last_sold_date);
-      } else {
-        const minYears = filters.last_sold_min_years ? parseInt(filters.last_sold_min_years) : 0;
-        const maxYears = filters.last_sold_max_years ? parseInt(filters.last_sold_max_years) : 999;
-        if (minYears > 0 || maxYears < 999) {
-          const now = new Date();
-          mapped = mapped.filter(p => {
-            if (!p.last_sold_date) return false;
-            const sold = new Date(p.last_sold_date);
-            if (isNaN(sold.getTime())) return false;
-            const years = (now.getTime() - sold.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-            return years >= minYears && years <= maxYears;
-          });
-        }
-      }
+      // Client-side filters for fields the outreach API doesn't support
+      // (bedrooms, bathrooms, car spaces, build year, RV, floor/land area, market premium)
 
       if (filters.min_bedrooms) {
         const min = parseInt(filters.min_bedrooms);
