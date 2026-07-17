@@ -22,11 +22,12 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
     }
 
     const suburbs: MonthlyDataPoint['suburbs'] = {};
-    const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
-    const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+    const toNum = (v: unknown): number => Number(v);
+    const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + toNum(b), 0) / arr.length) : null;
+    const sum = (arr: number[]) => arr.reduce((a, b) => a + toNum(b), 0);
     const avgField = (arr: (number | null | undefined)[]) => {
       const nums = arr.filter((v): v is number => v != null);
-      return nums.length > 0 ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : null;
+      return nums.length > 0 ? Math.round(nums.reduce((a, b) => a + toNum(b), 0) / nums.length) : null;
     };
 
     for (const sn of suburbNames) {
@@ -47,9 +48,9 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
       for (const m of months) {
         const sd = m.suburbs[sn];
         if (sd) {
-          if (sd.median != null) medians.push(sd.median);
-          salesSum += sd.sales;
-          if (sd.days != null) days.push(sd.days);
+          if (sd.median != null) medians.push(Number(sd.median));
+          salesSum += Number(sd.sales);
+          if (sd.days != null) days.push(Number(sd.days));
           priceDiffMom.push(sd.priceDiffMomPct);
           priceDiff1yr.push(sd.priceDiff1yrPct);
           medianListPrices.push(sd.medianListPrice);
@@ -88,7 +89,7 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
       period: key,
       periodRaw: key,
       cityMedian: avg(cityMedians),
-      citySales: months.reduce((sum, m) => sum + m.citySales, 0),
+      citySales: months.reduce((s, m) => s + Number(m.citySales), 0),
       cityDays: avg(cityDays),
       cityDetail: cityFirst?.cityDetail ?? null,
       suburbs,

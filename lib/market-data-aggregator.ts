@@ -78,7 +78,7 @@ export async function getMonthlyData(
     function toDetail(r: RawMonthly): SuburbDetail {
       return {
         median: n(r.median_price),
-        sales: r.sales_count,
+        sales: n(r.sales_count) ?? 0,
         days: n(r.days_to_sell),
         priceDiffMomPct: n(r.price_diff_mom_pct),
         priceDiff1yrPct: n(r.price_diff_1yr_pct),
@@ -248,8 +248,9 @@ function aggregateRawToQuarterly(
     }
   }
 
-  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
-  const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+  const toNum = (v: unknown): number => Number(v);
+  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + toNum(b), 0) / arr.length) : null;
+  const sum = (arr: number[]) => arr.reduce((a, b) => a + toNum(b), 0);
 
   const result: MonthlyDataPoint[] = [];
   for (const [key, groups] of map) {
