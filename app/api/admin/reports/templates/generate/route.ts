@@ -116,7 +116,7 @@ function buildBlocks(
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${quarter} Market Report`] });
-  blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Prepared by Marie Leulan — nzmarie.co.nz`] });
+  blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Prepared by Marie Nian — nzmarie.co.nz`] });
   blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Date: ${new Date().toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`] });
   blocks.push({ type: 'divider' });
 
@@ -267,8 +267,8 @@ function buildBlocks(
   blocks.push({ type: 'divider' });
 
   // Page 4: About Marie
-  blocks.push({ type: 'heading', props: { level: 2 }, content: ['About Marie Leulan'] });
-  blocks.push({ type: 'paragraph', content: ['Marie Leulan is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.'] });
+  blocks.push({ type: 'heading', props: { level: 2 }, content: ['About Marie Nian'] });
+  blocks.push({ type: 'paragraph', content: ['Marie Nian is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.'] });
   blocks.push({ type: 'heading', props: { level: 3 }, content: ['Services Offered'] });
   blocks.push({ type: 'bulletListItem', content: ['Free property appraisals and market analysis'] });
   blocks.push({ type: 'bulletListItem', content: ['Expert negotiation and sales strategy'] });

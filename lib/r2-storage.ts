@@ -23,7 +23,7 @@ const s3Client = new S3Client({
   },
 });
 
-export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string = 'application/pdf'): Promise<string> {
+export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string = 'application/pdf', cacheControl?: string): Promise<string> {
   if (R2_ACCESS_KEY_ID.startsWith('mock-')) {
     console.log('Skipping real R2 upload due to mock credentials');
     return key;
@@ -33,6 +33,7 @@ export async function uploadToR2(key: string, body: Buffer | Uint8Array, content
     Key: key,
     Body: body,
     ContentType: contentType,
+    ...(cacheControl ? { CacheControl: cacheControl } : {}),
   });
   await s3Client.send(command);
   return key;
