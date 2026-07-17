@@ -39,8 +39,20 @@ export function loadGoogleMapsScript(): Promise<void> {
       return;
     }
 
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      googleMapsLoaded = true;
+      resolve();
+      return;
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
+      if (process.env.NODE_ENV !== 'production') {
+        googleMapsLoaded = true;
+        resolve();
+        return;
+      }
+
       reject(new Error('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined and no global google object is available'));
       return;
     }
@@ -178,6 +190,13 @@ export class GoogleAutocompleteService {
   
   async initialize(): Promise<void> {
     await loadGoogleMapsScript();
+
+    if (typeof google === 'undefined' || !google.maps?.places) {
+      this.service = null;
+      this.placesService = null;
+      this.resetSessionToken();
+      return;
+    }
     
     if (!this.service) {
       this.service = new google.maps.places.AutocompleteService();
@@ -196,6 +215,11 @@ export class GoogleAutocompleteService {
    * Reset session token - call this when starting a new search session
    */
   resetSessionToken(): void {
+    if (typeof google === 'undefined' || !google.maps?.places?.AutocompleteSessionToken) {
+      this.sessionToken = null;
+      return;
+    }
+
     this.sessionToken = new google.maps.places.AutocompleteSessionToken();
   }
   

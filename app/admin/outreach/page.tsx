@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { SkeletonOutreach } from '@/components/admin/Skeleton';
+import { SkeletonOutreach, SkeletonOutreachCard, SkeletonOutreachListRow } from '@/components/admin/Skeleton';
 import AddressAutocomplete from '@/components/property/AddressAutocomplete';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
@@ -84,6 +84,8 @@ const STATUS_COLORS: Record<string, string> = {
   interacted: 'bg-orange-50 text-orange-600 border-orange-200',
   converted: 'bg-green-50 text-green-600 border-green-200',
 };
+
+const PAGE_SIZE = 18;
 
 interface PropertyHistoryRecord {
   date?: string;
@@ -278,12 +280,30 @@ export default function OutreachPage() {
   const isClassic = paginationMode === 'classic';
   const displayItems = isClassic ? classicItems : items;
   const displayPagination = isClassic ? classicPagination : pagination;
-  const totalPages = Math.max(1, Math.ceil((displayPagination?.total || 0) / 20));
+  const totalPages = Math.max(1, Math.ceil((displayPagination?.total || 0) / PAGE_SIZE));
 
   const pageRef = useRef(1);
   const hasMoreRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const lastPropertyElementRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Client-side cache: keyed by filter signature + page number so that
+  // infinite and classic modes share the same per-page cache. Switching between
+  // modes for the same page hits the cache instantly (no network round-trip).
+  interface CacheEntry {
+    items: OutreachProperty[];
+    pagination: PaginationMeta | null;
+    hasMore: boolean;
+  }
+  const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+  const buildCacheKey = useCallback((page: number) => {
+    return [
+      activeTab, suburbFilter, streetFilter, campaignFilter,
+      debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset,
+      `p${page}`,
+    ].join('|');
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -295,10 +315,16 @@ export default function OutreachPage() {
   }, [addressInput]);
 
   const fetchPageData = useCallback(async (pageNum: number): Promise<{ items: OutreachProperty[]; pagination: PaginationMeta | null }> => {
+    // Cancel any in-flight request so a slower earlier request can't
+    // overwrite the result of a newer filter/tab/page change.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const params = new URLSearchParams({
       status: activeTab,
       page: pageNum.toString(),
-      limit: '20',
+      limit: PAGE_SIZE.toString(),
       sortOrder,
     });
     if (suburbFilter) params.set('suburb', suburbFilter);
@@ -321,7 +347,10 @@ export default function OutreachPage() {
       }
     }
 
-    const res = await fetch(`/api/admin/outreach?${params}`);
+    const res = await fetch(`/api/admin/outreach?${params}`, { signal: controller.signal });
+    if (controller.signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
@@ -336,24 +365,54 @@ export default function OutreachPage() {
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
+    const key1 = buildCacheKey(1);
+    const cached1 = cacheRef.current.get(key1);
+    if (cached1) {
+      // Accumulate all cached consecutive pages for infinite scroll
+      const allItems = [...cached1.items];
+      let page = 2;
+      let lastTotal = cached1.pagination?.total ?? cached1.items.length;
+      while (true) {
+        const ck = buildCacheKey(page);
+        const cp = cacheRef.current.get(ck);
+        if (!cp) break;
+        allItems.push(...cp.items);
+        lastTotal = cp.pagination?.total ?? lastTotal;
+        page++;
+      }
+      setItems(allItems);
+      setPagination(cached1.pagination ? { ...cached1.pagination, total: lastTotal } : null);
+      setHasMore(cached1.hasMore);
+      hasMoreRef.current = cached1.hasMore;
+      pageRef.current = page - 1;
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     pageRef.current = 1;
     setHasMore(true);
     hasMoreRef.current = true;
     try {
       const result = await fetchPageData(1);
+      cacheRef.current.set(key1, {
+        items: result.items,
+        pagination: result.pagination,
+        hasMore: result.items.length >= PAGE_SIZE,
+      });
       setItems(result.items);
       setPagination(result.pagination);
-      if (result.items.length < 20) {
+      if (result.items.length < PAGE_SIZE) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
     } catch (error) {
-      console.error('Error fetching outreach:', error);
+      if ((error as Error)?.name !== 'AbortError') {
+        console.error('Error fetching outreach:', error);
+      }
     } finally {
       setLoading(false);
     }
-  }, [fetchPageData, isClassic]);
+  }, [fetchPageData, isClassic, buildCacheKey]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
@@ -361,45 +420,80 @@ export default function OutreachPage() {
 
   useEffect(() => {
     if (!isClassic || status !== 'authenticated') return;
+    const key = buildCacheKey(currentPage);
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      // Instant restore from cache — no loading state, no network.
+      setClassicItems(cached.items);
+      setClassicPagination(cached.pagination);
+      setClassicLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setClassicLoading(true);
       try {
         const result = await fetchPageData(currentPage);
         if (!cancelled) {
+          cacheRef.current.set(key, {
+            items: result.items,
+            pagination: result.pagination,
+            hasMore: result.items.length >= PAGE_SIZE,
+          });
           setClassicItems(result.items);
           setClassicPagination(result.pagination);
         }
       } catch (error) {
-        console.error('Error fetching outreach (classic):', error);
+        if ((error as Error)?.name !== 'AbortError') {
+          console.error('Error fetching outreach (classic):', error);
+        }
       } finally {
         if (!cancelled) setClassicLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [isClassic, currentPage, fetchPageData, status]);
+  }, [isClassic, currentPage, fetchPageData, status, buildCacheKey]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     const nextPage = pageRef.current + 1;
+    const key = buildCacheKey(nextPage);
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setItems((prev) => [...prev, ...cached.items]);
+      pageRef.current = nextPage;
+      setPagination(cached.pagination);
+      setHasMore(cached.hasMore);
+      hasMoreRef.current = cached.hasMore;
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+      return;
+    }
     try {
       const result = await fetchPageData(nextPage);
+      cacheRef.current.set(key, {
+        items: result.items,
+        pagination: result.pagination,
+        hasMore: result.items.length >= PAGE_SIZE,
+      });
       setItems((prev) => [...prev, ...result.items]);
       pageRef.current = nextPage;
-      if (result.items.length < 20) {
+      if (result.items.length < PAGE_SIZE) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
       setPagination(result.pagination);
     } catch (error) {
-      console.error('Error loading more:', error);
+      if ((error as Error)?.name !== 'AbortError') {
+        console.error('Error loading more:', error);
+      }
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [fetchPageData]);
+  }, [fetchPageData, buildCacheKey]);
 
   useEffect(() => {
     if (isClassic) return;
@@ -409,10 +503,10 @@ export default function OutreachPage() {
       if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
         loadMore();
       }
-    }, { threshold: 0.5 });
+    }, { rootMargin: '400px 0px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, loading, loadMore, isClassic]);
+  }, [hasMore, loadingMore, loading, loadMore, isClassic, viewMode]);
 
   useEffect(() => {
     const streets = new Set<string>();
@@ -436,8 +530,22 @@ export default function OutreachPage() {
   };
 
   const handleMarkAsSentSuccess = (updatedProperties: OutreachProperty[]) => {
-    setItems((prev) => prev.filter((item) => !updatedProperties.some((updated) => updated.id === item.id)));
-    setClassicItems((prev) => prev.filter((item) => !updatedProperties.some((updated) => updated.id === item.id)));
+    const removedIds = new Set(updatedProperties.map((u) => u.id));
+    setItems((prev) => prev.filter((item) => !removedIds.has(item.id)));
+    setClassicItems((prev) => prev.filter((item) => !removedIds.has(item.id)));
+    // Keep the cache in sync so a tab switch doesn't resurrect removed items.
+    for (const [key, entry] of cacheRef.current) {
+      const filtered = entry.items.filter((item) => !removedIds.has(item.id));
+      if (filtered.length !== entry.items.length) {
+        cacheRef.current.set(key, {
+          ...entry,
+          items: filtered,
+          pagination: entry.pagination
+            ? { ...entry.pagination, total: Math.max(0, entry.pagination.total - (entry.items.length - filtered.length)) }
+            : entry.pagination,
+        });
+      }
+    }
     const dec = (p: PaginationMeta | null) => p ? { ...p, total: Math.max(0, p.total - updatedProperties.length) } : p;
     setPagination(dec);
     setClassicPagination(dec);
@@ -628,6 +736,12 @@ export default function OutreachPage() {
   }
 
   // Group by suburb and street with smart sorting
+  // Stable content key: only recompute groupedBySuburb when item IDs or sortOrder
+  // actually change, not just because displayItems got a new array ref.
+  const currentContentKey = useMemo(() => {
+    return displayItems.map((i) => i.id).join(',') + '|' + sortOrder;
+  }, [displayItems, sortOrder]);
+
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
     
@@ -680,7 +794,7 @@ export default function OutreachPage() {
         };
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb));
-  }, [displayItems, sortOrder]);
+    }, [currentContentKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'loading') return <SkeletonOutreach />;
 
@@ -728,7 +842,7 @@ export default function OutreachPage() {
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
             {isClassic
-              ? `Displaying ${Math.max(1, (currentPage - 1) * 20 + 1)} to ${Math.min(currentPage * 20, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
+              ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
               : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
           </p>
         </div>
@@ -1032,7 +1146,7 @@ export default function OutreachPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
           {isClassic
-            ? `Displaying ${Math.max(1, (currentPage - 1) * 20 + 1)} to ${Math.min(currentPage * 20, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
+            ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
             : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
         </span>
         <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
@@ -1255,15 +1369,12 @@ export default function OutreachPage() {
                 ☰ List
               </button>
             </div>
-            {loadingMore && (
-              <span className="text-sm text-blue-500 font-medium">Loading more...</span>
-            )}
           </div>
         </div>
 
         {(loading || (isClassic && classicLoading)) ? (
           <SkeletonOutreach />
-        ) : displayItems.length === 0 ? (
+        ) : displayItems.length === 0 && !loadingMore ? (
           <div className="p-12 text-center">
             <div className="text-6xl mb-4">📭</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
@@ -1893,7 +2004,7 @@ export default function OutreachPage() {
             {isClassic && displayItems.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
                 <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-                  {Math.max(1, (currentPage - 1) * 20 + 1)}–{Math.min(currentPage * 20, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+                  {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
                 </span>
                 <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
                 <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
@@ -1925,9 +2036,6 @@ export default function OutreachPage() {
                   onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
                 >≫</button>
               </div>
-            )}
-            {!isClassic && hasMore && !loading && (
-              <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
             )}
           </div>
         ) : (
@@ -2175,7 +2283,7 @@ export default function OutreachPage() {
         {isClassic && displayItems.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
             <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-              {Math.max(1, (currentPage - 1) * 20 + 1)}–{Math.min(currentPage * 20, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+              {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
             </span>
             <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
             <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
@@ -2208,8 +2316,36 @@ export default function OutreachPage() {
             >≫</button>
           </div>
         )}
-        {!isClassic && viewMode === 'list' && hasMore && !loading && (
+        {!isClassic && hasMore && !loading && !loadingMore && (
           <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+        )}
+
+        {!isClassic && loadingMore && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
+            gap: viewMode === 'card' ? '20px' : '0',
+          }}>
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+              viewMode === 'card' ? (
+                <SkeletonOutreachCard key={`skel-${i}`} />
+              ) : (
+                <SkeletonOutreachListRow key={`skel-${i}`} />
+              )
+            ))}
+          </div>
+        )}
+
+        {!isClassic && !hasMore && displayItems.length > 0 && !loadingMore && (
+          <div style={{
+            textAlign: 'center',
+            padding: '30px',
+            color: '#718096',
+            fontSize: '0.95rem',
+            fontWeight: '500',
+          }}>
+            You&apos;ve reached the end! No more addresses to load.
+          </div>
         )}
 
         {editingProperty && (
@@ -2317,3 +2453,6 @@ export default function OutreachPage() {
     </div>
   );
 }
+
+
+

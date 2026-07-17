@@ -329,7 +329,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 20 of 45 properties/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(2);
     });
   });
 });

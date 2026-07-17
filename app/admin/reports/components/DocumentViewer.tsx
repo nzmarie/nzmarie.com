@@ -7,7 +7,7 @@ import ReportToolbar from './ReportToolbar';
 import ConfirmModal from './ConfirmModal';
 import EmptyState from './EmptyState';
 import { useReportStore } from '../stores/report-store';
-import type { ReportDocument } from '@/types/report';
+import type { ReportDocument, ReportEditorContent } from '@/types/report';
 
 export default function DocumentViewer({ docId, onNavigate }: { docId: string; onNavigate?: (id: string | null) => void }) {
   const router = useRouter();
@@ -48,14 +48,14 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: docId, title: newTitle }),
       });
-      updateDocument(docId, { title: newTitle } as any);
+      updateDocument(docId, { title: newTitle });
     } catch {
       // silent
     }
   }, [docId, updateDocument]);
 
-  const handleContentChange = useCallback((content: unknown[]) => {
-    updateDocument(docId, { content: content as any } as any);
+  const handleContentChange = useCallback((content: ReportEditorContent) => {
+    updateDocument(docId, { content });
   }, [docId, updateDocument]);
 
   const handleSaveNow = useCallback(async () => {
@@ -161,7 +161,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
           onSaveNow={handleSaveNow}
           onExport={handleExport}
           onDelete={() => setShowDeleteModal(true)}
-          suburbName={(doc as any).suburb_name}
+          suburbName={doc.suburb_name}
           quarter={doc.quarter || undefined}
           suburbId={doc.suburb_id || undefined}
         />
@@ -178,7 +178,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       <div style={{ flex: 1, position: 'relative' }}>
         <ReportEditor
           docId={docId}
-          initialContent={doc.content as unknown[]}
+          initialContent={doc.content}
           onContentChange={handleContentChange}
         />
       </div>

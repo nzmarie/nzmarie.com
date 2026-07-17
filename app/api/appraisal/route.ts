@@ -168,8 +168,12 @@ export async function POST(req: Request) {
         [`%${address.trim()}%`, suburb.trim()]
       );
 
-      if (outreachResult.rows.length > 0) {
-        const outreachProperty = outreachResult.rows[0];
+      const outreachRows = Array.isArray((outreachResult as { rows?: Array<{ id: string; status: string }> } | null | undefined)?.rows)
+        ? (outreachResult as { rows: Array<{ id: string; status: string }> }).rows
+        : [];
+
+      if (outreachRows.length > 0) {
+        const outreachProperty = outreachRows[0];
         if (outreachProperty.status === 'interacted') {
           await marieDB.query(
             `UPDATE outreach_properties 

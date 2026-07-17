@@ -294,7 +294,7 @@ export function SkeletonBookings() {
 
 // ─── Properties skeleton ──────────────────────────────────────────────────────
 
-function SkeletonPropertyCard() {
+export function SkeletonPropertyCard() {
   return (
     <div
       data-testid="skeleton-property-card"
@@ -360,6 +360,73 @@ export function SkeletonProperties() {
         {Array.from({ length: 9 }).map((_, i) => (
           <SkeletonPropertyCard key={i} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Outreach card skeleton (for infinite scroll loadingMore) ─────────────────
+
+export function SkeletonOutreachCard() {
+  return (
+    <div
+      data-testid="skeleton-outreach-card"
+      className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-200 animate-pulse"
+      style={{
+        border: '1px solid #e2e8f0',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        backgroundColor: 'white',
+      }}
+    >
+      {/* Image area */}
+      <SkeletonBlock className="h-[220px] w-full rounded-none" />
+      <div className="p-6 space-y-4">
+        <SkeletonBlock className="h-5 w-3/4" />
+        <SkeletonBlock className="h-4 w-1/2" />
+        <div className="flex justify-between pt-2 border-t border-slate-100">
+          <div className="space-y-1">
+            <SkeletonBlock className="h-3 w-20" />
+            <SkeletonBlock className="h-5 w-24" />
+          </div>
+          <div className="space-y-1">
+            <SkeletonBlock className="h-3 w-16" />
+            <SkeletonBlock className="h-5 w-20" />
+          </div>
+        </div>
+        <div className="flex justify-around pt-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <SkeletonBlock className="h-5 w-8" />
+              <SkeletonBlock className="h-3 w-8" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Outreach list row skeleton (for infinite scroll loadingMore in list view) ─
+
+export function SkeletonOutreachListRow() {
+  return (
+    <div
+      data-testid="skeleton-outreach-list-row"
+      className="px-4 py-3 flex items-center gap-4 animate-pulse"
+    >
+      <SkeletonBlock className="h-4 w-4 rounded" />
+      <div className="flex-1 space-y-2">
+        <SkeletonBlock className="h-4 w-64" />
+        <div className="flex gap-2">
+          <SkeletonBlock className="h-3 w-16 rounded" />
+          <SkeletonBlock className="h-3 w-32" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <SkeletonBlock className="h-7 w-16 rounded" />
+        <SkeletonBlock className="h-7 w-14 rounded" />
+        <SkeletonBlock className="h-7 w-8 rounded" />
       </div>
     </div>
   );

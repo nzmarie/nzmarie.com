@@ -7,11 +7,12 @@ import '@blocknote/react/style.css';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useReportStore } from '../stores/report-store';
+import type { ReportEditorContent } from '@/types/report';
 
 interface ReportEditorProps {
   docId: string;
-  initialContent: unknown[] | null;
-  onContentChange?: (content: unknown[]) => void;
+  initialContent: ReportEditorContent | null;
+  onContentChange?: (content: ReportEditorContent) => void;
 }
 
 export default function ReportEditor({ docId, initialContent, onContentChange }: ReportEditorProps) {
@@ -19,7 +20,7 @@ export default function ReportEditor({ docId, initialContent, onContentChange }:
   const { handleImageFile } = useImageUpload();
 
   const editor = useCreateBlockNote({
-    initialContent: initialContent as any,
+    initialContent: initialContent ?? undefined,
     trailingBlock: false,
     uploadFile: async (file: File) => {
       return handleImageFile(file, docId);
@@ -38,8 +39,8 @@ export default function ReportEditor({ docId, initialContent, onContentChange }:
       const result = await res.json();
       if (result.success) {
         setLastSaved(new Date().toLocaleTimeString('en-NZ'));
-        updateDocument(docId, { content: blocks as any });
-        onContentChange?.(blocks as unknown[]);
+        updateDocument(docId, { content: blocks as ReportEditorContent });
+        onContentChange?.(blocks as ReportEditorContent);
       }
     } catch {
       // silent
@@ -57,8 +58,8 @@ export default function ReportEditor({ docId, initialContent, onContentChange }:
 
   const handleChange = useCallback(() => {
     const now = Date.now();
-    if (now - (editor as any)._lastChangeTime > 500) {
-      (editor as any)._lastChangeTime = now;
+    if (now - (editor as { _lastChangeTime?: number })._lastChangeTime! > 500) {
+      (editor as { _lastChangeTime?: number })._lastChangeTime = now;
     }
   }, [editor]);
 

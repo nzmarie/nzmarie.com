@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
-import { SkeletonProperties } from "@/components/admin/Skeleton";
+import { SkeletonProperties, SkeletonPropertyCard } from "@/components/admin/Skeleton";
 import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
 import { getFixedImageUrl } from "@/lib/google-maps";
 
@@ -2268,6 +2268,9 @@ export default function PropertiesPage() {
             </div>
           );
         })}
+          {(isFetchingNextPage || (classicFetching && isClassic)) && Array.from({ length: 18 }).map((_, i) => (
+            <SkeletonPropertyCard key={`skel-${i}`} />
+          ))}
       </div>
 
       {isClassic && displayProperties.length > 0 && (
@@ -2354,30 +2357,6 @@ export default function PropertiesPage() {
             onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
             onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
           >≫</button>
-        </div>
-      )}
-
-      {classicFetching && isClassic && (
-        <div style={{ textAlign: "center", padding: "20px", color: "#718096" }}>
-          Loading...
-        </div>
-      )}
-
-      {!isClassic && isFetchingNextPage && (
-        <div style={{
-          textAlign: "center",
-          padding: "30px",
-          display: "flex",
-          justifyContent: "center",
-        }}>
-          <div style={{
-            width: "48px",
-            height: "48px",
-            border: "4px solid #f3f4f6",
-            borderTop: "4px solid #3b82f6",
-            borderRadius: "50%",
-            animation: "spin 1s linear infinite",
-          }}></div>
         </div>
       )}
 

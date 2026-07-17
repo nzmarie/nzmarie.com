@@ -12,6 +12,10 @@ function isAllowedSuburb(value: unknown): value is string {
   return typeof value === "string" && allowedSuburbs.includes(value);
 }
 
+function getRows<T>(result: { rows?: T[] } | null | undefined): T[] {
+  return Array.isArray((result as { rows?: T[] } | null | undefined)?.rows) ? ((result as { rows?: T[] } | null | undefined)?.rows ?? []) : [];
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json() as {
@@ -54,7 +58,8 @@ export async function POST(req: Request) {
       [emailHash, DOWNLOAD_WINDOW_DAYS]
     );
 
-    const recentCount = Number(recentResult.rows[0].count);
+    const recentRows = getRows<{ count: string }>(recentResult);
+    const recentCount = Number(recentRows[0]?.count ?? 0);
     if (recentCount >= DOWNLOAD_LIMIT) {
       return NextResponse.json(
         {
@@ -72,9 +77,10 @@ export async function POST(req: Request) {
       [suburb]
     );
 
+    const reportRows = getRows<{ r2_key: string }>(reportResult);
     let r2Key: string;
-    if (reportResult.rows.length > 0) {
-      r2Key = reportResult.rows[0].r2_key;
+    if (reportRows.length > 0) {
+      r2Key = reportRows[0].r2_key;
     } else {
       r2Key = `reports/${suburb}/latest.pdf`;
     }
@@ -96,7 +102,12 @@ export async function POST(req: Request) {
       ]
     );
 
-    const eventId = insertResult.rows[0].id;
+    const insertRows = getRows<{ id: string }>(insertResult);
+    const eventId = insertRows[0]?.id;
+
+    if (!eventId) {
+      return NextResponse.json({ success: false, message: "Failed to create download event" }, { status: 500 });
+    }
 
     if (process.env.NODE_ENV === 'production') {
       const r2Access = process.env.R2_ACCESS_KEY_ID;
@@ -154,11 +165,12 @@ export async function POST(req: Request) {
         ]
       );
       
-      if (result.rows.length > 0) {
+      const downloadRows = getRows<{ id: string; email?: string | null; suburb?: string | null }>(result as unknown as { rows?: Array<{ id: string; email?: string | null; suburb?: string | null }> } | null | undefined);
+      if (downloadRows.length > 0) {
         console.log('✅ Successfully inserted into report_downloads:', {
-          id: result.rows[0].id,
-          email: result.rows[0].email,
-          suburb: result.rows[0].suburb,
+          id: downloadRows[0].id,
+          email: downloadRows[0].email,
+          suburb: downloadRows[0].suburb,
           source: trackingCodeFromUrl ? 'direct_mail' : 'organic'
         });
       } else {
@@ -198,8 +210,9 @@ export async function POST(req: Request) {
           [trackingCodeFromUrl]
         );
 
-        if (tokenResult.rows.length > 0) {
-          const { outreach_property_id, status } = tokenResult.rows[0];
+        const tokenRows = getRows<{ outreach_property_id: string; status: string }>(tokenResult);
+        if (tokenRows.length > 0) {
+          const { outreach_property_id, status } = tokenRows[0];
           if (status === 'sent') {
             await marieDB.query(
               `UPDATE outreach_properties 
@@ -222,8 +235,9 @@ export async function POST(req: Request) {
           [`%${suburb}%`, suburb]
         );
 
-        if (outreachResult.rows.length > 0) {
-          const outreachProperty = outreachResult.rows[0];
+        const outreachRows = getRows<{ id: string; status: string }>(outreachResult);
+        if (outreachRows.length > 0) {
+          const outreachProperty = outreachRows[0];
           if (outreachProperty.status === 'sent') {
             await marieDB.query(
               `UPDATE outreach_properties 

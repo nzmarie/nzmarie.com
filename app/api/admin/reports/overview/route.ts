@@ -16,7 +16,18 @@ export async function GET() {
   }
 
   try {
-    const result = await marieQuery<any>(
+    type OverviewRow = {
+      suburb_id: string;
+      suburb_name: string;
+      doc_id: string | null;
+      doc_type: string | null;
+      title: string | null;
+      quarter: string | null;
+      status: string | null;
+      created_at: string | null;
+    };
+
+    const result = await marieQuery<OverviewRow>(
       `SELECT
         rs.id AS suburb_id,
         rs.name AS suburb_name,
@@ -53,16 +64,16 @@ export async function GET() {
       if (!row.doc_id) continue;
       const entry = suburbMap.get(row.suburb_id)!;
       if (row.doc_type === 'suburb_intro') {
-        entry.introDoc = { id: row.doc_id, title: row.title, status: row.status };
+        entry.introDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
       } else if (row.doc_type === 'letter') {
-        entry.letterDoc = { id: row.doc_id, title: row.title, status: row.status };
+        entry.letterDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
       } else if (row.doc_type === 'report') {
         entry.reports.push({
           id: row.doc_id,
-          title: row.title,
+          title: row.title ?? '',
           quarter: row.quarter || '',
-          status: row.status,
-          createdAt: row.created_at,
+          status: row.status ?? 'draft',
+          createdAt: row.created_at ?? '',
         });
       }
     }

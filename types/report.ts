@@ -9,6 +9,10 @@ export interface ReportSuburb {
   sort_order: number;
 }
 
+import type { DefaultBlockSchema, DefaultInlineContentSchema, DefaultStyleSchema, PartialBlock } from '@blocknote/core';
+
+export type ReportEditorContent = PartialBlock<DefaultBlockSchema, DefaultInlineContentSchema, DefaultStyleSchema>[];
+
 export interface ReportDocument {
   id: string;
   user_id: string;
@@ -17,7 +21,7 @@ export interface ReportDocument {
   suburb_id: string | null;
   quarter: string | null;
   title: string;
-  content: unknown[] | null;
+  content: ReportEditorContent | null;
   icon: string | null;
   cover_type: string | null;
   cover_value: string | null;

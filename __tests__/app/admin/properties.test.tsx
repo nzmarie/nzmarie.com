@@ -130,6 +130,7 @@ vi.mock('@/components/property/AddressAutocomplete', () => ({
 
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonProperties: () => <div>Loading Properties</div>,
+  SkeletonPropertyCard: () => <div>Loading Property Card</div>,
 }));
 
 vi.mock('next/image', () => ({
@@ -944,7 +945,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getByText('Loading...')).toBeDefined();
+      expect(screen.getAllByText('Loading Property Card').length).toBe(18);
     });
   });
 
