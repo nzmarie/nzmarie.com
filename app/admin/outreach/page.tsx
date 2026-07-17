@@ -206,6 +206,24 @@ export default function OutreachPage() {
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
 
+  // Debounce filter changes: only trigger fetch after 300ms of filter stability
+  const [debouncedFilterKey, setDebouncedFilterKey] = useState(0);
+  const filterDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    filterDebounceRef.current = setTimeout(() => {
+      setDebouncedFilterKey(k => k + 1);
+    }, 300);
+    return () => {
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    };
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
+
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
   const [selectedByTab, setSelectedByTab] = useState<Record<string, Set<string>>>({
@@ -215,7 +233,6 @@ export default function OutreachPage() {
   });
   const selected = selectedByTab[activeTab];
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-  const [availableStreets, setAvailableStreets] = useState<string[]>([]);
   const canMarkAsSent = isAdmin(session?.user?.email ?? '');
 
   // Edit Property modal (edits the linked properties table record)
@@ -281,6 +298,13 @@ export default function OutreachPage() {
   const displayItems = isClassic ? classicItems : items;
   const displayPagination = isClassic ? classicPagination : pagination;
   const totalPages = Math.max(1, Math.ceil((displayPagination?.total || 0) / PAGE_SIZE));
+  const availableStreets = useMemo(() => {
+    const streets = new Set<string>();
+    displayItems.forEach(item => {
+      if (item.street) streets.add(item.street);
+    });
+    return Array.from(streets).sort();
+  }, [displayItems]);
 
   const pageRef = useRef(1);
   const hasMoreRef = useRef(true);
@@ -416,7 +440,12 @@ export default function OutreachPage() {
 
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
-  }, [status, fetchItems]);
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (status !== 'authenticated' || debouncedFilterKey === 0) return;
+    fetchItems();
+  }, [debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isClassic || status !== 'authenticated') return;
@@ -452,7 +481,7 @@ export default function OutreachPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isClassic, currentPage, fetchPageData, status, buildCacheKey]);
+  }, [isClassic, currentPage, debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current) return;
@@ -507,14 +536,6 @@ export default function OutreachPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, loadMore, isClassic, viewMode]);
-
-  useEffect(() => {
-    const streets = new Set<string>();
-    displayItems.forEach(item => {
-      if (item.street) streets.add(item.street);
-    });
-    setAvailableStreets(Array.from(streets).sort());
-  }, [displayItems]);
 
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
@@ -795,6 +816,19 @@ export default function OutreachPage() {
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb));
     }, [currentContentKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Synchronously restore classic items from the shared per-page cache
+  // when switching to classic mode. This avoids a loading flash when the
+  // data was already fetched under infinite scroll (same cache key).
+  if (isClassic && classicItems.length === 0) {
+    const key = buildCacheKey(currentPage);
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setClassicItems(cached.items);
+      setClassicPagination(cached.pagination);
+      if (classicLoading) setClassicLoading(false);
+    }
+  }
 
   if (status === 'loading') return <SkeletonOutreach />;
 

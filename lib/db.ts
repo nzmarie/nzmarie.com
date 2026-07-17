@@ -46,6 +46,14 @@ let _outreachTableEnsured = false;
 export async function ensureOutreachTablesExist(): Promise<void> {
   if (_outreachTableEnsured) return;
   try {
+    // Create pg_trgm extension if available (may require superuser on some hosts)
+    try {
+      await mariePool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    } catch {
+      // Extension creation may fail due to permissions — the trigram index
+      // will simply be skipped (GIN index requires the extension).
+    }
+
     // Create outreach_properties and outreach_qr_tokens if they don't exist.
     const sql = `
     CREATE TABLE IF NOT EXISTS outreach_properties (
@@ -80,6 +88,10 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_outreach_campaign ON outreach_properties(campaign);
     CREATE INDEX IF NOT EXISTS idx_outreach_property_id ON outreach_properties(property_id);
 
+    -- Performance indexes for JOIN with properties table
+    CREATE INDEX IF NOT EXISTS idx_outreach_louis_property_id ON outreach_properties(louis_property_id);
+    CREATE INDEX IF NOT EXISTS idx_outreach_property_id_clean ON outreach_properties (REPLACE(property_id::text, '-', ''));
+
     CREATE TABLE IF NOT EXISTS outreach_qr_tokens (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       token VARCHAR(100) UNIQUE NOT NULL,
@@ -94,6 +106,14 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     `;
 
     await mariePool.query(sql);
+
+    // Trigram index for ILIKE search on property_address (requires pg_trgm extension)
+    try {
+      await mariePool.query(`CREATE INDEX IF NOT EXISTS idx_outreach_address_trgm ON outreach_properties USING gin (property_address gin_trgm_ops)`);
+    } catch {
+      // Trigram index may fail if pg_trgm extension isn't available — non-critical.
+    }
+
     _outreachTableEnsured = true;
   } catch (err) {
     console.error('Failed to ensure outreach tables exist:', err);

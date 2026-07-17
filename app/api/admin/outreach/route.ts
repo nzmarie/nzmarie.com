@@ -38,6 +38,7 @@ export async function GET(request: Request) {
     let query = `
       SELECT 
         op.*,
+        COUNT(*) OVER() as total_count,
         p.id as joined_property_id,
         p.property_url,
         p.cover_image_url as image_url,
@@ -153,59 +154,7 @@ export async function GET(request: Request) {
     params.push(limit, offset);
 
     const result = await marieDB.query(query, params);
-
-    // Count total
-    let countQuery = `SELECT COUNT(*) FROM outreach_properties op
-      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
-      LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
-      LEFT JOIN real_estate_rent rer ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(rer.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(rer.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
-      WHERE 1=1`;
-    const countParams: unknown[] = [];
-    let ci = 1;
-
-    if (status) { countQuery += ` AND op.status = $${ci++}`; countParams.push(status); }
-    if (campaign) { countQuery += ` AND op.campaign = $${ci++}`; countParams.push(campaign); }
-    if (region) { countQuery += ` AND op.region ILIKE $${ci++}`; countParams.push(region); }
-    if (city) { countQuery += ` AND op.city ILIKE $${ci++}`; countParams.push(city); }
-    if (suburb) { countQuery += ` AND op.suburb ILIKE $${ci++}`; countParams.push(suburb); }
-    if (street) { countQuery += ` AND op.street ILIKE $${ci++}`; countParams.push(street); }
-    if (search) { countQuery += ` AND op.property_address ILIKE $${ci++}`; countParams.push(`%${search}%`); }
-    if (lastSoldNone === 'true') {
-      countQuery += ` AND p.last_sold_date IS NULL`;
-    } else {
-      if (lastSoldMinYears) {
-        const years = parseInt(lastSoldMinYears);
-        if (!isNaN(years) && years > 0) {
-          countQuery += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
-        }
-      }
-      if (lastSoldMaxYears) {
-        const years = parseInt(lastSoldMaxYears);
-        if (!isNaN(years) && years > 0) {
-          countQuery += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
-        }
-      }
-    }
-    if (standaloneOnly === 'true') {
-      countQuery += ` AND p.address NOT LIKE '%/%'`;
-    }
-    if (townhouseOnly === 'true') {
-      countQuery += ` AND p.address LIKE '%/%'`;
-    }
-    if (marketStatus === 'for_sale') {
-      countQuery += ` AND re.id IS NOT NULL`;
-    } else if (marketStatus === 'for_rent') {
-      countQuery += ` AND rer.id IS NOT NULL`;
-    } else if (marketStatus === 'rented') {
-      countQuery += ` AND p.has_rental_history = true`;
-    } else if (marketStatus === 'never_rented') {
-      countQuery += ` AND p.has_rental_history = false`;
-    } else if (marketStatus === 'not_listed') {
-      countQuery += ` AND re.id IS NULL AND rer.id IS NULL`;
-    }
-
-    const countResult = await marieDB.query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
 
     return NextResponse.json({
       success: true,
