@@ -88,11 +88,11 @@ describe('Outreach page', () => {
     fireEvent.click(pendingTab);
     const listBtn = await screen.findByRole('button', { name: /☰ List/i });
     fireEvent.click(listBtn);
-    const suburbButton = await screen.findByRole('button', { name: /Takapuna/i });
-    fireEvent.click(suburbButton);
+    const suburbHeader = await screen.findByText(/Takapuna/i);
+    expect(suburbHeader).toBeTruthy();
 
     expect(await screen.findByText('15 Marine Parade')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /✓ Sent/i })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /✓ Sent/i }).length).toBeGreaterThanOrEqual(1);
   });
 
   it('marks a pending address as sent when row button clicked', async () => {
@@ -152,11 +152,12 @@ describe('Outreach page', () => {
     fireEvent.click(pendingTab);
     const listBtn = await screen.findByRole('button', { name: /☰ List/i });
     fireEvent.click(listBtn);
-    const suburbButton = await screen.findByRole('button', { name: /Takapuna/i });
-    fireEvent.click(suburbButton);
+    const suburbHeader = await screen.findByText(/Takapuna/i);
+    expect(suburbHeader).toBeTruthy();
 
-    const sentButton = await screen.findByRole('button', { name: /✓ Sent/i });
-    fireEvent.click(sentButton);
+    const sentButtons = await screen.findAllByRole('button', { name: /✓ Sent/i });
+    const rowSentButton = sentButtons[sentButtons.length - 1];
+    fireEvent.click(rowSentButton);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/admin/outreach/out-1/mark-sent', { method: 'PATCH' });
@@ -236,7 +237,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
 
     render(<OutreachPage />);
 
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
@@ -260,7 +261,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
 
     render(<OutreachPage />);
 
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
@@ -284,7 +285,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
 
     render(<OutreachPage />);
 
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
@@ -318,7 +319,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
 
     render(<OutreachPage />);
 
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
@@ -367,13 +368,13 @@ describe('Outreach page - Liked icon on card image', () => {
 
   it('shows "No Image Available" placeholder when image_url is no-photo-available', async () => {
     render(<OutreachPage />);
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
     expect(await screen.findByText('No Image Available')).toBeDefined();
   });
 
   it('does NOT render a standalone unlike (♥/♡) button on the image in liked tab', async () => {
     render(<OutreachPage />);
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     // The old standalone heart button with title "Unlike"/"Like" must be gone.
     expect(screen.queryByTitle('Unlike')).toBeNull();
@@ -385,7 +386,7 @@ describe('Outreach page - Liked icon on card image', () => {
 
   it('clicking the liked icon removes the record via DELETE without full refresh', async () => {
     render(<OutreachPage />);
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     const likedIcon = screen.getByTitle('取消喜欢 / Unlike');
     fireEvent.click(likedIcon);
@@ -405,7 +406,7 @@ describe('Outreach page - Liked icon on card image', () => {
     window.confirm = vi.fn().mockReturnValue(false);
 
     render(<OutreachPage />);
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     fireEvent.click(screen.getByTitle('取消喜欢 / Unlike'));
 
@@ -427,7 +428,7 @@ describe('Outreach page - Liked icon on card image', () => {
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Failed' }) });
 
     render(<OutreachPage />);
-    await waitFor(() => expect(screen.getByText('Liked')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
 
     fireEvent.click(screen.getByTitle('取消喜欢 / Unlike'));
 

@@ -205,7 +205,7 @@ export default function OutreachPage() {
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
-  const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
+  const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
   const [selectedByTab, setSelectedByTab] = useState<Record<string, Set<string>>>({
     liked: new Set(),
     pending: new Set(),
@@ -443,11 +443,12 @@ export default function OutreachPage() {
     setClassicPagination(dec);
   };
 
-  const toggleSuburb = (suburb: string) => {
-    setExpandedSuburbs((prev) => {
+  const toggleStreet = (suburb: string, street: string) => {
+    const key = `${suburb}::${street}`;
+    setCollapsedStreets((prev) => {
       const next = new Set(prev);
-      if (next.has(suburb)) next.delete(suburb);
-      else next.add(suburb);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -619,13 +620,20 @@ export default function OutreachPage() {
     return match ? parseInt(match[1], 10) : 999999;
   }
 
+  // Extract street name from address when database street field is null
+  function extractStreetName(address: string): string {
+    let s = address.replace(/^\d+\//, '');
+    s = s.replace(/^\d+[A-Za-z]?\s*/, '');
+    return s.trim() || 'Unknown Street';
+  }
+
   // Group by suburb and street with smart sorting
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
     
     displayItems.forEach((item) => {
       const suburb = item.suburb || 'Unknown';
-      const street = item.street || 'Unknown Street';
+      const street = item.street || extractStreetName(item.property_address);
       
       if (!groups.has(suburb)) {
         groups.set(suburb, new Map());
@@ -671,16 +679,8 @@ export default function OutreachPage() {
           totalCount: streets.reduce((sum, s) => sum + s.totalCount, 0),
         };
       })
-      .sort((a, b) => b.totalCount - a.totalCount);
+      .sort((a, b) => a.suburb.localeCompare(b.suburb));
   }, [displayItems, sortOrder]);
-
-  const stats = useMemo(() => {
-    const totalLiked = displayItems.filter((i) => i.status === 'liked').length;
-    const totalPending = displayItems.filter((i) => i.status === 'pending').length;
-    const totalSent = displayItems.filter((i) => i.status === 'sent').length;
-    const totalInteracted = displayItems.filter((i) => i.status === 'interacted').length;
-    return { totalLiked, totalPending, totalSent, totalInteracted, total: displayPagination?.total ?? displayItems.length };
-  }, [displayItems, displayPagination]);
 
   if (status === 'loading') return <SkeletonOutreach />;
 
@@ -713,55 +713,6 @@ export default function OutreachPage() {
         <p className="text-gray-600 mt-1">Direct Mail Campaign Management</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
-        <button
-          onClick={() => { setActiveTab('liked'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
-          className={`px-6 py-3 font-semibold transition-colors relative ${
-            activeTab === 'liked'
-              ? 'text-pink-600 border-b-2 border-pink-600'
-              : 'text-slate-600 hover:text-pink-600'
-          }`}
-        >
-          Liked
-          {stats.totalLiked > 0 && (
-            <span className="ml-2 px-2 py-0.5 text-xs bg-pink-100 text-pink-700 rounded-full">
-              {stats.totalLiked}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => { setActiveTab('pending'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
-          className={`px-6 py-3 font-semibold transition-colors relative ${
-            activeTab === 'pending'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-slate-600 hover:text-blue-600'
-          }`}
-        >
-          Pending
-          {stats.totalPending > 0 && (
-            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
-              {stats.totalPending}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => { setActiveTab('sent'); setAddressInput(''); setSuburbFilter(''); setStreetFilter(''); setCampaignFilter(''); setCurrentPage(1); }}
-          className={`px-6 py-3 font-semibold transition-colors relative ${
-            activeTab === 'sent'
-              ? 'text-purple-600 border-b-2 border-purple-600'
-              : 'text-slate-600 hover:text-purple-600'
-          }`}
-        >
-          Sent
-          {stats.totalSent > 0 && (
-            <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-              {stats.totalSent}
-            </span>
-          )}
-        </button>
-      </div>
-
       {/* Filters */}
       <div style={{
         marginBottom: "32px",
@@ -780,6 +731,47 @@ export default function OutreachPage() {
               ? `Displaying ${Math.max(1, (currentPage - 1) * 20 + 1)} to ${Math.min(currentPage * 20, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
               : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
           </p>
+        </div>
+
+        {/* Status Filter Buttons */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Status
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {(['liked', 'pending', 'sent'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
+                  color: activeTab === tab ? 'white' : '#4a5568',
+                  border: activeTab === tab ? `2px solid ${tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6'}` : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: activeTab === tab ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: activeTab === tab ? `0 4px 12px ${tab === 'liked' ? 'rgba(236, 72, 153, 0.3)' : tab === 'pending' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(139, 92, 246, 0.3)'}` : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (activeTab !== tab) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== tab) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {tab === 'liked' ? '❤️ Liked' : tab === 'pending' ? '⏳ Pending' : '✓ Sent'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div style={{ marginBottom: "20px" }}>
@@ -1028,6 +1020,7 @@ export default function OutreachPage() {
               setLastSoldPreset('all');
               setPropertyFilter('all');
               setMarketStatus('all');
+              setActiveTab('liked');
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
@@ -1243,7 +1236,7 @@ export default function OutreachPage() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
-            {activeTab === 'liked' ? 'Liked' : activeTab === 'pending' ? 'Pending' : 'Sent'} Addresses
+            {activeTab === 'liked' ? '❤️ Liked' : activeTab === 'pending' ? '⏳ Pending' : '✓ Sent'} Addresses
           </h2>
           <div className="flex items-center gap-3">
             <div className="flex bg-slate-100 rounded-lg p-0.5">
@@ -1275,9 +1268,6 @@ export default function OutreachPage() {
             <div className="text-6xl mb-4">📭</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
             <p className="text-gray-500">
-              {activeTab === 'pending'
-                ? 'Use the input above to add addresses'
-                : 'Mark properties as sent to see them here'}
             </p>
           </div>
         ) : viewMode === 'card' ? (
@@ -1943,13 +1933,9 @@ export default function OutreachPage() {
         ) : (
           <div className="p-4 space-y-3">
             {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
-              const isExpanded = expandedSuburbs.has(suburb);
               return (
                 <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleSuburb(suburb)}
-                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between"
-                  >
+                  <div className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">📂</span>
                       <div className="text-left">
@@ -1963,28 +1949,33 @@ export default function OutreachPage() {
                       <span className="text-sm font-medium text-slate-600">
                         {totalCount} {totalCount === 1 ? 'address' : 'addresses'}
                       </span>
-                      <span className="text-slate-400">{isExpanded ? '▼' : '▶'}</span>
                     </div>
-                  </button>
+                  </div>
 
-                  {isExpanded && (
-                    <div className="divide-y divide-slate-100">
-                      {streets.map(({ street, properties, totalCount: streetTotal }) => (
+                  <div className="divide-y divide-slate-100">
+                    {streets.map(({ street, properties, totalCount: streetTotal }) => {
+                      const streetKey = `${suburb}::${street}`;
+                      const isCollapsed = collapsedStreets.has(streetKey);
+                      return (
                         <div key={street} className="bg-white">
-                          <div className="px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">📍</span>
-                                <span className="font-medium text-slate-700">{street}</span>
-                              </div>
+                          <button
+                            onClick={() => toggleStreet(suburb, street)}
+                            className="w-full px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">📍</span>
+                              <span className="font-medium text-slate-700">{street}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
                               <span className="text-xs text-slate-500 font-medium">
                                 {streetTotal} {streetTotal === 1 ? 'address' : 'addresses'}
                               </span>
+                              <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
                             </div>
-                          </div>
-                          
-                          <div className="divide-y divide-slate-50">
-                            {properties.map((prop) => (
+                          </button>
+                          {!isCollapsed && (
+                            <div className="divide-y divide-slate-50">
+                              {properties.map((prop) => (
                               <div
                                 key={prop.id}
                                 className="px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-4 group"
@@ -2171,10 +2162,11 @@ export default function OutreachPage() {
                               </div>
                             ))}
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })}
+                  </div>
                 </div>
               );
             })}
