@@ -21,6 +21,7 @@ interface ReportToolbarProps {
   suburbName?: string;
   quarter?: string;
   suburbId?: string;
+  hideExtraButtons?: boolean;
 }
 
 function toSlug(name: string): string {
@@ -51,7 +52,7 @@ function quartersForYear(year: number): string[] {
 }
 
 export default function ReportToolbar({
-  title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, suburbName, quarter, suburbId,
+  title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, suburbName, quarter, suburbId, hideExtraButtons,
 }: ReportToolbarProps) {
   const router = useRouter();
   const slugMap = useReportStore(s => s.slugMap);
@@ -151,13 +152,15 @@ export default function ReportToolbar({
           Save
         </button>
 
-        <button onClick={() => { setGenSuburbId(suburbId || ''); setGenSuburbName(suburbName || ''); setShowGenerate(true); }} style={{
-          padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
-          border: '1px solid #059669', background: '#ecfdf5', cursor: 'pointer',
-          color: '#059669', fontWeight: 500,
-        }}>
-          + Generate Report
-        </button>
+        {!hideExtraButtons && (
+          <button onClick={() => { setGenSuburbId(suburbId || ''); setGenSuburbName(suburbName || ''); setShowGenerate(true); }} style={{
+            padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
+            border: '1px solid #059669', background: '#ecfdf5', cursor: 'pointer',
+            color: '#059669', fontWeight: 500,
+          }}>
+            + Generate Report
+          </button>
+        )}
 
         <button onClick={onExport} style={{
           padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
@@ -167,13 +170,15 @@ export default function ReportToolbar({
           Export PDF
         </button>
 
-        <button onClick={onDelete} style={{
-          padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
-          border: '1px solid #fecaca', background: '#fef2f2', cursor: 'pointer',
-          color: '#dc2626', fontWeight: 500,
-        }}>
-          Delete
-        </button>
+        {!hideExtraButtons && (
+          <button onClick={onDelete} style={{
+            padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
+            border: '1px solid #fecaca', background: '#fef2f2', cursor: 'pointer',
+            color: '#dc2626', fontWeight: 500,
+          }}>
+            Delete
+          </button>
+        )}
 
         <div style={{ fontSize: '0.75rem', color: '#999' }}>
           {docType === 'report' ? '📊' : docType === 'letter' ? '📬' : docType === 'suburb_intro' ? '📝' : '📄'}

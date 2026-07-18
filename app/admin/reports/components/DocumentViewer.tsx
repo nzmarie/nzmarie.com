@@ -168,6 +168,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
           suburbName={doc.suburb_name}
           quarter={doc.quarter || undefined}
           suburbId={doc.suburb_id || undefined}
+          hideExtraButtons={isAboutMarie}
         />
       </div>
       <ConfirmModal
