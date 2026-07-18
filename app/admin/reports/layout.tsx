@@ -165,10 +165,27 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
         }
 
         @media print {
+          /* Hide navigation bar */
+          nav { display: none !important; }
+          /* Hide default report footer */
+          .print-footer { display: none !important; }
+          
           .reports-sidebar { display: none !important; }
           .reports-toolbar { display: none !important; }
           .reports-editor-status { display: none !important; }
-          body { overflow: visible !important; }
+          body { overflow: visible !important; background: white !important; }
+          
+          /* Reset AdminLayout wrappers */
+          .min-h-screen,
+          main,
+          .max-w-7xl {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            min-height: 0 !important;
+            background: transparent !important;
+          }
+          
           .reports-layout-wrapper {
             position: static !important;
             overflow: visible !important;
@@ -176,16 +193,22 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           }
           .reports-layout-wrapper > main {
             overflow: visible !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
           }
 
+          /* Clear page margins to hide browser default headers and footers */
           @page {
-            margin: 40px 40px 100px 40px;
+            size: A4;
+            margin: 0;
           }
 
           .report-editor-container {
             max-width: 100% !important;
-            padding: 0 !important;
+            padding: 80px 60px 80px 60px !important;
             margin: 0 !important;
+            box-sizing: border-box !important;
           }
 
           [data-block-type="divider"] + [data-block-type="heading"] {
@@ -193,26 +216,6 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           }
           [data-block-type="divider"] {
             display: none !important;
-          }
-
-          .print-footer {
-            display: flex !important;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            justify-content: center;
-            align-items: center;
-            gap: 4px;
-            padding: 10px 0;
-            font-size: 8pt;
-            color: #94a3b8;
-            border-top: 0.5pt solid #e2e8f0;
-            background: white;
-            z-index: 9999;
-          }
-          .page-number::after {
-            content: counter(page);
           }
         }
       `}</style>
