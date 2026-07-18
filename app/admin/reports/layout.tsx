@@ -206,7 +206,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
 
           .report-editor-container {
             max-width: 100% !important;
-            padding: 80px 60px 80px 60px !important;
+            padding: 60px 60px 80px 60px !important;
             margin: 0 !important;
             box-sizing: border-box !important;
           }

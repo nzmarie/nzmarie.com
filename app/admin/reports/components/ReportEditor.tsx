@@ -2,8 +2,8 @@
 
 import { useCallback } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteViewRaw } from '@blocknote/react';
-import '@blocknote/react/style.css';
+import { BlockNoteView } from '@blocknote/mantine';
+import '@blocknote/mantine/style.css';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useReportStore } from '../stores/report-store';
@@ -81,7 +81,7 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
         </span>
       </div>
       <div style={{ background: 'white' }}>
-        <BlockNoteViewRaw editor={editor} theme="light" onChange={handleChange} />
+        <BlockNoteView editor={editor} theme="light" onChange={handleChange} />
       </div>
     </div>
   );
