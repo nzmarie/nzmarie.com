@@ -8,12 +8,14 @@ interface ReportStore {
   slugMap: Record<string, string>;
   isSaving: boolean;
   lastSaved: string | null;
+  sidebarCollapsed: boolean;
   setDocuments: (docs: ReportDocumentTree[]) => void;
   setSuburbs: (suburbs: ReportSuburb[]) => void;
   setSelectedDocId: (id: string | null) => void;
   setSlugMap: (map: Record<string, string>) => void;
   setIsSaving: (saving: boolean) => void;
   setLastSaved: (time: string | null) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   updateDocument: (id: string, updates: Partial<ReportDocumentTree>) => void;
   removeDocument: (id: string) => void;
 }
@@ -25,6 +27,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   slugMap: {},
   isSaving: false,
   lastSaved: null,
+  sidebarCollapsed: false,
 
   setDocuments: (documents) => set({ documents }),
   setSuburbs: (suburbs) => set({ suburbs }),
@@ -32,6 +35,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   setSlugMap: (slugMap) => set({ slugMap }),
   setIsSaving: (isSaving) => set({ isSaving }),
   setLastSaved: (lastSaved) => set({ lastSaved }),
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
 
   updateDocument: (id, updates) => set((state) => ({
     documents: state.documents.map((d) =>

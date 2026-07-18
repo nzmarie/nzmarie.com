@@ -16,9 +16,11 @@ interface AboutMarieContent {
   phone: string;
   email: string;
   website: string;
+  location: string;
   license: string;
   appraisalTitle: string;
   steps: string[];
+  websiteCtaPrefix: string;
   disclaimer1: string;
   disclaimer2: string;
   disclaimer3: string;
@@ -43,8 +45,10 @@ const defaultContent = {
   phone: '021 069 3089',
   email: 'm.nian@barfoot.co.nz',
   website: 'nzmarie.com',
+  location: 'Serving North Shore & Greater Auckland',
   license: 'Licensed under REAA 2008',
   appraisalTitle: 'How a Free Appraisal Works (Our 3-Step No-Pressure Promise)',
+  websiteCtaPrefix: 'For more information, visit ',
   steps: [
     'Send your address: Drop a quick line to m.nian@barfoot.co.nz or visit nzmarie.com/appraisal.',
     'I’ll do the homework: Analysing REINZ stats, local school zones, and unitary land potential.',
@@ -66,9 +70,11 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
   const [phone, setPhone] = useState(defaultContent.phone);
   const [email, setEmail] = useState(defaultContent.email);
   const [website, setWebsite] = useState(defaultContent.website);
+  const [location, setLocation] = useState(defaultContent.location);
   const [license, setLicense] = useState(defaultContent.license);
   const [appraisalTitle, setAppraisalTitle] = useState(defaultContent.appraisalTitle);
   const [steps, setSteps] = useState(defaultContent.steps);
+  const [websiteCtaPrefix, setWebsiteCtaPrefix] = useState(defaultContent.websiteCtaPrefix);
   const [disclaimer1, setDisclaimer1] = useState(defaultContent.disclaimer1);
   const [disclaimer2, setDisclaimer2] = useState(defaultContent.disclaimer2);
   const [disclaimer3, setDisclaimer3] = useState(defaultContent.disclaimer3);
@@ -89,9 +95,11 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
       setPhone(data.phone || defaultContent.phone);
       setEmail(data.email || defaultContent.email);
       setWebsite(data.website || defaultContent.website);
+      setLocation(data.location || defaultContent.location);
       setLicense(data.license || defaultContent.license);
       setAppraisalTitle(data.appraisalTitle || defaultContent.appraisalTitle);
       setSteps(data.steps || defaultContent.steps);
+      setWebsiteCtaPrefix(data.websiteCtaPrefix || defaultContent.websiteCtaPrefix);
       setDisclaimer1(data.disclaimer1 || defaultContent.disclaimer1);
       setDisclaimer2(data.disclaimer2 || defaultContent.disclaimer2);
       setDisclaimer3(data.disclaimer3 || defaultContent.disclaimer3);
@@ -129,9 +137,11 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
       phone,
       email,
       website,
+      location,
       license,
       appraisalTitle,
       steps,
+      websiteCtaPrefix,
       disclaimer1,
       disclaimer2,
       disclaimer3,
@@ -154,9 +164,11 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
     phone,
     email,
     website,
+    location,
     license,
     appraisalTitle,
     steps,
+    websiteCtaPrefix,
     disclaimer1,
     disclaimer2,
     disclaimer3,
@@ -164,7 +176,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
   ]);
 
   return (
-    <div className="max-w-6xl mx-auto px-8 py-12 bg-white min-h-screen">
+    <div className="max-w-6xl mx-auto p-6 print:p-0">
       <div className="flex justify-end gap-2 mb-6 print:hidden">
         <button
           onClick={() => setIsEditMode(false)}
@@ -189,104 +201,173 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
       </div>
 
       {!isEditMode ? (
-        <div className="text-slate-800">
-          <div className="border-b border-slate-200/60 pb-6 mb-8 text-left">
-            <div className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[11px] font-semibold text-slate-600 uppercase tracking-widest mb-3">
-              {subtitle}
+        <div
+          id="am-root"
+          className="max-w-[210mm] mx-auto bg-white min-h-[297mm] shadow-lg border border-slate-200/50 rounded-sm relative flex flex-col justify-between text-slate-800 pt-[70px] px-[40px] pb-[40px] print:shadow-none print:border-none print:p-0 print:max-w-none print:min-h-0 print:bg-transparent"
+        >
+          <style>{`
+            #am-root {
+              box-sizing: border-box;
+            }
+            @media print {
+              /* Hide navigation bar */
+              nav { display: none !important; }
+              /* Hide report sidebars/toolbars/footers */
+              .reports-sidebar { display: none !important; }
+              .reports-toolbar { display: none !important; }
+              .reports-editor-status { display: none !important; }
+              .print-footer { display: none !important; }
+              body { overflow: visible !important; background: white !important; }
+              
+              /* Override standard layout containers for print */
+              .reports-layout-wrapper {
+                position: static !important;
+                overflow: visible !important;
+                display: block !important;
+              }
+              .reports-layout-wrapper > main {
+                overflow: visible !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background: transparent !important;
+              }
+              main {
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+              }
+              
+              /* Zero page margins to clear browser headers and footers */
+              @page {
+                size: A4;
+                margin: 0;
+              }
+              
+              /* Force exact A4 dimensions and custom padding margins inside document */
+              #am-root {
+                width: 210mm !important;
+                height: 297mm !important;
+                padding: 70px 40px 40px 40px !important;
+                margin: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: transparent !important;
+                box-sizing: border-box !important;
+                page-break-after: avoid !important;
+                page-break-before: avoid !important;
+              }
+            }
+          `}</style>
+
+          <div>
+            <div id="am-header" className="border-b border-slate-200/80 pb-4 mb-6 text-left">
+              <div className="am-badge inline-block px-3 py-1 bg-slate-100 rounded-full tracking-widest text-xs font-light text-slate-400 mb-2">
+                {subtitle}
+              </div>
+              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">
+                {title}
+              </h1>
             </div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-slate-900 tracking-tight">
-              {title}
-            </h1>
+
+            <div id="am-grid" className="grid grid-cols-12 gap-8 items-start">
+              <div id="am-left" className="col-span-4 flex flex-col gap-4 text-left">
+                <div id="am-photo-wrap" className="overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50 aspect-[4/5] w-full">
+                  <Image
+                    src="https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg"
+                    alt="Marie Nian"
+                    width={859}
+                    height={1014}
+                    className="w-full h-full object-cover object-center"
+                  />
+                </div>
+
+                <div id="am-contact" className="space-y-3 bg-slate-50/50 p-4 rounded-lg border border-slate-100/80">
+                  <div className="flex items-center gap-3 text-slate-600 text-xs">
+                    <span className="flex-shrink-0">📍</span>
+                    <span>{location}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-600 text-xs">
+                    <Phone className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
+                    <span>{phone}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-600 text-xs">
+                    <Mail className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
+                    <a href={`mailto:${email}`} className="hover:text-slate-950 underline transition-colors">
+                      {email}
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-600 text-xs">
+                    <Globe className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
+                    <a href={`https://${website}`} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 underline transition-colors">
+                      {website}
+                    </a>
+                  </div>
+                </div>
+
+                <div id="am-license" className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase mt-1">
+                  LICENSED UNDER REAA 2008
+                </div>
+              </div>
+
+              <div id="am-right" className="col-span-8 flex flex-col gap-4 text-left">
+                <div id="am-welcome" className="text-lg font-serif text-slate-800 leading-snug">
+                  {welcomeText}
+                </div>
+
+                <div id="am-paragraphs" className="space-y-3">
+                  {paragraphs.map((p, idx) => (
+                    <p key={idx} className="text-slate-600 leading-relaxed text-xs md:text-sm">
+                      {p}
+                    </p>
+                  ))}
+                </div>
+
+                <div id="am-appraisal" className="bg-gradient-to-br from-slate-50 to-slate-100/30 border border-slate-200/50 rounded-xl p-5 mt-2 shadow-sm">
+                  <h3 className="text-sm font-serif font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <Award className="w-4 h-4 text-slate-800" />
+                    {appraisalTitle}
+                  </h3>
+                  <div id="am-steps" className="space-y-4">
+                    {steps.map((step, idx) => {
+                      const parts = step.split(':');
+                      const boldPart = parts[0];
+                      const normalPart = parts.slice(1).join(':');
+                      return (
+                        <div key={idx} className="flex items-start gap-3">
+                          <div className="am-step-num w-6 h-6 rounded-full bg-slate-900 text-white font-serif font-semibold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </div>
+                          <div className="am-step-text text-slate-600 text-xs md:text-sm leading-relaxed">
+                            {boldPart && (
+                              <strong className="font-semibold text-slate-900 mr-1">
+                                {boldPart}:
+                              </strong>
+                            )}
+                            <span>{normalPart}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-5 pt-4 border-t border-slate-200/50 text-xs text-slate-400 leading-relaxed">
+                    {websiteCtaPrefix}
+                    <a href={`https://${website}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-700 underline underline-offset-2 hover:text-slate-900 transition-colors">
+                      {website}
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mt-10 items-start">
-            <div className="md:col-span-4 flex flex-col gap-6 text-left">
-              <div className="overflow-hidden rounded-xl shadow-md border border-slate-100 bg-slate-50 aspect-4/5 w-full">
-                <Image
-                  src="https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg"
-                  alt="Marie Nian"
-                  width={859}
-                  height={1014}
-                  className="w-full h-full object-cover object-center"
-                />
-              </div>
-
-              <div className="space-y-4 bg-slate-50/50 p-6 rounded-xl border border-slate-100">
-                <div className="flex items-center gap-3 text-slate-600 text-sm">
-                  <Phone className="w-4 h-4 text-slate-800 flex-shrink-0" />
-                  <span>{phone}</span>
-                </div>
-                <div className="flex items-center gap-3 text-slate-600 text-sm">
-                  <Mail className="w-4 h-4 text-slate-800 flex-shrink-0" />
-                  <a href={`mailto:${email}`} className="hover:text-slate-950 underline transition-colors">
-                    {email}
-                  </a>
-                </div>
-                <div className="flex items-center gap-3 text-slate-600 text-sm">
-                  <Globe className="w-4 h-4 text-slate-800 flex-shrink-0" />
-                  <a href={`https://${website}`} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 underline transition-colors">
-                    {website}
-                  </a>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-400 font-semibold tracking-widest uppercase mt-2">
-                {license}
-              </div>
-            </div>
-
-            <div className="md:col-span-8 flex flex-col gap-6 text-left">
-              <div className="text-xl md:text-2xl font-serif text-slate-800 leading-snug">
-                {welcomeText}
-              </div>
-
-              <div className="space-y-4">
-                {paragraphs.map((p, idx) => (
-                  <p key={idx} className="text-slate-600 leading-relaxed text-base md:text-lg">
-                    {p}
-                  </p>
-                ))}
-              </div>
-
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100/40 border border-slate-200/50 rounded-2xl p-8 mt-8 shadow-sm">
-                <h3 className="text-lg md:text-xl font-serif font-semibold text-slate-900 mb-6 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-slate-800" />
-                  {appraisalTitle}
-                </h3>
-                <div className="space-y-6">
-                  {steps.map((step, idx) => {
-                    const parts = step.split(':');
-                    const boldPart = parts[0];
-                    const normalPart = parts.slice(1).join(':');
-                    return (
-                      <div key={idx} className="flex items-start gap-4">
-                        <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-serif font-semibold text-sm flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-                          {idx + 1}
-                        </div>
-                        <div className="text-slate-700 text-sm md:text-base leading-relaxed">
-                          {boldPart && (
-                            <strong className="font-semibold text-slate-900 block md:inline md:mr-1">
-                              {boldPart}:
-                            </strong>
-                          )}
-                          <span>{normalPart}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-16 pt-8 border-t border-slate-100 text-left space-y-3">
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+          <div id="am-footer" className="mt-auto pt-6 border-t border-slate-100 text-left space-y-2">
+            <p className="text-[9.5px] text-slate-400/80 leading-normal">
               {disclaimer1}
             </p>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[9.5px] text-slate-400/80 leading-normal">
               {disclaimer2}
             </p>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[9.5px] text-slate-400/80 leading-normal">
               {disclaimer3}
             </p>
           </div>
@@ -297,9 +378,9 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
             <h2 className="text-lg font-semibold text-slate-800">Edit About Marie</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Page Title
               </label>
               <input
@@ -310,7 +391,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Subtitle Badge
               </label>
               <input
@@ -320,10 +401,21 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 className="w-full p-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-950 text-sm"
               />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
+                Location Tag
+              </label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full p-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-950 text-sm"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
               Welcome Tagline
             </label>
             <input
@@ -335,7 +427,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
               Narrative Paragraphs
             </label>
             <div className="space-y-4">
@@ -373,7 +465,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Phone Number
               </label>
               <input
@@ -384,7 +476,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Email Address
               </label>
               <input
@@ -395,7 +487,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Website URL
               </label>
               <input
@@ -409,7 +501,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
 
           <div className="grid grid-cols-1 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 License Info
               </label>
               <input
@@ -422,7 +514,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
           </div>
 
           <div className="border-t border-slate-200 pt-6 mt-4">
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
               Appraisal Promise Box Title
             </label>
             <input
@@ -432,10 +524,10 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               className="w-full p-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-950 text-sm mb-4"
             />
 
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
               Appraisal Promise Steps
             </label>
-            <div className="space-y-4">
+            <div className="space-y-4 mb-4">
               {steps.map((step, idx) => (
                 <div key={idx} className="flex gap-4 items-center">
                   <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center flex-shrink-0">
@@ -454,11 +546,20 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 </div>
               ))}
             </div>
+            <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
+              Website CTA Prefix
+            </label>
+            <input
+              type="text"
+              value={websiteCtaPrefix}
+              onChange={(e) => setWebsiteCtaPrefix(e.target.value)}
+              className="w-full p-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-950 text-sm"
+            />
           </div>
 
           <div className="border-t border-slate-200 pt-6 mt-4 space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Footer Disclaimer 1
               </label>
               <textarea
@@ -469,7 +570,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Footer Disclaimer 2
               </label>
               <textarea
@@ -480,7 +581,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-600 tracking-wider mb-2">
                 Footer Disclaimer 3
               </label>
               <textarea

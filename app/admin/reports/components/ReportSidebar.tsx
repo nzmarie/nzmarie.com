@@ -44,6 +44,7 @@ export default function ReportSidebar() {
   const [aboutMarieLoading, setAboutMarieLoading] = useState(true);
 
   const selectedDocId = useReportStore(s => s.selectedDocId);
+  const setSidebarCollapsed = useReportStore(s => s.setSidebarCollapsed);
 
   useEffect(() => {
     fetch('/api/admin/reports/overview')
@@ -135,9 +136,24 @@ export default function ReportSidebar() {
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{ padding: '12px 12px 8px' }}>
-        <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#333', margin: '0 0 8px' }}>
-          Reports
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#333', margin: 0 }}>
+            Reports
+          </h1>
+          <span
+            onClick={() => setSidebarCollapsed(true)}
+            title="Collapse sidebar"
+            style={{
+              cursor: 'pointer', fontSize: '0.75rem', color: '#999', padding: '2px 6px',
+              borderRadius: 4, lineHeight: 1, userSelect: 'none',
+              transition: 'color 0.1s, background 0.1s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = '#e8e7e4'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#999'; e.currentTarget.style.background = 'transparent'; }}
+          >
+            ◀
+          </span>
+        </div>
 
         <input
           type="text"

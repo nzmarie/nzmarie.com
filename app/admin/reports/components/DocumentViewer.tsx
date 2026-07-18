@@ -154,7 +154,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: isAboutMarie ? '#f8fafc' : 'white' }}>
       <div style={{ flexShrink: 0, position: 'sticky', top: 0, zIndex: 10, background: 'white' }}>
         <ReportToolbar
           title={title}
@@ -207,7 +207,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       )}
 
       <div className="print-footer" style={{ display: 'none' }}>
-        nzmarie.com Market Report &mdash; Page <span className="page-number" />
+        nzmarie.com Market Report &mdash; Page {isAboutMarie ? '4' : <span className="page-number" />}
       </div>
     </div>
   );

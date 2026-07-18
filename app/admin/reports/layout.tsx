@@ -25,7 +25,7 @@ const ABOUT_MARIE_CONTENT = [
 ];
 
 export default function ReportsLayout({ children }: { children: React.ReactNode }) {
-  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId, slugMap, setSlugMap } = useReportStore();
+  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId, slugMap, setSlugMap, sidebarCollapsed, setSidebarCollapsed } = useReportStore();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -174,7 +174,25 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
         position: 'fixed', top: '64px', left: 0, right: 0, bottom: 0,
         display: 'flex', overflow: 'hidden',
       }}>
-        <ReportSidebar />
+        {sidebarCollapsed ? (
+          <div
+            onClick={() => setSidebarCollapsed(false)}
+            title="Expand sidebar"
+            style={{
+              width: 20, minWidth: 20, height: '100%', cursor: 'pointer',
+              background: '#f7f6f3', borderRight: '1px solid #e8e7e4',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#999', fontSize: '0.75rem', transition: 'color 0.1s, background 0.1s',
+              flexShrink: 0, userSelect: 'none',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = '#e8e7e4'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#999'; e.currentTarget.style.background = '#f7f6f3'; }}
+          >
+            ▶
+          </div>
+        ) : (
+          <ReportSidebar />
+        )}
         <main style={{ flex: 1, overflowY: 'auto', background: 'white' }}>
           {selectedDocId ? <DocumentViewer docId={selectedDocId} /> : children}
         </main>
