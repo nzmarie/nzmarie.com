@@ -4,6 +4,11 @@ import path from 'path';
 const isTurbo = process.argv.includes("--turbo") || process.argv.includes("--turbopack");
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'reports.nzmarie.com' },
+    ],
+  },
   ...(isTurbo ? {} : {
     webpack: (config) => {
       config.module.exprContextCritical = false;

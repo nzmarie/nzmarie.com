@@ -5,11 +5,13 @@ interface ReportStore {
   documents: ReportDocumentTree[];
   suburbs: ReportSuburb[];
   selectedDocId: string | null;
+  slugMap: Record<string, string>;
   isSaving: boolean;
   lastSaved: string | null;
   setDocuments: (docs: ReportDocumentTree[]) => void;
   setSuburbs: (suburbs: ReportSuburb[]) => void;
   setSelectedDocId: (id: string | null) => void;
+  setSlugMap: (map: Record<string, string>) => void;
   setIsSaving: (saving: boolean) => void;
   setLastSaved: (time: string | null) => void;
   updateDocument: (id: string, updates: Partial<ReportDocumentTree>) => void;
@@ -20,12 +22,14 @@ export const useReportStore = create<ReportStore>((set) => ({
   documents: [],
   suburbs: [],
   selectedDocId: null,
+  slugMap: {},
   isSaving: false,
   lastSaved: null,
 
   setDocuments: (documents) => set({ documents }),
   setSuburbs: (suburbs) => set({ suburbs }),
   setSelectedDocId: (selectedDocId) => set({ selectedDocId }),
+  setSlugMap: (slugMap) => set({ slugMap }),
   setIsSaving: (isSaving) => set({ isSaving }),
   setLastSaved: (lastSaved) => set({ lastSaved }),
 

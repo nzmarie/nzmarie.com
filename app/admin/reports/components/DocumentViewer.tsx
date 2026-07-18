@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ReportEditor from './ReportEditor';
+import AboutMarieEditor from './AboutMarieEditor';
 import ReportToolbar from './ReportToolbar';
 import ConfirmModal from './ConfirmModal';
 import EmptyState from './EmptyState';
@@ -18,11 +19,13 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [isAboutMarie, setIsAboutMarie] = useState(false);
 
   useEffect(() => {
     setSelectedDocId(docId);
     setLoading(true);
     setDoc(null);
+    setIsAboutMarie(false);
     const fetchDoc = async () => {
       try {
         const res = await fetch(`/api/admin/reports/documents/${docId}`);
@@ -30,6 +33,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         if (data.success) {
           setDoc(data.document);
           setTitle(data.document.title || '');
+          setIsAboutMarie(data.document.icon === 'about_marie' || data.document.title === 'About Marie');
         }
       } catch {
         // silent
@@ -176,11 +180,19 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         confirmLabel="Confirm Delete"
       />
       <div style={{ flex: 1, position: 'relative' }}>
-        <ReportEditor
-          docId={docId}
-          initialContent={doc.content}
-          onContentChange={handleContentChange}
-        />
+        {isAboutMarie ? (
+          <AboutMarieEditor
+            docId={docId}
+            initialContent={doc.content}
+            onContentChange={handleContentChange}
+          />
+        ) : (
+          <ReportEditor
+            docId={docId}
+            initialContent={doc.content}
+            onContentChange={handleContentChange}
+          />
+        )}
       </div>
 
       {toast && (
@@ -193,6 +205,10 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
           {toast}
         </div>
       )}
+
+      <div className="print-footer" style={{ display: 'none' }}>
+        nzmarie.com Market Report &mdash; Page <span className="page-number" />
+      </div>
     </div>
   );
 }

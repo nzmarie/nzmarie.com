@@ -27,6 +27,11 @@ const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waia
   'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
   'Hillcrest', 'Birkenhead', 'Hauraki'];
 
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+
 export default function ReportSidebar() {
   const router = useRouter();
   const setSelectedDocId = useReportStore(s => s.setSelectedDocId);
@@ -35,6 +40,8 @@ export default function ReportSidebar() {
   const [search, setSearch] = useState('');
   const [selectedSuburb, setSelectedSuburb] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [aboutMarieDoc, setAboutMarieDoc] = useState<{ id: string } | null>(null);
+  const [aboutMarieLoading, setAboutMarieLoading] = useState(true);
 
   const selectedDocId = useReportStore(s => s.selectedDocId);
 
@@ -45,9 +52,28 @@ export default function ReportSidebar() {
       .catch(() => {});
   }, [refreshKey, selectedDocId]);
 
-  const handleClick = (docId: string) => {
+  const slugMap = useReportStore(s => s.slugMap);
+
+  useEffect(() => {
+    if (slugMap['about-marie']) {
+      setAboutMarieDoc({ id: slugMap['about-marie'] });
+      setAboutMarieLoading(false);
+    } else {
+      const check = setInterval(() => {
+        const id = useReportStore.getState().slugMap['about-marie'];
+        if (id) {
+          setAboutMarieDoc({ id });
+          setAboutMarieLoading(false);
+          clearInterval(check);
+        }
+      }, 500);
+      return () => clearInterval(check);
+    }
+  }, [slugMap]);
+
+  const handleClick = (docId: string, slug?: string) => {
     setSelectedDocId(docId);
-    router.replace(`/admin/reports/${docId}`, { scroll: false });
+    router.replace(`/admin/reports/${slug || docId}`, { scroll: false });
   };
 
   const handleSuburbClick = (name: string, suburbs: SuburbEntry[]) => {
@@ -64,7 +90,7 @@ export default function ReportSidebar() {
     }
     if (docId) {
       setSelectedDocId(docId);
-      router.replace(`/admin/reports/${docId}`, { scroll: false });
+      router.replace(`/admin/reports/${toSlug(name)}`, { scroll: false });
     }
     setTimeout(() => {
       const el = document.getElementById(`sidebar-${name.replace(/\s+/g, '-')}`);
@@ -73,6 +99,13 @@ export default function ReportSidebar() {
   };
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+
+  const handleAboutMarieClick = () => {
+    if (aboutMarieDoc?.id) {
+      setSelectedDocId(aboutMarieDoc.id);
+      router.replace('/admin/reports/about-marie', { scroll: false });
+    }
+  };
 
   const handleDocDelete = async () => {
     if (!deleteTarget) return;
@@ -155,11 +188,29 @@ export default function ReportSidebar() {
       </div>
 
       <div
+        onClick={handleAboutMarieClick}
+        style={{
+          padding: '8px 12px', cursor: aboutMarieLoading ? 'default' : 'pointer',
+          fontSize: '0.8rem', fontWeight: 600, color: '#555',
+          display: 'flex', alignItems: 'center', gap: 8,
+          borderTop: '1px solid #e8e7e4', borderBottom: '1px solid #e8e7e4',
+          userSelect: 'none', flexShrink: 0,
+          background: selectedDocId === aboutMarieDoc?.id ? '#dbeafe' : 'transparent',
+          opacity: aboutMarieLoading ? 0.4 : 1,
+        }}
+        onMouseEnter={(e) => { if (!aboutMarieLoading && selectedDocId !== aboutMarieDoc?.id) e.currentTarget.style.background = '#e8f0fe'; }}
+        onMouseLeave={(e) => { if (selectedDocId !== aboutMarieDoc?.id) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span style={{ fontSize: '1rem' }}>👤</span>
+        <span>About Marie</span>
+      </div>
+
+      <div
         onClick={() => setExpanded(!expanded)}
         style={{
           padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem',
           fontWeight: 600, color: '#555', display: 'flex', alignItems: 'center', gap: 6,
-          borderTop: '1px solid #e8e7e4', borderBottom: '1px solid #e8e7e4',
+          borderBottom: '1px solid #e8e7e4',
           userSelect: 'none', flexShrink: 0,
         }}
       >
@@ -180,10 +231,10 @@ export default function ReportSidebar() {
 
           return (
               <div key={suburb.id} id={`sidebar-${suburb.name.replace(/\s+/g, '-')}`}>
-                <div
-                  onClick={() => {
-                    if (suburb.introDoc) router.push(`/admin/reports/${suburb.introDoc.id}`);
-                  }}
+                  <div
+                    onClick={() => {
+                      if (suburb.introDoc) router.push(`/admin/reports/${toSlug(suburb.name)}`);
+                    }}
                   style={{
                     padding: '5px 12px 1px 16px', fontSize: '0.78rem', fontWeight: 600,
                     color: '#666', display: 'flex', alignItems: 'center', gap: 4,

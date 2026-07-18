@@ -13,9 +13,10 @@ interface ReportEditorProps {
   docId: string;
   initialContent: ReportEditorContent | null;
   onContentChange?: (content: ReportEditorContent) => void;
+  className?: string;
 }
 
-export default function ReportEditor({ docId, initialContent, onContentChange }: ReportEditorProps) {
+export default function ReportEditor({ docId, initialContent, onContentChange, className }: ReportEditorProps) {
   const { isSaving, lastSaved, setIsSaving, setLastSaved, updateDocument } = useReportStore();
   const { handleImageFile } = useImageUpload();
 
@@ -64,7 +65,7 @@ export default function ReportEditor({ docId, initialContent, onContentChange }:
   }, [editor]);
 
   return (
-    <div className="report-editor-container" style={{ position: 'relative', maxWidth: '900px', margin: '0 auto' }}>
+    <div className={'report-editor-container' + (className ? ' ' + className : '')} style={{ position: 'relative', maxWidth: '900px', margin: '0 auto' }}>
       <div className="reports-editor-status" style={{
         position: 'sticky', top: 0, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: '8px',

@@ -6,40 +6,118 @@ import { useReportStore } from './stores/report-store';
 import ReportSidebar from './components/ReportSidebar';
 import DocumentViewer from './components/DocumentViewer';
 
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+const ABOUT_MARIE_CONTENT = [
+  { type: 'image', props: { url: 'https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg', caption: '', showPreview: true, previewWidth: 220 }, content: [] },
+  { type: 'heading', props: { level: 2 }, content: [{ type: 'text', text: 'About Marie Nian', styles: {} }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Marie Nian is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.', styles: {} }] },
+  { type: 'heading', props: { level: 3 }, content: [{ type: 'text', text: 'Services Offered', styles: {} }] },
+  { type: 'bulletListItem', content: [{ type: 'text', text: 'Free property appraisals and market analysis', styles: {} }] },
+  { type: 'bulletListItem', content: [{ type: 'text', text: 'Expert negotiation and sales strategy', styles: {} }] },
+  { type: 'bulletListItem', content: [{ type: 'text', text: 'Comprehensive marketing campaigns', styles: {} }] },
+  { type: 'bulletListItem', content: [{ type: 'text', text: 'Buyer representation and property search', styles: {} }] },
+  { type: 'bulletListItem', content: [{ type: 'text', text: 'Investment portfolio advice', styles: {} }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Contact Marie today for a no-obligation discussion about your property goals.', styles: {} }] },
+  { type: 'paragraph', props: { textAlignment: 'center' }, content: [{ type: 'text', text: 'www.nzmarie.co.nz', styles: {} }] },
+];
+
 export default function ReportsLayout({ children }: { children: React.ReactNode }) {
-  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId } = useReportStore();
+  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId, slugMap, setSlugMap } = useReportStore();
   const pathname = usePathname();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [docRes, subRes] = await Promise.all([
+        const [docRes, subRes, overviewRes] = await Promise.all([
           fetch('/api/admin/reports/documents'),
           fetch('/api/admin/reports/suburbs'),
+          fetch('/api/admin/reports/overview'),
         ]);
         const docData = await docRes.json();
         const subData = await subRes.json();
+        const overviewData = await overviewRes.json();
         if (docData.success) setDocuments(docData.documents);
         if (subData.success) setSuburbs(subData.suburbs);
+
+        if (overviewData.success) {
+          const map: Record<string, string> = {};
+          for (const suburb of overviewData.suburbs) {
+            const slug = toSlug(suburb.name);
+            const doc = suburb.introDoc || suburb.letterDoc || suburb.reports?.[0];
+            if (doc) map[slug] = doc.id;
+          }
+          // Fetch/create about_marie doc for slug map
+          try {
+            let amDocId: string | null = null;
+            const amRes = await fetch('/api/admin/reports/documents?type=general');
+            const amData = await amRes.json();
+            if (amData.success) {
+              const byIcon = amData.documents.find((d: { icon: string }) => d.icon === 'about_marie');
+              const byTitle = amData.documents.find((d: { title: string; icon: string | null }) => d.title === 'About Marie' && d.icon !== 'about_marie');
+              if (byIcon) {
+                amDocId = byIcon.id;
+              } else if (byTitle) {
+                amDocId = byTitle.id;
+                await fetch('/api/admin/reports/documents', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: byTitle.id, icon: 'about_marie' }),
+                });
+              } else {
+                const createRes = await fetch('/api/admin/reports/documents', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ doc_type: 'general', title: 'About Marie', icon: 'about_marie', content: ABOUT_MARIE_CONTENT }),
+                });
+                const createData = await createRes.json();
+                if (createData.success) amDocId = createData.id;
+              }
+            }
+            if (amDocId) map['about-marie'] = amDocId;
+          } catch {}
+          setSlugMap(map);
+        }
       } catch {
         // silent
       }
     };
     fetchData();
-  }, [setDocuments, setSuburbs]);
+  }, [setDocuments, setSuburbs, setSlugMap]);
 
   useEffect(() => {
-    const match = pathname.match(/^\/admin\/reports\/([a-f0-9-]+)$/);
+    const match = pathname.match(/^\/admin\/reports\/(.+)$/);
     if (match) {
-      setSelectedDocId(match[1]);
+      const slug = match[1];
+      if (/^[a-f0-9-]{36}$/.test(slug)) {
+        setSelectedDocId(slug);
+      } else if (slugMap[slug]) {
+        setSelectedDocId(slugMap[slug]);
+      } else {
+        setSelectedDocId(null);
+      }
     } else if (pathname === '/admin/reports' || pathname === '/admin/reports/') {
       setSelectedDocId(null);
     }
-  }, [pathname, setSelectedDocId]);
+  }, [pathname, setSelectedDocId, slugMap]);
 
   return (
     <>
       <style>{`
+        .about-marie-editor [data-block-type="image"]:first-child {
+          float: left;
+          margin: 0 24px 16px 0;
+          max-width: 220px;
+        }
+        .about-marie-editor [data-block-type="image"]:first-child .bn-block-content {
+          width: auto !important;
+        }
+        .about-marie-editor [data-block-type="image"]:first-child + [data-block-type="heading"] {
+          padding-top: 0;
+        }
+
         @media print {
           .reports-sidebar { display: none !important; }
           .reports-toolbar { display: none !important; }
@@ -52,6 +130,43 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           }
           .reports-layout-wrapper > main {
             overflow: visible !important;
+          }
+
+          @page {
+            margin: 40px 40px 100px 40px;
+          }
+
+          .report-editor-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          [data-block-type="divider"] + [data-block-type="heading"] {
+            page-break-before: always;
+          }
+          [data-block-type="divider"] {
+            display: none !important;
+          }
+
+          .print-footer {
+            display: flex !important;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 0;
+            font-size: 8pt;
+            color: #94a3b8;
+            border-top: 0.5pt solid #e2e8f0;
+            background: white;
+            z-index: 9999;
+          }
+          .page-number::after {
+            content: counter(page);
           }
         }
       `}</style>
