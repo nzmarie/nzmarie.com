@@ -10,6 +10,30 @@ function toSlug(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-');
 }
 
+function quarterToSlug(quarter: string): string {
+  const parts = quarter.split('-Q');
+  if (parts.length === 2) {
+    return `q${parts[1].toLowerCase()}-${parts[0]}`;
+  }
+  return quarter.toLowerCase();
+}
+
+function addToSlugMaps(
+  slugMap: Record<string, string>,
+  idToSlug: Record<string, string>,
+  id: string,
+  baseSlug: string,
+) {
+  let slug = baseSlug;
+  let counter = 2;
+  while (slugMap[slug] && slugMap[slug] !== id) {
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+  slugMap[slug] = id;
+  idToSlug[id] = slug;
+}
+
 const ABOUT_MARIE_CONTENT = [
   { type: 'image', props: { url: 'https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg', caption: '', showPreview: true, previewWidth: 220 }, content: [] },
   { type: 'heading', props: { level: 2 }, content: [{ type: 'text', text: 'About Marie Nian', styles: {} }] },
@@ -43,12 +67,32 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
         if (subData.success) setSuburbs(subData.suburbs);
 
         if (overviewData.success) {
-          const map: Record<string, string> = {};
+          const slugMap: Record<string, string> = {};
+          const idToSlug: Record<string, string> = {};
+
           for (const suburb of overviewData.suburbs) {
-            const slug = toSlug(suburb.name);
-            const doc = suburb.introDoc || suburb.letterDoc || suburb.reports?.[0];
-            if (doc) map[slug] = doc.id;
+            const slugName = toSlug(suburb.name);
+
+            // Intro doc
+            if (suburb.introDoc) {
+              addToSlugMaps(slugMap, idToSlug, suburb.introDoc.id, `${slugName}-introduction`);
+            }
+            // Letter doc
+            if (suburb.letterDoc) {
+              addToSlugMaps(slugMap, idToSlug, suburb.letterDoc.id, `${slugName}-letter`);
+            }
+            // Quarter reports
+            for (const report of suburb.reports) {
+              const qSlug = quarterToSlug(report.quarter);
+              addToSlugMaps(slugMap, idToSlug, report.id, `${slugName}-${qSlug}`);
+            }
+            // Fallback: suburb name → first available doc
+            const firstDoc = suburb.introDoc || suburb.letterDoc || suburb.reports?.[0];
+            if (firstDoc && !slugMap[slugName]) {
+              slugMap[slugName] = firstDoc.id;
+            }
           }
+
           // Fetch/create about_marie doc for slug map
           try {
             let amDocId: string | null = null;
@@ -76,9 +120,11 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
                 if (createData.success) amDocId = createData.id;
               }
             }
-            if (amDocId) map['about-marie'] = amDocId;
+            if (amDocId) {
+              addToSlugMaps(slugMap, idToSlug, amDocId, 'about-marie');
+            }
           } catch {}
-          setSlugMap(map);
+          setSlugMap(slugMap, idToSlug);
         }
       } catch {
         // silent

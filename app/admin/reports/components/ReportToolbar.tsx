@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useReportStore } from '../stores/report-store';
 
 interface SuburbOption {
   id: string;
@@ -20,6 +21,18 @@ interface ReportToolbarProps {
   suburbName?: string;
   quarter?: string;
   suburbId?: string;
+}
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+function quarterToSlug(quarter: string): string {
+  const parts = quarter.split('-Q');
+  if (parts.length === 2) {
+    return `q${parts[1].toLowerCase()}-${parts[0]}`;
+  }
+  return quarter.toLowerCase();
 }
 
 const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
@@ -41,6 +54,9 @@ export default function ReportToolbar({
   title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, suburbName, quarter, suburbId,
 }: ReportToolbarProps) {
   const router = useRouter();
+  const slugMap = useReportStore(s => s.slugMap);
+  const idToSlug = useReportStore(s => s.idToSlug);
+  const setSlugMap = useReportStore(s => s.setSlugMap);
   const [showGenerate, setShowGenerate] = useState(false);
   const [genQuarter, setGenQuarter] = useState(getCurrentQuarter());
   const [genSuburbId, setGenSuburbId] = useState(suburbId || '');
@@ -78,7 +94,19 @@ export default function ReportToolbar({
       });
       const data = await res.json();
       if (data.success) {
-        router.push(`/admin/reports/${data.id}`);
+        const docId = data.id;
+        const qSlug = quarterToSlug(genQuarter);
+        const baseSlug = `${toSlug(genSuburbName)}-${qSlug}`;
+        let slug = baseSlug;
+        let counter = 2;
+        while (slugMap[slug] && slugMap[slug] !== docId) {
+          slug = `${baseSlug}-${counter}`;
+          counter++;
+        }
+        const newSlugMap = { ...slugMap, [slug]: docId };
+        const newIdToSlug = { ...idToSlug, [docId]: slug };
+        setSlugMap(newSlugMap, newIdToSlug);
+        router.push(`/admin/reports/${slug}`);
       }
     } catch {
       // silent

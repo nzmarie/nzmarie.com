@@ -6,13 +6,14 @@ interface ReportStore {
   suburbs: ReportSuburb[];
   selectedDocId: string | null;
   slugMap: Record<string, string>;
+  idToSlug: Record<string, string>;
   isSaving: boolean;
   lastSaved: string | null;
   sidebarCollapsed: boolean;
   setDocuments: (docs: ReportDocumentTree[]) => void;
   setSuburbs: (suburbs: ReportSuburb[]) => void;
   setSelectedDocId: (id: string | null) => void;
-  setSlugMap: (map: Record<string, string>) => void;
+  setSlugMap: (map: Record<string, string>, idMap: Record<string, string>) => void;
   setIsSaving: (saving: boolean) => void;
   setLastSaved: (time: string | null) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -25,6 +26,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   suburbs: [],
   selectedDocId: null,
   slugMap: {},
+  idToSlug: {},
   isSaving: false,
   lastSaved: null,
   sidebarCollapsed: false,
@@ -32,7 +34,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   setDocuments: (documents) => set({ documents }),
   setSuburbs: (suburbs) => set({ suburbs }),
   setSelectedDocId: (selectedDocId) => set({ selectedDocId }),
-  setSlugMap: (slugMap) => set({ slugMap }),
+  setSlugMap: (slugMap, idToSlug) => set({ slugMap, idToSlug }),
   setIsSaving: (isSaving) => set({ isSaving }),
   setLastSaved: (lastSaved) => set({ lastSaved }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),

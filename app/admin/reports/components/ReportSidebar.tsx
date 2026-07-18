@@ -44,6 +44,7 @@ export default function ReportSidebar() {
   const [aboutMarieLoading, setAboutMarieLoading] = useState(true);
 
   const selectedDocId = useReportStore(s => s.selectedDocId);
+  const idToSlug = useReportStore(s => s.idToSlug);
   const setSidebarCollapsed = useReportStore(s => s.setSidebarCollapsed);
 
   useEffect(() => {
@@ -72,8 +73,9 @@ export default function ReportSidebar() {
     }
   }, [slugMap]);
 
-  const handleClick = (docId: string, slug?: string) => {
+  const handleClick = (docId: string) => {
     setSelectedDocId(docId);
+    const slug = idToSlug[docId];
     router.replace(`/admin/reports/${slug || docId}`, { scroll: false });
   };
 
@@ -91,7 +93,8 @@ export default function ReportSidebar() {
     }
     if (docId) {
       setSelectedDocId(docId);
-      router.replace(`/admin/reports/${toSlug(name)}`, { scroll: false });
+      const slug = idToSlug[docId] || toSlug(name);
+      router.replace(`/admin/reports/${slug}`, { scroll: false });
     }
     setTimeout(() => {
       const el = document.getElementById(`sidebar-${name.replace(/\s+/g, '-')}`);
@@ -249,7 +252,10 @@ export default function ReportSidebar() {
               <div key={suburb.id} id={`sidebar-${suburb.name.replace(/\s+/g, '-')}`}>
                   <div
                     onClick={() => {
-                      if (suburb.introDoc) router.push(`/admin/reports/${toSlug(suburb.name)}`);
+                      if (suburb.introDoc) {
+                        const slug = idToSlug[suburb.introDoc.id] || toSlug(suburb.name);
+                        router.push(`/admin/reports/${slug}`);
+                      }
                     }}
                   style={{
                     padding: '5px 12px 1px 16px', fontSize: '0.78rem', fontWeight: 600,
