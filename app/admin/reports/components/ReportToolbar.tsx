@@ -18,6 +18,7 @@ interface ReportToolbarProps {
   onSaveNow: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onEditHeaderFooter?: () => void;
   suburbName?: string;
   quarter?: string;
   suburbId?: string;
@@ -52,7 +53,7 @@ function quartersForYear(year: number): string[] {
 }
 
 export default function ReportToolbar({
-  title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, suburbName, quarter, suburbId, hideExtraButtons,
+  title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, onEditHeaderFooter, suburbName, quarter, suburbId, hideExtraButtons,
 }: ReportToolbarProps) {
   const router = useRouter();
   const slugMap = useReportStore(s => s.slugMap);
@@ -159,6 +160,16 @@ export default function ReportToolbar({
             color: '#059669', fontWeight: 500,
           }}>
             + Generate Report
+          </button>
+        )}
+
+        {docType === 'report' && (
+          <button onClick={onEditHeaderFooter} style={{
+            padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
+            border: '1px solid #d1d5db', background: 'white', cursor: 'pointer',
+            color: '#555', fontWeight: 500,
+          }}>
+            Edit Header/Footer
           </button>
         )}
 

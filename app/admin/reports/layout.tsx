@@ -152,6 +152,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
   return (
     <>
       <style>{`
+        .print-page-header, .print-page-footer { display: none; }
         .about-marie-editor [data-block-type="image"]:first-child {
           float: left;
           margin: 0 24px 16px 0;
@@ -195,7 +196,13 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           .reports-sidebar { display: none !important; }
           .reports-toolbar { display: none !important; }
           .reports-editor-status { display: none !important; }
-          body { overflow: visible !important; background: white !important; }
+          .edit-header-footer-btn { display: none !important; }
+          body {
+            overflow: visible !important;
+            background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           
           /* Reset AdminLayout wrappers */
           .min-h-screen,
@@ -220,17 +227,21 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
             background: transparent !important;
           }
 
-          /* Clear page margins to hide browser default headers and footers */
           @page {
-            size: A4;
             margin: 0;
+            size: A4 portrait;
           }
 
           .report-editor-container {
             max-width: 100% !important;
-            padding: 60px 60px 80px 60px !important;
+            width: 100% !important;
+            padding: 83px 54px 83px !important;
             margin: 0 !important;
             box-sizing: border-box !important;
+          }
+
+          .bn-editor {
+            padding: 0 !important;
           }
 
           [data-block-type="divider"] + [data-block-type="heading"] {
@@ -238,6 +249,44 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           }
           [data-block-type="divider"] {
             display: none !important;
+          }
+
+          /* ===== Print Header & Footer ===== */
+          .print-page-header {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 64px !important;
+            padding: 0 54px !important;
+            z-index: 9999 !important;
+            background: white !important;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.7) !important;
+            box-sizing: border-box !important;
+            font-size: 0.75rem !important;
+            color: #94a3b8 !important;
+            font-weight: 500 !important;
+          }
+          .print-page-footer {
+            display: flex !important;
+            align-items: center !important;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 64px !important;
+            padding: 0 54px !important;
+            z-index: 9999 !important;
+            background: white !important;
+            border-top: 1px solid rgba(226, 232, 240, 0.7) !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            font-size: 11px !important;
+            color: #94a3b8 !important;
+            line-height: 1.6 !important;
           }
         }
       `}</style>

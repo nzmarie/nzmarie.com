@@ -7,6 +7,7 @@ import AboutMarieEditor from './AboutMarieEditor';
 import ReportToolbar from './ReportToolbar';
 import ConfirmModal from './ConfirmModal';
 import EmptyState from './EmptyState';
+import EditHeaderFooter from './EditHeaderFooter';
 import { useReportStore } from '../stores/report-store';
 import type { ReportDocument, ReportEditorContent } from '@/types/report';
 
@@ -20,6 +21,9 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [isAboutMarie, setIsAboutMarie] = useState(false);
+  const [showHeaderFooter, setShowHeaderFooter] = useState(false);
+  const [headerContent, setHeaderContent] = useState('');
+  const [footerContent, setFooterContent] = useState('');
 
   useEffect(() => {
     setSelectedDocId(docId);
@@ -41,6 +45,10 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         setLoading(false);
       }
     };
+    const hf = localStorage.getItem('report-hf-global');
+    if (hf) {
+      try { const p = JSON.parse(hf); setHeaderContent(p.header || ''); setFooterContent(p.footer || ''); } catch {}
+    }
     fetchDoc();
   }, [docId, setSelectedDocId]);
 
@@ -74,6 +82,13 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       // silent
     }
   }, [docId, title, doc]);
+
+  const handleHeaderFooterSave = useCallback((h: string, f: string) => {
+    setHeaderContent(h);
+    setFooterContent(f);
+    localStorage.setItem('report-hf-global', JSON.stringify({ header: h, footer: f }));
+    setShowHeaderFooter(false);
+  }, []);
 
   const handleExport = useCallback(() => {
     window.print();
@@ -156,16 +171,17 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: isAboutMarie ? '#f8fafc' : 'white' }}>
       <div style={{ flexShrink: 0, position: 'sticky', top: 0, zIndex: 10, background: 'white' }}>
-        <ReportToolbar
-          title={title}
-          onTitleChange={handleTitleChange}
-          status={doc.status}
-          docType={doc.doc_type}
-          saving={isSaving}
-          onSaveNow={handleSaveNow}
-          onExport={handleExport}
-          onDelete={() => setShowDeleteModal(true)}
-          suburbName={doc.suburb_name}
+          <ReportToolbar
+            title={title}
+            onTitleChange={handleTitleChange}
+            status={doc.status}
+            docType={doc.doc_type}
+            saving={isSaving}
+            onSaveNow={handleSaveNow}
+            onExport={handleExport}
+            onDelete={() => setShowDeleteModal(true)}
+            onEditHeaderFooter={() => setShowHeaderFooter(true)}
+            suburbName={doc.suburb_name}
           quarter={doc.quarter || undefined}
           suburbId={doc.suburb_id || undefined}
           hideExtraButtons={isAboutMarie}
@@ -179,6 +195,13 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         onConfirm={handleDelete}
         loading={deleting}
         confirmLabel="Confirm Delete"
+      />
+      <EditHeaderFooter
+        open={showHeaderFooter}
+        header={headerContent}
+        footer={footerContent}
+        onSave={handleHeaderFooterSave}
+        onCancel={() => setShowHeaderFooter(false)}
       />
       <div style={{ flex: 1, position: 'relative' }}>
         {isAboutMarie ? (
@@ -195,6 +218,12 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
             className={doc.doc_type === 'report' ? 'is-quarterly-report' : ''}
           />
         )}
+        {doc.doc_type === 'report' && (
+          <div className="print-page-header">{headerContent || 'nzmarie.com | Market Report'}</div>
+        )}
+        {doc.doc_type === 'report' && (
+          <div className="print-page-footer">{footerContent || 'Data sourced from official REINZ metrics. Prepared independently for property context.'}</div>
+        )}
       </div>
 
       {toast && (
@@ -207,10 +236,6 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
           {toast}
         </div>
       )}
-
-      <div className="print-footer" style={{ display: 'none' }}>
-        nzmarie.com Market Report &mdash; Page {isAboutMarie ? '4' : <span className="page-number" />}
-      </div>
     </div>
   );
 }
