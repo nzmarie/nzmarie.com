@@ -273,6 +273,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           .print-page-footer {
             display: flex !important;
             align-items: center !important;
+            justify-content: space-between !important;
             position: fixed !important;
             bottom: 0 !important;
             left: 0 !important;
@@ -286,7 +287,27 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
             overflow: hidden !important;
             font-size: 11px !important;
             color: #94a3b8 !important;
-            line-height: 1.6 !important;
+          }
+          .print-page-footer-text {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            padding-right: 24px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            font-size: 11px !important;
+            color: #94a3b8 !important;
+            font-weight: 300 !important;
+          }
+          .print-page-footer-page {
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            font-size: 11px !important;
+            color: #94a3b8 !important;
+            font-weight: 300 !important;
+            letter-spacing: 0.025em !important;
+          }
+          .page-count::before {
+            content: counter(page) !important;
           }
         }
       `}</style>

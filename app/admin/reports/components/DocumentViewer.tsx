@@ -24,6 +24,8 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   const [showHeaderFooter, setShowHeaderFooter] = useState(false);
   const [headerContent, setHeaderContent] = useState('');
   const [footerContent, setFooterContent] = useState('');
+  const pageNumber = 1;
+  const totalPages = 2;
 
   useEffect(() => {
     setSelectedDocId(docId);
@@ -222,7 +224,10 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
           <div className="print-page-header">{headerContent || 'nzmarie.com | Market Report'}</div>
         )}
         {doc.doc_type === 'report' && (
-          <div className="print-page-footer">{footerContent || 'Data sourced from official REINZ metrics. Prepared independently for property context.'}</div>
+          <div className="print-page-footer">
+            <div className="print-page-footer-text">{footerContent || 'Data sourced from official REINZ metrics. Prepared independently for property context.'}</div>
+            <span className="print-page-footer-page">Page {pageNumber} of {totalPages}</span>
+          </div>
         )}
       </div>
 
