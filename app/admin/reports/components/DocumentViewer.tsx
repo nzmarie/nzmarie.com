@@ -192,6 +192,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
             docId={docId}
             initialContent={doc.content}
             onContentChange={handleContentChange}
+            className={doc.doc_type === 'report' ? 'is-quarterly-report' : ''}
           />
         )}
       </div>
