@@ -37,6 +37,7 @@ export default function ReportSidebar() {
   const setSelectedDocId = useReportStore(s => s.setSelectedDocId);
   const [suburbs, setSuburbs] = useState<SuburbEntry[]>([]);
   const [expanded, setExpanded] = useState(true);
+  const [isSuburbsOpen, setIsSuburbsOpen] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedSuburb, setSelectedSuburb] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -138,11 +139,16 @@ export default function ReportSidebar() {
       background: '#f7f6f3', borderRight: '1px solid #e8e7e4',
       display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ padding: '12px 12px 8px' }}>
+      <div style={{ padding: '12px 12px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#333', margin: 0 }}>
+          <span
+            onClick={() => router.push('/admin/reports')}
+            style={{ cursor: 'pointer', fontSize: '1rem', fontWeight: 700, color: '#333', margin: 0, transition: 'opacity 0.1s' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+          >
             Reports
-          </h1>
+          </span>
           <span
             onClick={() => setSidebarCollapsed(true)}
             title="Collapse sidebar"
@@ -157,54 +163,71 @@ export default function ReportSidebar() {
             ◀
           </span>
         </div>
-
-        <input
-          type="text"
-          placeholder="Search suburbs..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            width: '100%', padding: '6px 10px', fontSize: '0.8rem',
-            border: '1px solid #ddd', borderRadius: 6,
-            outline: 'none', boxSizing: 'border-box',
-            background: search ? 'white' : '#f0efed',
-          }}
-          onFocus={(e) => e.target.style.background = 'white'}
-          onBlur={(e) => e.target.style.background = search ? 'white' : '#f0efed'}
-        />
-
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8,
-          maxHeight: 120, overflowY: 'auto',
-        }}>
-          {SUBURB_ORDER.map((name) => {
-            const hasData = suburbs.some((s) => s.name === name);
-            if (!hasData) return null;
-            const isSelected = selectedSuburb === name;
-            return (
-              <button
-                key={name}
-                onClick={() => handleSuburbClick(name, suburbs)}
-                style={{
-                  padding: '3px 8px', fontSize: '0.7rem', fontWeight: isSelected ? 600 : 500,
-                  background: isSelected ? '#1a73e8' : 'white',
-                  color: isSelected ? 'white' : '#4a5568',
-                  border: isSelected ? '1px solid #1a73e8' : '1px solid #e2e8f0',
-                  borderRadius: 8, cursor: 'pointer', transition: 'all 0.1s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected) { e.currentTarget.style.background = '#e8f0fe'; e.currentTarget.style.borderColor = '#1a73e8'; }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }
-                }}
-              >
-                {name}
-              </button>
-            );
-          })}
-        </div>
       </div>
+
+      <div
+        onClick={() => setIsSuburbsOpen(!isSuburbsOpen)}
+        style={{
+          padding: '8px 12px', cursor: 'pointer', fontSize: '0.8rem',
+          fontWeight: 600, color: '#555', display: 'flex', alignItems: 'center', gap: 6,
+          borderTop: '1px solid #e8e7e4', borderBottom: '1px solid #e8e7e4',
+          userSelect: 'none', flexShrink: 0,
+        }}
+      >
+        <span style={{ transform: isSuburbsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '0.65rem' }}>▶</span>
+        <span style={{ fontSize: '1rem' }}>🏘️</span>
+        <span>Suburbs</span>
+      </div>
+
+      {isSuburbsOpen && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #e8e7e4' }}>
+          <input
+            type="text"
+            placeholder="Search suburbs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%', padding: '6px 10px', fontSize: '0.8rem',
+              border: '1px solid #ddd', borderRadius: 6,
+              outline: 'none', boxSizing: 'border-box',
+              background: search ? 'white' : '#f0efed',
+            }}
+            onFocus={(e) => e.target.style.background = 'white'}
+            onBlur={(e) => e.target.style.background = search ? 'white' : '#f0efed'}
+          />
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8,
+            maxHeight: 120, overflowY: 'auto',
+          }}>
+            {SUBURB_ORDER.map((name) => {
+              const hasData = suburbs.some((s) => s.name === name);
+              if (!hasData) return null;
+              const isSelected = selectedSuburb === name;
+              return (
+                <button
+                  key={name}
+                  onClick={() => handleSuburbClick(name, suburbs)}
+                  style={{
+                    padding: '3px 8px', fontSize: '0.7rem', fontWeight: isSelected ? 600 : 500,
+                    background: isSelected ? '#1a73e8' : 'white',
+                    color: isSelected ? 'white' : '#4a5568',
+                    border: isSelected ? '1px solid #1a73e8' : '1px solid #e2e8f0',
+                    borderRadius: 8, cursor: 'pointer', transition: 'all 0.1s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) { e.currentTarget.style.background = '#e8f0fe'; e.currentTarget.style.borderColor = '#1a73e8'; }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }
+                  }}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div
         onClick={handleAboutMarieClick}
