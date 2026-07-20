@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCallback } from 'react';
-import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createInlineContentSpec, createBlockSpec } from '@blocknote/core';
+import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createInlineContentSpec } from '@blocknote/core';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -163,87 +163,8 @@ const deltaInlineContent = createInlineContentSpec(
   },
 );
 
-const quarterlyDataBlock = createBlockSpec(
-  {
-    type: 'quarterlyData' as const,
-    content: 'none',
-    propSchema: {
-      suburbName: { default: '' },
-      totalVolume: { default: '' },
-      totalSales: { default: '' },
-      avgDaysToSell: { default: '' },
-      periodText: { default: '' },
-      compareLabel: { default: '' },
-      comparePriceChange: { default: '' },
-      comparePriceUp: { default: 'false' },
-      compareSalesChange: { default: '' },
-      compareSalesUp: { default: 'false' },
-      compareDaysChange: { default: '' },
-      compareDaysUp: { default: 'false' },
-      insightText: { default: '' },
-    },
-  },
-  {
-    render: (block: any) => {
-      const p = block.props;
-      const priceUp = p.comparePriceUp === 'true';
-      const salesUp = p.compareSalesUp === 'true';
-      const daysUp = p.compareDaysUp === 'true';
-
-      const kpiCard = (label: string, value: string, color?: string) => `
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;flex:1;min-width:0;box-shadow:0 1px 3px rgba(0,0,0,.06);">
-          <span style="font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px;">${label}</span>
-          <span style="font-size:26px;font-weight:800;color:${color || '#0f172a'};display:block;">${value}</span>
-        </div>
-      `;
-
-      const statCol = (label: string, value: string, up: boolean, neutral = false) => {
-        const arrow = neutral ? '' : (up ? '▲' : '▼');
-        const col = neutral ? '#64748b' : (up ? '#16a34a' : '#dc2626');
-        return `
-          <div style="text-align:center;flex:1;">
-            <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;">${label}</div>
-            <div style="font-size:14px;font-weight:700;color:${col};">${arrow} ${value}</div>
-          </div>
-        `;
-      };
-
-      const html = `
-        <div style="font-family:inherit;">
-          <div style="display:flex;gap:12px;margin-bottom:16px;">
-            ${kpiCard('Total Volume', p.totalVolume || '—')}
-            ${kpiCard('Transactions', p.totalSales || '—', '#2563eb')}
-            ${kpiCard('Avg Days to Sell', p.avgDaysToSell ? p.avgDaysToSell + ' Days' : '—')}
-          </div>
-          ${p.avgDaysToSell ? `
-          <div style="background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%);border:1px solid #ddd6fe;border-radius:12px;padding:20px 24px;">
-            <div style="margin-bottom:12px;">
-              <span style="font-size:28px;font-weight:800;color:#6d28d9;">${p.avgDaysToSell}</span>
-              <span style="font-size:16px;font-weight:600;color:#7c3aed;margin-left:8px;">Days to Sell</span>
-            </div>
-            ${p.insightText ? `<p style="font-size:13px;color:#475569;line-height:1.6;margin:0 0 16px;">${p.insightText}</p>` : ''}
-            ${p.compareLabel ? `
-            <div style="border-top:1px solid #c4b5fd;padding-top:14px;margin-top:4px;">
-              <div style="font-size:11px;font-weight:700;color:#6d28d9;margin-bottom:10px;">${p.compareLabel}</div>
-              <div style="display:flex;gap:8px;">
-                ${statCol('Median Price', p.comparePriceChange || '—', priceUp)}
-                ${statCol('Sales Count', p.compareSalesChange || '—', salesUp)}
-                ${statCol('Days to Sell', p.compareDaysChange || '—', !daysUp)}
-              </div>
-            </div>` : ''}
-          </div>` : ''}
-        </div>
-      `;
-
-      const container = document.createElement('div');
-      container.innerHTML = html;
-      return { dom: container };
-    },
-  }
-);
-
 const schema = BlockNoteSchema.create({
-  blockSpecs: { ...defaultBlockSpecs, quarterlyData: quarterlyDataBlock() } as any,
+  blockSpecs: { ...defaultBlockSpecs } as any,
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     delta: deltaInlineContent,

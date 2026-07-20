@@ -159,24 +159,18 @@ function buildBlocks(
       ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
       : '';
 
-    blocks.push({
-      type: 'quarterlyData',
-      props: {
-        suburbName,
-        totalVolume: fmtM(kpiMedian),
-        totalSales: String(kpiSales),
-        avgDaysToSell: kpiDays != null ? String(kpiDays) : '',
-        periodText: displayQuarter,
-        compareLabel: hasCompare ? `Compared to Previous Period` : '',
-        comparePriceChange: priceChange,
-        comparePriceUp: String(priceUp),
-        compareSalesChange: salesChange,
-        compareSalesUp: String(salesUp),
-        compareDaysChange: kpiDays != null ? String(kpiDays) : '\u2014',
-        compareDaysUp: 'false',
-        insightText,
-      },
-    });
+    blocks.push({ type: 'heading', props: { level: 3 }, content: ['Quarterly KPIs'] });
+    blocks.push({ type: 'paragraph', content: [`Median Price: ${fmtM(kpiMedian)}`] });
+    blocks.push({ type: 'paragraph', content: [`Total Sales: ${kpiSales}`] });
+    if (kpiDays != null) {
+      blocks.push({ type: 'paragraph', content: [`Avg Days to Sell: ${kpiDays} days`] });
+    }
+    if (hasCompare) {
+      blocks.push({ type: 'paragraph', content: [`Compared to Previous Period — Price: ${priceChange}, Sales: ${salesChange}`] });
+    }
+    if (insightText) {
+      blocks.push({ type: 'paragraph', content: [insightText] });
+    }
   } else {
     blocks.push({ type: 'paragraph', content: ['Quarterly data is not yet available for this suburb.'] });
   }
