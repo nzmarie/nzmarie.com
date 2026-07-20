@@ -29,12 +29,20 @@ function toSlug(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-');
 }
 
-function quarterToSlug(quarter: string): string {
-  const parts = quarter.split('-Q');
+function _singleQToSlug(q: string): string {
+  const parts = q.split('-Q');
   if (parts.length === 2) {
     return `q${parts[1].toLowerCase()}-${parts[0]}`;
   }
-  return quarter.toLowerCase();
+  return q.toLowerCase();
+}
+
+function quarterToSlug(quarter: string): string {
+  const parts = quarter.split('–');
+  if (parts.length === 2) {
+    return `${_singleQToSlug(parts[0].trim())}-to-${_singleQToSlug(parts[1].trim())}`;
+  }
+  return _singleQToSlug(quarter);
 }
 
 const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
@@ -43,14 +51,21 @@ const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waia
   'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
   'Hillcrest', 'Birkenhead', 'Hauraki'];
 
-function getCurrentYear() { return new Date().getFullYear(); }
-function getCurrentQuarter(): string {
-  const m = new Date().getMonth() + 1;
-  return `${getCurrentYear()}-Q${Math.ceil(m / 3)}`;
+const REPORT_QUARTERS = ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4', '2027-Q1', '2027-Q2', '2027-Q3', '2027-Q4'];
+
+function buildDataQuarters(): string[] {
+  const result: string[] = [];
+  for (let y = 2023; y <= 2027; y++) {
+    for (let q = 1; q <= 4; q++) {
+      result.push(`${y}-Q${q}`);
+    }
+  }
+  return result;
 }
-function quartersForYear(year: number): string[] {
-  return [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`];
-}
+
+const DATA_QUARTERS = buildDataQuarters();
+
+const fieldStyles = 'w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm';
 
 export default function ReportToolbar({
   title, onTitleChange, status, docType, saving, onSaveNow, onExport, onDelete, onEditHeaderFooter, suburbName, quarter, suburbId, hideExtraButtons,
@@ -60,7 +75,9 @@ export default function ReportToolbar({
   const idToSlug = useReportStore(s => s.idToSlug);
   const setSlugMap = useReportStore(s => s.setSlugMap);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [genQuarter, setGenQuarter] = useState(getCurrentQuarter());
+  const [genReportQuarter, setGenReportQuarter] = useState(REPORT_QUARTERS[0]);
+  const [genStartQuarter, setGenStartQuarter] = useState(REPORT_QUARTERS[0]);
+  const [genEndQuarter, setGenEndQuarter] = useState(REPORT_QUARTERS[0]);
   const [genSuburbId, setGenSuburbId] = useState(suburbId || '');
   const [genSuburbName, setGenSuburbName] = useState(suburbName || '');
   const [genLoading, setGenLoading] = useState(false);
@@ -79,11 +96,7 @@ export default function ReportToolbar({
 
   const selectedSuburb = suburbList.find(s => s.id === genSuburbId) || null;
 
-  if (!quarter) quarter = getCurrentQuarter();
-
-  const currentYear = getCurrentYear();
-  const years = [currentYear - 1, currentYear, currentYear + 1];
-  const quarterOptions = years.flatMap(y => quartersForYear(y));
+  if (!quarter) quarter = REPORT_QUARTERS[0];
 
   const handleGenerate = async () => {
     if (!genSuburbId) return;
@@ -92,12 +105,17 @@ export default function ReportToolbar({
       const res = await fetch('/api/admin/reports/templates/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ suburb_id: genSuburbId, quarter: genQuarter }),
+        body: JSON.stringify({
+          suburb_id: genSuburbId,
+          quarter: genReportQuarter,
+          start_quarter: genStartQuarter,
+          end_quarter: genEndQuarter,
+        }),
       });
       const data = await res.json();
       if (data.success) {
         const docId = data.id;
-        const qSlug = quarterToSlug(genQuarter);
+        const qSlug = quarterToSlug(genReportQuarter);
         const baseSlug = `${toSlug(genSuburbName)}-${qSlug}`;
         let slug = baseSlug;
         let counter = 2;
@@ -199,121 +217,117 @@ export default function ReportToolbar({
       {showGenerate && (
         <div
           onClick={() => setShowGenerate(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.4)',
-          }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'white', borderRadius: 12, padding: 0,
-              width: 380, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              overflow: 'hidden',
-            }}
+            className="bg-white rounded-xl w-[380px] max-w-[90vw] shadow-2xl overflow-hidden"
           >
-            <div style={{ padding: '24px 24px 8px' }}>
-              <h2 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 700, color: '#111' }}>
+            <div className="p-6 pb-0">
+              <h2 className="text-lg font-bold text-slate-900 mb-1">
                 Generate Report
               </h2>
-              <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#666' }}>
+              <p className="text-sm text-slate-500 mb-4">
                 Select suburb and quarter to generate a new market report.
               </p>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>
-                Suburb
-              </label>
-              <div style={{ position: 'relative', marginBottom: 12 }}>
-                <input
-                  value={showDropdown ? genSearch : (selectedSuburb?.name || genSuburbName || '')}
-                  onChange={(e) => { setGenSearch(e.target.value); setShowDropdown(true); }}
-                  onFocus={() => { setGenSearch(''); setShowDropdown(true); }}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  placeholder="Search suburb..."
-                  style={{
-                    width: '100%', padding: '8px 10px', fontSize: '0.9rem',
-                    border: '1px solid #d1d5db', borderRadius: 8,
-                    outline: 'none', background: 'white', boxSizing: 'border-box',
-                  }}
-                />
-                {showDropdown && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0,
-                    maxHeight: 200, overflowY: 'auto', background: 'white',
-                    border: '1px solid #d1d5db', borderRadius: 8, zIndex: 10,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  }}>
-                    {(genSearch
-                      ? suburbList.filter(s => s.name.toLowerCase().includes(genSearch.toLowerCase()))
-                      : SUBURB_ORDER.map(name => suburbList.find(s => s.name === name)).filter(Boolean) as SuburbOption[]
-                    ).map(s => (
-                      <div
-                        key={s.id}
-                        onClick={() => {
-                          setGenSuburbId(s.id);
-                          setGenSuburbName(s.name);
-                          setGenSearch('');
-                          setShowDropdown(false);
-                        }}
-                        style={{
-                          padding: '8px 12px', cursor: 'pointer', fontSize: '0.85rem',
-                          background: s.id === genSuburbId ? '#e8f0fe' : 'white',
-                          color: s.id === genSuburbId ? '#1a73e8' : '#333',
-                          fontWeight: s.id === genSuburbId ? 600 : 400,
-                        }}
-                        onMouseEnter={(e) => { if (s.id !== genSuburbId) e.currentTarget.style.background = '#f5f5f5'; }}
-                        onMouseLeave={(e) => { if (s.id !== genSuburbId) e.currentTarget.style.background = 'white'; }}
-                      >
-                        {s.name}
-                      </div>
-                    ))}
-                    {genSearch && suburbList.filter(s => s.name.toLowerCase().includes(genSearch.toLowerCase())).length === 0 && (
-                      <div style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#999' }}>
-                        No suburbs found
+              <div className="flex flex-col space-y-4">
+                <div>
+                  <label className="block text-sm text-slate-500 mb-1">Suburb</label>
+                  <div className="relative">
+                    <input
+                      value={showDropdown ? genSearch : (selectedSuburb?.name || genSuburbName || '')}
+                      onChange={(e) => { setGenSearch(e.target.value); setShowDropdown(true); }}
+                      onFocus={() => { setGenSearch(''); setShowDropdown(true); }}
+                      onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                      placeholder="Search suburb..."
+                      className={fieldStyles}
+                    />
+                    {showDropdown && (
+                      <div className="absolute top-full left-0 right-0 max-h-[200px] overflow-y-auto bg-white border border-slate-200 rounded-lg z-10 shadow-md">
+                        {(genSearch
+                          ? suburbList.filter(s => s.name.toLowerCase().includes(genSearch.toLowerCase()))
+                          : SUBURB_ORDER.map(name => suburbList.find(s => s.name === name)).filter(Boolean) as SuburbOption[]
+                        ).map(s => (
+                          <div
+                            key={s.id}
+                            onClick={() => {
+                              setGenSuburbId(s.id);
+                              setGenSuburbName(s.name);
+                              setGenSearch('');
+                              setShowDropdown(false);
+                            }}
+                            className={`px-3 py-2 text-sm cursor-pointer ${
+                              s.id === genSuburbId ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {s.name}
+                          </div>
+                        ))}
+                        {genSearch && suburbList.filter(s => s.name.toLowerCase().includes(genSearch.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-slate-400">
+                            No suburbs found
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
 
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>
-                Quarter
-              </label>
-              <select
-                value={genQuarter}
-                onChange={(e) => setGenQuarter(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px 10px', fontSize: '0.9rem',
-                  border: '1px solid #d1d5db', borderRadius: 8,
-                  outline: 'none', background: 'white',
-                }}
-              >
-                {quarterOptions.map(q => (
-                  <option key={q} value={q}>{q}</option>
-                ))}
-              </select>
+                <div>
+                  <label className="block text-sm text-slate-500 mb-1">Report Quarter</label>
+                  <select
+                    value={genReportQuarter}
+                    onChange={(e) => setGenReportQuarter(e.target.value)}
+                    className={fieldStyles}
+                  >
+                    {REPORT_QUARTERS.map(q => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-500 mb-1">Data Start Quarter</label>
+                  <select
+                    value={genStartQuarter}
+                    onChange={(e) => setGenStartQuarter(e.target.value)}
+                    className={fieldStyles}
+                  >
+                    {DATA_QUARTERS.map(q => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-500 mb-1">Data End Quarter</label>
+                  <select
+                    value={genEndQuarter}
+                    onChange={(e) => setGenEndQuarter(e.target.value)}
+                    className={fieldStyles}
+                  >
+                    {DATA_QUARTERS.map(q => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '16px 24px' }}>
+
+            <div className="flex justify-end gap-2 p-6">
               <button
                 onClick={() => setShowGenerate(false)}
-                style={{
-                  padding: '8px 16px', fontSize: '0.85rem', borderRadius: 8,
-                  border: '1px solid #d1d5db', background: 'white', cursor: 'pointer',
-                  color: '#374151', fontWeight: 500,
-                }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleGenerate}
                 disabled={genLoading || !genSuburbId}
-                style={{
-                  padding: '8px 16px', fontSize: '0.85rem', borderRadius: 8,
-                  border: 'none', background: genLoading || !genSuburbId ? '#6ee7b7' : '#059669',
-                  cursor: genLoading || !genSuburbId ? 'not-allowed' : 'pointer',
-                  color: 'white', fontWeight: 600,
-                }}
+                className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors ${
+                  genLoading || !genSuburbId ? 'bg-emerald-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
                 {genLoading ? 'Generating...' : 'Generate'}
               </button>

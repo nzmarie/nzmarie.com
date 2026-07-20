@@ -12,11 +12,34 @@ function avg(arr: number[]) {
   return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
 }
 
-async function fetchQuarterly(suburbName: string, numQuarters = 8) {
-  const now = new Date();
-  const endStr = `${now.getFullYear() + 1}-01-01`;
-  const startDate = new Date(now.getFullYear(), now.getMonth() - numQuarters * 3, 1);
-  const startStr = startDate.toISOString().slice(0, 10);
+function quarterToRange(quarter: string): { start: string; end: string } | null {
+  const [yearStr, qStr] = quarter.split('-Q');
+  if (!yearStr || !qStr) return null;
+  const year = parseInt(yearStr);
+  const qNum = parseInt(qStr);
+  const startMonth = (qNum - 1) * 3 + 1;
+  const startDate = `${year}-${String(startMonth).padStart(2, '0')}-01`;
+  const endMonth = startMonth + 3;
+  const endYear = endMonth > 12 ? year + 1 : year;
+  const endMonthAdjusted = endMonth > 12 ? endMonth - 12 : endMonth;
+  const endDate = `${endYear}-${String(endMonthAdjusted).padStart(2, '0')}-01`;
+  return { start: startDate, end: endDate };
+}
+
+async function fetchQuarterly(suburbName: string, dataStartQuarter?: string, dataEndQuarter?: string) {
+  let startStr: string, endStr: string;
+  if (dataStartQuarter && dataEndQuarter) {
+    const start = quarterToRange(dataStartQuarter);
+    const end = quarterToRange(dataEndQuarter);
+    if (!start || !end) return { subData: [], distData: [] };
+    startStr = start.start;
+    endStr = end.end;
+  } else {
+    const now = new Date();
+    endStr = `${now.getFullYear() + 1}-01-01`;
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 8 * 3, 1);
+    startStr = startDate.toISOString().slice(0, 10);
+  }
 
   const result = await marieQuery<RawTrendRow>(
     `SELECT region_name, period_month::text, median_price
@@ -163,15 +186,16 @@ ${distDots}
 </svg>`;
 }
 
-export async function generateChartImageUrl(suburbName: string, quarter: string): Promise<string | null> {
+export async function generateChartImageUrl(suburbName: string, quarter: string, dataStartQuarter?: string, dataEndQuarter?: string): Promise<string | null> {
   if (isR2Mock) return null;
 
-  const { subData, distData } = await fetchQuarterly(suburbName);
+  const { subData, distData } = await fetchQuarterly(suburbName, dataStartQuarter, dataEndQuarter);
   const svg = generateSVG(suburbName, subData, distData);
   if (!svg) return null;
 
   const safeName = suburbName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const key = `charts/${safeName}-${quarter}-median-trend.svg`;
+  const boundQuarter = dataStartQuarter && dataEndQuarter ? `${dataStartQuarter}-${dataEndQuarter}` : quarter;
+  const key = `charts/${safeName}-${boundQuarter}-median-trend.svg`;
   await uploadToR2(key, Buffer.from(svg, 'utf-8'), 'image/svg+xml', 'public, max-age=0, must-revalidate');
 
   const domain = process.env.R2_PUBLIC_DOMAIN;

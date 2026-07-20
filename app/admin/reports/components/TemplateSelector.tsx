@@ -4,29 +4,44 @@ import { useState, useEffect } from 'react';
 import type { ReportSuburb } from '@/types/report';
 
 interface TemplateSelectorProps {
-  onGenerate: (suburbId: string, quarter: string) => Promise<string | undefined>;
+  onGenerate: (suburbId: string, reportQuarter: string, startQuarter: string, endQuarter: string) => Promise<string | undefined>;
   open: boolean;
   onClose: () => void;
   preselectedSuburbId?: string | null;
   preselectedQuarter?: string;
 }
 
-function getCurrentQuarter(): string {
-  const now = new Date();
-  const q = Math.ceil((now.getMonth() + 1) / 3);
-  return `${now.getFullYear()}-Q${q}`;
+const REPORT_QUARTERS = ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4', '2027-Q1', '2027-Q2', '2027-Q3', '2027-Q4'];
+
+function buildDataQuarters(): string[] {
+  const result: string[] = [];
+  for (let y = 2023; y <= 2027; y++) {
+    for (let q = 1; q <= 4; q++) {
+      result.push(`${y}-Q${q}`);
+    }
+  }
+  return result;
 }
+
+const DATA_QUARTERS = buildDataQuarters();
+
+const fieldStyles = 'w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm';
 
 export default function TemplateSelector({ onGenerate, open, onClose, preselectedSuburbId, preselectedQuarter }: TemplateSelectorProps) {
   const [suburbs, setSuburbs] = useState<ReportSuburb[]>([]);
   const [selectedSuburb, setSelectedSuburb] = useState(preselectedSuburbId || '');
-  const [selectedQuarter, setSelectedQuarter] = useState(preselectedQuarter || getCurrentQuarter());
+  const [reportQuarter, setReportQuarter] = useState(preselectedQuarter || REPORT_QUARTERS[0]);
+  const [startQuarter, setStartQuarter] = useState(preselectedQuarter || REPORT_QUARTERS[0]);
+  const [endQuarter, setEndQuarter] = useState(preselectedQuarter || REPORT_QUARTERS[0]);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSelectedSuburb(preselectedSuburbId || '');
-      setSelectedQuarter(preselectedQuarter || getCurrentQuarter());
+      const q = preselectedQuarter || REPORT_QUARTERS[0];
+      setReportQuarter(q);
+      setStartQuarter(q);
+      setEndQuarter(q);
       fetch('/api/admin/reports/suburbs')
         .then((r) => r.json())
         .then((data) => { if (data.success) setSuburbs(data.suburbs); })
@@ -34,22 +49,13 @@ export default function TemplateSelector({ onGenerate, open, onClose, preselecte
     }
   }, [open, preselectedSuburbId, preselectedQuarter]);
 
-  const quarters = [];
-  const now = new Date();
-  for (let i = 0; i < 4; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i * 3, 1);
-    const q = `Q${Math.ceil((d.getMonth() + 1) / 3)}`;
-    quarters.push(`${d.getFullYear()}-${q}`);
-  }
-
   const handleGenerate = async () => {
-    if (!selectedSuburb || !selectedQuarter) return;
+    if (!selectedSuburb || !reportQuarter || !startQuarter || !endQuarter) return;
+    if (startQuarter > endQuarter) return;
     setGenerating(true);
     try {
-      const id = await onGenerate(selectedSuburb, selectedQuarter);
-      if (id) {
-        onClose();
-      }
+      const id = await onGenerate(selectedSuburb, reportQuarter, startQuarter, endQuarter);
+      if (id) onClose();
     } finally {
       setGenerating(false);
     }
@@ -57,65 +63,84 @@ export default function TemplateSelector({ onGenerate, open, onClose, preselecte
 
   if (!open) return null;
 
+  const btnDisabled = !selectedSuburb || !reportQuarter || !startQuarter || !endQuarter || startQuarter > endQuarter || generating;
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.4)',
-    }}>
-      <div style={{
-        background: 'white', borderRadius: 12, padding: 24, width: 400,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-      }}>
-        <h2 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: 600, color: '#333' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl p-6 w-[400px] shadow-xl">
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">
           Generate Market Report
         </h2>
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: 4 }}>
-            Suburb
-          </label>
-          <select
-            value={selectedSuburb}
-            onChange={(e) => setSelectedSuburb(e.target.value)}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: '0.9rem' }}
-          >
-            <option value="">Select suburb...</option>
-            {suburbs.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+        <div className="flex flex-col space-y-4">
+          <div>
+            <label className="block text-sm text-slate-500 mb-1">Suburb</label>
+            <select
+              value={selectedSuburb}
+              onChange={(e) => setSelectedSuburb(e.target.value)}
+              className={fieldStyles}
+            >
+              <option value="">Select suburb...</option>
+              {suburbs.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-500 mb-1">Report Quarter</label>
+            <select
+              value={reportQuarter}
+              onChange={(e) => setReportQuarter(e.target.value)}
+              className={fieldStyles}
+            >
+              {REPORT_QUARTERS.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-500 mb-1">Data Start Quarter</label>
+            <select
+              value={startQuarter}
+              onChange={(e) => setStartQuarter(e.target.value)}
+              className={fieldStyles}
+            >
+              {DATA_QUARTERS.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-500 mb-1">Data End Quarter</label>
+            <select
+              value={endQuarter}
+              onChange={(e) => setEndQuarter(e.target.value)}
+              className={fieldStyles}
+            >
+              {DATA_QUARTERS.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: 4 }}>
-            Quarter
-          </label>
-          <select
-            value={selectedQuarter}
-            onChange={(e) => setSelectedQuarter(e.target.value)}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: '0.9rem' }}
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
           >
-            <option value="">Select quarter...</option>
-            {quarters.map((q) => (
-              <option key={q} value={q}>{q}</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{
-            padding: '8px 16px', borderRadius: 6, border: '1px solid #ddd',
-            background: 'white', cursor: 'pointer', color: '#555',
-          }}>
             Cancel
           </button>
-          <button onClick={handleGenerate} disabled={!selectedSuburb || !selectedQuarter || generating} style={{
-            padding: '8px 16px', borderRadius: 6, border: 'none',
-            background: !selectedSuburb || !selectedQuarter || generating ? '#ccc' : '#1a73e8',
-            cursor: !selectedSuburb || !selectedQuarter || generating ? 'not-allowed' : 'pointer',
-            color: 'white', fontWeight: 500,
-          }}>
+          <button
+            onClick={handleGenerate}
+            disabled={btnDisabled}
+            className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors ${
+              btnDisabled ? 'bg-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+          >
             {generating ? 'Generating...' : 'Generate'}
           </button>
         </div>

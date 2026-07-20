@@ -39,7 +39,7 @@ const fmtM = (v: number | null | undefined): string => {
   return `$${(v / 1000000).toFixed(1)}M`;
 };
 
-async function fetchMarketTrends(suburbName: string, quarter: string): Promise<TrendRow[] | null> {
+function quarterToRange(quarter: string): { start: string; end: string } | null {
   const [yearStr, qStr] = quarter.split('-Q');
   if (!yearStr || !qStr) return null;
   const year = parseInt(yearStr);
@@ -47,7 +47,19 @@ async function fetchMarketTrends(suburbName: string, quarter: string): Promise<T
   const startMonth = (qNum - 1) * 3 + 1;
   const startDate = `${year}-${String(startMonth).padStart(2, '0')}-01`;
   const endMonth = startMonth + 3;
-  const endDate = `${endMonth > 12 ? year + 1 : year}-${String(endMonth > 12 ? endMonth - 12 : endMonth).padStart(2, '0')}-01`;
+  const endYear = endMonth > 12 ? year + 1 : year;
+  const endMonthAdjusted = endMonth > 12 ? endMonth - 12 : endMonth;
+  const endDate = `${endYear}-${String(endMonthAdjusted).padStart(2, '0')}-01`;
+  return { start: startDate, end: endDate };
+}
+
+async function fetchMarketTrends(suburbName: string, startQuarter: string, endQuarter?: string): Promise<TrendRow[] | null> {
+  const start = quarterToRange(startQuarter);
+  if (!start) return null;
+  const startDate = start.start;
+  const endDate = endQuarter && endQuarter !== startQuarter
+    ? (quarterToRange(endQuarter)?.end ?? start.end)
+    : start.end;
 
   const result = await marieQuery<TrendRow>(
     `SELECT region_name, region_type, period_month, median_price, sales_count, days_to_sell,
@@ -109,13 +121,15 @@ function buildBlocks(
   marketTrends: TrendRow[] | null,
   lastSold: LastSoldRow | null,
   campaign: CampaignRow | null,
-  chartImageUrl: string | null
+  chartImageUrl: string | null,
+  endQuarter?: string
 ): unknown[] {
   const blocks: unknown[] = [];
+  const displayQuarter = endQuarter && endQuarter !== quarter ? `${quarter} – ${endQuarter}` : quarter;
 
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
-  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${quarter} Market Report`] });
+  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
   blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Prepared by Marie Nian — nzmarie.co.nz`] });
   blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Date: ${new Date().toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`] });
   blocks.push({ type: 'divider' });
@@ -289,9 +303,13 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { suburb_id, quarter } = body;
+    const { suburb_id, quarter, start_quarter, end_quarter } = body;
 
-    if (!suburb_id || !quarter) {
+    const reportQuarter = quarter; // label displayed on report cover
+    const dataStart = start_quarter || quarter; // data query range start
+    const dataEnd = end_quarter || quarter; // data query range end
+
+    if (!suburb_id || !reportQuarter) {
       return NextResponse.json({ success: false, error: 'suburb_id and quarter are required' }, { status: 400 });
     }
 
@@ -311,19 +329,19 @@ export async function POST(request: Request) {
     const userId = adminResult.rows[0].id;
 
     const [marketTrends, lastSold, campaign, chartImageUrl] = await Promise.all([
-      fetchMarketTrends(suburb.name, quarter),
+      fetchMarketTrends(suburb.name, dataStart, dataEnd),
       fetchLastSoldData(suburb.name),
       fetchCampaignStats(suburb.name),
-      generateChartImageUrl(suburb.name, quarter).catch(() => null),
+      generateChartImageUrl(suburb.name, reportQuarter, dataStart, dataEnd).catch(() => null),
     ]);
 
-    const title = `${suburb.name} ${quarter} Market Report`;
-    const content = buildBlocks(suburb.name, quarter, marketTrends, lastSold, campaign, chartImageUrl);
+    const title = `${suburb.name} ${reportQuarter} Market Report`;
+    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, lastSold, campaign, chartImageUrl);
 
     const result = await marieQuery<{ id: string }>(
       `INSERT INTO report_documents (user_id, doc_type, suburb_id, quarter, title, content)
        VALUES ($1, 'report', $2, $3, $4, $5) RETURNING id`,
-      [userId, suburb_id, quarter, title, JSON.stringify(content)]
+      [userId, suburb_id, reportQuarter, title, JSON.stringify(content)]
     );
 
     return NextResponse.json({ success: true, id: result.rows[0].id });

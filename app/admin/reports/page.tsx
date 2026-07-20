@@ -189,8 +189,8 @@ export default function ReportsPage() {
       <TemplateSelector
         open={showTemplate}
         onClose={() => { setShowTemplate(false); setSelectedSuburbId(null); }}
-        onGenerate={async (suburbId, quarter) => {
-          const id = await generateReport(suburbId, quarter);
+        onGenerate={async (suburbId, reportQuarter, startQuarter, endQuarter) => {
+          const id = await generateReport(suburbId, reportQuarter, startQuarter, endQuarter);
           if (id) router.push(`/admin/reports/${id}`);
           return id;
         }}
