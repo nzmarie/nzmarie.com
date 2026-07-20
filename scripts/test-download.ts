@@ -28,7 +28,7 @@ async function main() {
 
   // If local path, invoke local route; if HTTP(S), fetch the URL
   if (downloadUrl.startsWith('/reports/')) {
-    const { GET } = await import('../app/reports/[...key]/route');
+    const { GET } = await import('../app/reports/pdf/[...key]/route');
     const req = new Request('http://localhost' + downloadUrl);
     const res = await GET(req as any);
     console.log('Local route status:', res.status);

@@ -190,7 +190,7 @@ describe('GET /api/admin/realestate', () => {
 
   it('returns 401 for unauthorized users', async () => {
     const { auth } = await import('@/lib/auth');
-    vi.mocked(auth).mockResolvedValueOnce(null);
+    (vi.mocked(auth) as any).mockResolvedValueOnce(null);
 
     const req = new Request('http://localhost/api/admin/realestate');
     const res = await GET(req);
@@ -238,7 +238,7 @@ describe('PATCH /api/admin/realestate/[id]', () => {
 
   it('returns 401 for unauthorized users', async () => {
     const { auth } = await import('@/lib/auth');
-    vi.mocked(auth).mockResolvedValueOnce(null);
+    (vi.mocked(auth) as any).mockResolvedValueOnce(null);
 
     const req = new Request('http://localhost/api/admin/realestate/re-1', {
       method: 'PATCH',

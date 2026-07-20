@@ -134,7 +134,56 @@ function buildBlocks(
   blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Date: ${new Date().toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`] });
   blocks.push({ type: 'divider' });
 
-  // Page 2: REINZ Market Trends
+  // Page 2: Northcross Quarterly Data — custom card block
+  blocks.push({ type: 'heading', props: { level: 2 }, content: ['Northcross Quarterly Data'] });
+
+  if (marketTrends && marketTrends.length > 0) {
+    const subData = marketTrends.filter((r) => r.region_type === 'suburb');
+    const kpiMedian = agg(subData.map(r => r.median_price));
+    const kpiSales = sum(subData.map(r => r.sales_count));
+    const kpiDays = agg(subData.map(r => r.days_to_sell));
+
+    const lastSub = subData[subData.length - 1];
+    const pricePct = lastSub?.price_diff_1yr_pct ?? null;
+    const priceUp = (pricePct ?? 0) >= 0;
+    const priceChange = pricePct != null ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
+
+    const halfLen = Math.floor(subData.length / 2);
+    const prevSalesVal = halfLen > 0 ? sum(subData.slice(0, halfLen).map(r => r.sales_count)) : 0;
+    const salesDiff = prevSalesVal > 0 ? ((kpiSales - prevSalesVal) / prevSalesVal * 100) : null;
+    const salesUp = (salesDiff ?? 0) >= 0;
+    const salesChange = salesDiff != null ? `${salesUp ? '+' : ''}${salesDiff.toFixed(1)}%` : '\u2014';
+
+    const hasCompare = pricePct != null || salesDiff != null;
+    const insightText = kpiDays
+      ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
+      : '';
+
+    blocks.push({
+      type: 'quarterlyData',
+      props: {
+        suburbName,
+        totalVolume: fmtM(kpiMedian),
+        totalSales: String(kpiSales),
+        avgDaysToSell: kpiDays != null ? String(kpiDays) : '',
+        periodText: displayQuarter,
+        compareLabel: hasCompare ? `Compared to Previous Period` : '',
+        comparePriceChange: priceChange,
+        comparePriceUp: String(priceUp),
+        compareSalesChange: salesChange,
+        compareSalesUp: String(salesUp),
+        compareDaysChange: kpiDays != null ? String(kpiDays) : '\u2014',
+        compareDaysUp: 'false',
+        insightText,
+      },
+    });
+  } else {
+    blocks.push({ type: 'paragraph', content: ['Quarterly data is not yet available for this suburb.'] });
+  }
+
+  blocks.push({ type: 'divider' });
+
+  // Page 3: REINZ Market Trends
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['REINZ Market Trends'] });
   blocks.push({ type: 'paragraph', content: [`Quarterly market data for ${suburbName} compared with North Shore City.`] });
 

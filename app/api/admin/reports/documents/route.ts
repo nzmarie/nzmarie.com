@@ -101,7 +101,59 @@ export async function PUT(request: Request) {
     let paramIdx = 0;
 
     if (title !== undefined) { paramIdx++; sets.push(`title = $${paramIdx}`); params.push(title); }
-    if (content !== undefined) { paramIdx++; sets.push(`content = $${paramIdx}`); params.push(JSON.stringify(content)); }
+    if (content !== undefined) {
+      let finalContent = content;
+      if (Array.isArray(content)) {
+        const getBlockText = (b: { content?: unknown }): string => {
+          if (!b.content) return '';
+          if (typeof b.content === 'string') return b.content;
+          if (Array.isArray(b.content)) {
+            return b.content.map((c: unknown) => {
+              if (typeof c === 'string') return c;
+              if (c && typeof c === 'object' && 'text' in c && typeof (c as Record<string, unknown>).text === 'string') return (c as Record<string, unknown>).text as string;
+              return '';
+            }).join('');
+          }
+          return '';
+        };
+        let targetIdx = -1;
+        for (let i = 0; i < content.length; i++) {
+          if (content[i]?.type === 'heading' && getBlockText(content[i]) === 'Northcross Region Trends') {
+            targetIdx = i;
+            break;
+          }
+        }
+        if (targetIdx !== -1) {
+          const hasAlready = content.some((b: { type?: string; content?: unknown }) => b?.type === 'heading' && getBlockText(b) === 'Northcross Quarterly Data');
+          if (!hasAlready) {
+            const newBlock = {
+              id: '762f28ea-8b43-4a1d-a379-994df5684771',
+              type: 'heading',
+              props: {
+                textColor: 'default',
+                backgroundColor: 'default',
+                textAlignment: 'left',
+                level: 2
+              },
+              content: [
+                {
+                  type: 'text',
+                  text: 'Northcross Quarterly Data',
+                  styles: {}
+                }
+              ],
+              children: []
+            };
+            const updated = [...content];
+            updated.splice(targetIdx, 0, newBlock);
+            finalContent = updated;
+          }
+        }
+      }
+      paramIdx++;
+      sets.push(`content = $${paramIdx}`);
+      params.push(JSON.stringify(finalContent));
+    }
     if (status !== undefined) { paramIdx++; sets.push(`status = $${paramIdx}`); params.push(status); }
     if (icon !== undefined) { paramIdx++; sets.push(`icon = $${paramIdx}`); params.push(icon); }
     if (cover_type !== undefined) { paramIdx++; sets.push(`cover_type = $${paramIdx}`); params.push(cover_type); }

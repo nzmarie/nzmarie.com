@@ -32,7 +32,7 @@ describe("r2-storage (mock credentials)", () => {
     it("returns a local relative path for the key in mock mode", async () => {
       const key = "reports/Northcross/2026-Q2.pdf";
       const url = await getSignedDownloadUrl(key);
-      expect(url).toBe(`/${key}`);
+      expect(url).toBe(`/reports/pdf/${key.replace(/^reports\//, "")}`);
     });
   });
 

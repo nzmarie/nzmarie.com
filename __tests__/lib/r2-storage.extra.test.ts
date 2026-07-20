@@ -12,11 +12,11 @@ describe("lib/r2-storage additional coverage", () => {
     process.env.R2_BUCKET_NAME = "nz";
 
     const mod = await import("../../lib/r2-storage");
-    expect(mod.getLocalReportUrl("reports/X.pdf")).toBe("/reports/X.pdf");
+    expect(mod.getLocalReportUrl("reports/X.pdf")).toBe("/reports/pdf/X.pdf");
     expect(mod.isR2Mock).toBeTruthy();
 
     const signed = await mod.getSignedDownloadUrl("reports/X.pdf");
-    expect(signed).toBe("/reports/X.pdf");
+    expect(signed).toBe("/reports/pdf/X.pdf");
 
     const key = await mod.uploadToR2("reports/X.pdf", Buffer.from("x"));
     expect(key).toBe("reports/X.pdf");

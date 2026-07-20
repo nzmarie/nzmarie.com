@@ -25,6 +25,7 @@ function makeMonthly(
     cityMedian,
     citySales,
     cityDays,
+    cityDetail: null,
     suburbs,
   };
 }

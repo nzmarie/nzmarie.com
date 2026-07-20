@@ -57,7 +57,7 @@ describe('POST /api/admin/analytics/upload-excel', () => {
 
   it('returns 401 when not authenticated', async () => {
     const { auth } = await import('@/lib/auth');
-    vi.mocked(auth).mockResolvedValueOnce(null);
+    (vi.mocked(auth) as any).mockResolvedValueOnce(null);
 
     const form = new FormData();
     form.append('file', new File([''], 'test.csv', { type: 'text/csv' }));

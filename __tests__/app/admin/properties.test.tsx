@@ -112,8 +112,8 @@ const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
 
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ setQueryData: mockSetQueryData, invalidateQueries: vi.fn() }),
-  useInfiniteQuery: (...args: unknown[]) => mockUseInfiniteQuery(...args),
-  useQuery: (...args: unknown[]) => mockUseQuery(...args),
+  useInfiniteQuery: (...args: unknown[]) => mockUseInfiniteQuery(...(args as any)),
+  useQuery: (...args: unknown[]) => mockUseQuery(...(args as any)),
   keepPreviousData: vi.fn(),
 }));
 
@@ -448,7 +448,7 @@ describe('Properties Page - Edit Functionality', () => {
     });
 
     const patchCall = (global.fetch as any).mock.calls.find((c: unknown[]) =>
-      c[0] === '/api/admin/properties/prop-1' && c[1]?.method === 'PATCH'
+      c[0] === '/api/admin/properties/prop-1' && (c[1] as any)?.method === 'PATCH'
     );
     const body = JSON.parse(patchCall[1].body);
     expect(body.address).toBe('16 Marine Parade');
@@ -893,8 +893,8 @@ describe('Properties Page - Dual Pagination Mode', () => {
       const prevBtns = allButtons.filter(b => b.textContent === '‹');
       expect(firstBtns.length).toBeGreaterThanOrEqual(2);
       expect(prevBtns.length).toBeGreaterThanOrEqual(2);
-      firstBtns.forEach(b => expect(b.disabled).toBe(true));
-      prevBtns.forEach(b => expect(b.disabled).toBe(true));
+      firstBtns.forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true));
+      prevBtns.forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true));
     });
   });
 

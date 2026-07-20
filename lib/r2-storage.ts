@@ -40,7 +40,8 @@ export async function uploadToR2(key: string, body: Buffer | Uint8Array, content
 }
 
 export function getLocalReportUrl(key: string): string {
-  return `/${key}`;
+  const path = key.startsWith("reports/") ? key.slice("reports/".length) : key;
+  return `/reports/pdf/${path}`;
 }
 
 export async function getSignedDownloadUrl(key: string, expiresIn: number = 300): Promise<string> {

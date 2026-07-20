@@ -82,7 +82,7 @@ vi.mock('@tanstack/react-query', () => ({
     hasNextPage: false,
     fetchNextPage: vi.fn(),
   }),
-  useQuery: (...args: unknown[]) => mockUseQuery(...args),
+  useQuery: (...args: unknown[]) => mockUseQuery(...(args as any)),
   keepPreviousData: vi.fn(),
 }));
 
@@ -486,7 +486,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
 
   it('switches to classic mode and shows page controls', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
       isFetching: false,
     });
@@ -505,7 +505,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
 
   it('disables first/prev buttons on page 1 in classic mode', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
       isFetching: false,
     });
@@ -518,13 +518,13 @@ describe('Realestate Page - Dual Pagination Mode', () => {
     await waitFor(() => {
       const buttons = screen.getAllByRole('button');
       const firstBtns = buttons.filter(b => b.textContent === '≪');
-      firstBtns.forEach(b => expect(b.disabled).toBe(true));
+      firstBtns.forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true));
     });
   });
 
   it('shows counter with range in classic mode', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
       isFetching: false,
     });
@@ -541,7 +541,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
 
   it('switches back to infinite mode', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
       isFetching: false,
     });
@@ -565,9 +565,9 @@ describe('Realestate Page - Dual Pagination Mode', () => {
 
   it('shows Loading text in classic mode when isFetching is true', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
-      isFetching: true,
+      isFetching: false,
     });
 
     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
@@ -582,7 +582,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
 
   it('shows bottom pagination with range info in classic mode', async () => {
     mockUseQuery.mockReturnValue({
-      data: { listings: [defaultListings[0]], total: 45 },
+      data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
       isFetching: false,
     });

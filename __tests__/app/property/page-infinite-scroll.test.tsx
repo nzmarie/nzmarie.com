@@ -46,7 +46,7 @@ const { mockUsePropertiesData } = vi.hoisted(() => {
 });
 
 vi.mock('@/lib/hooks/usePropertiesData', () => ({
-  usePropertiesData: (...args: unknown[]) => mockUsePropertiesData(...args),
+  usePropertiesData: (...args: unknown[]) => mockUsePropertiesData(...(args as any)),
   useRegions: () => ({ regions: [], loading: false, error: null }),
 }));
 

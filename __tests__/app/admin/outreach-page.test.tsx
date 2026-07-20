@@ -273,7 +273,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
     await waitFor(() => {
       const buttons = screen.getAllByRole('button');
       const firstBtns = buttons.filter(b => b.textContent === '≪');
-      firstBtns.forEach(b => expect(b.disabled).toBe(true));
+      firstBtns.forEach(b => expect((b as HTMLButtonElement).disabled).toBe(true));
     });
   });
 
