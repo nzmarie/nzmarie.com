@@ -567,7 +567,7 @@ describe('Realestate Page - Dual Pagination Mode', () => {
     mockUseQuery.mockReturnValue({
       data: { listings: [defaultListings[0]], total: 45 } as any,
       isLoading: false,
-      isFetching: false,
+      isFetching: true,
     });
 
     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
