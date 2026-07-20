@@ -40,6 +40,8 @@ interface Listing {
   description: string | null;
   listing_number: string | null;
   listing_date_parsed: string | null;
+  last_sold_date: string | null;
+  property_history: string | null;
   listing_type: string | null;
 }
 
@@ -54,6 +56,89 @@ interface Filters {
   max_bathrooms: string;
   property_type: string;
   type: string;
+  last_sold_min_years: string;
+  last_sold_max_years: string;
+}
+
+interface PropertyHistoryRecord {
+  date?: string;
+  type?: string;
+  price?: string;
+  agent?: string;
+  interval?: string;
+}
+
+function PropertyHistoryView({ raw }: { raw: string }) {
+  if (!raw || !raw.trim()) {
+    return (
+      <div style={{
+        padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px',
+        fontSize: '0.9rem', color: '#a0aec0', backgroundColor: '#f8fafc',
+      }}>
+        No property history available
+      </div>
+    );
+  }
+
+  let records: PropertyHistoryRecord[] = [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) records = parsed as PropertyHistoryRecord[];
+  } catch {
+    records = [];
+  }
+
+  if (records.length === 0) {
+    return (
+      <div style={{
+        padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px',
+        fontSize: '0.9rem', color: '#2D3748', whiteSpace: 'pre-wrap',
+        fontFamily: 'monospace', backgroundColor: '#f8fafc',
+      }}>
+        {raw}
+      </div>
+    );
+  }
+
+  const typeColor: Record<string, string> = {
+    SOLD: '#dc2626',
+    Listed: '#2563eb',
+    Rented: '#0891b2',
+    Built: '#16a34a',
+  };
+
+  return (
+    <div style={{
+      border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden',
+      fontSize: '0.85rem', backgroundColor: '#f8fafc',
+    }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '120px 90px 1fr',
+        backgroundColor: '#edf2f7', fontWeight: '700', color: '#4a5568',
+        padding: '8px 12px', borderBottom: '1px solid #e2e8f0',
+      }}>
+        <span>Date</span>
+        <span>Type</span>
+        <span>Price / Detail</span>
+      </div>
+      {records.map((rec, i) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: '120px 90px 1fr',
+          padding: '8px 12px', borderBottom: i < records.length - 1 ? '1px solid #edf2f7' : 'none',
+          color: '#2D3748',
+        }}>
+          <span style={{ fontFamily: 'monospace' }}>{rec.date || '—'}</span>
+          <span style={{ fontWeight: '600', color: typeColor[rec.type || ''] || '#4a5568' }}>
+            {rec.type || '—'}
+          </span>
+          <span style={{ fontFamily: 'monospace' }}>
+            {rec.price ? rec.price : '—'}
+            {rec.interval ? <span style={{ color: '#a0aec0', marginLeft: '8px', fontFamily: 'inherit' }}>({rec.interval})</span> : null}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const ListingCard = ({ listing }: { listing: Listing }) => {
@@ -199,6 +284,27 @@ const ListingCard = ({ listing }: { listing: Listing }) => {
             {listing.suburb || listing.city}
           </div>
         )}
+
+        {listing.last_sold_date && (() => {
+          const soldDate = new Date(listing.last_sold_date);
+          if (!Number.isNaN(soldDate.getTime())) {
+            const today = new Date();
+            const years = today.getFullYear() - soldDate.getFullYear();
+            if (years > 0) {
+              return (
+                <div style={{
+                  position: "absolute", bottom: "16px", right: "16px",
+                  backgroundColor: "rgba(249, 115, 22, 0.9)", color: "white",
+                  padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem",
+                  fontWeight: "600", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                }}>
+                  Sold {years}yr{years > 1 ? 's' : ''} ago
+                </div>
+              );
+            }
+          }
+          return null;
+        })()}
 
         <div style={{ position: "absolute", top: "16px", right: "16px", display: "flex", gap: "6px", flexDirection: "column", alignItems: "flex-end" }}>
           {listing.listing_date_raw && (
@@ -374,6 +480,8 @@ const DEFAULT_FILTERS: Filters = {
   max_bathrooms: "",
   property_type: "House",
   type: "sale",
+  last_sold_min_years: "",
+  last_sold_max_years: "",
 };
 
 export default function RealestatePage() {
@@ -385,6 +493,7 @@ export default function RealestatePage() {
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
+  const [lastSoldPreset, setLastSoldPreset] = useState('');
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -418,6 +527,12 @@ export default function RealestatePage() {
     if (filters.max_bathrooms) params.append("max_bathrooms", filters.max_bathrooms);
     if (filters.property_type && filters.property_type !== 'All') params.append("property_type", filters.property_type);
     if (filters.type) params.append("type", filters.type);
+    if (lastSoldPreset === 'none') {
+      params.append('last_sold_none', 'true');
+    } else if (filters.last_sold_min_years || filters.last_sold_max_years) {
+      if (filters.last_sold_min_years) params.append('last_sold_min_years', filters.last_sold_min_years);
+      if (filters.last_sold_max_years) params.append('last_sold_max_years', filters.last_sold_max_years);
+    }
 
     const response = await fetch(`/api/admin/realestate?${params}`);
     const result = await response.json();
@@ -516,6 +631,7 @@ export default function RealestatePage() {
   const handleClearFilters = () => {
     setAddressInput("");
     setFilters(DEFAULT_FILTERS);
+    setLastSoldPreset('');
   };
 
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
@@ -544,6 +660,8 @@ export default function RealestatePage() {
         property_type: detail.property_type || '',
         description: detail.description || '',
         listing_number: detail.listing_number || '',
+        last_sold_date: detail.last_sold_date ? detail.last_sold_date.split('T')[0] : '',
+        property_history: detail.property_history || '',
       });
     };
     window.addEventListener('open-edit-modal', handler);
@@ -559,7 +677,7 @@ export default function RealestatePage() {
     setSaving(true);
 
     const body: Record<string, string> = {};
-    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'suburb', 'city', 'region', 'bedroom_count', 'bathroom_count', 'car_spaces', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number'] as const) {
+    for (const key of ['price_display', 'agent_name', 'status', 'property_url', 'cover_image_url', 'address', 'suburb', 'city', 'region', 'bedroom_count', 'bathroom_count', 'car_spaces', 'land_area', 'floor_area', 'property_type', 'description', 'listing_number', 'last_sold_date', 'property_history'] as const) {
       const val = editFormData[key];
       if (typeof val === 'string' && val !== '' && val !== (editingListing as unknown as Record<string, string>)[key]?.toString()) {
         body[key] = val;
@@ -895,6 +1013,55 @@ export default function RealestatePage() {
           </div>
         </div>
 
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+            Last Sold
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            {(['all', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
+              <button
+                key={preset}
+                onClick={() => {
+                  setLastSoldPreset(preset);
+                  switch (preset) {
+                    case '5-10': setFilters((prev) => ({ ...prev, last_sold_min_years: '5', last_sold_max_years: '10' })); break;
+                    case '3-5': setFilters((prev) => ({ ...prev, last_sold_min_years: '3', last_sold_max_years: '5' })); break;
+                    case '0-3': setFilters((prev) => ({ ...prev, last_sold_min_years: '0', last_sold_max_years: '3' })); break;
+                    case '10-15': setFilters((prev) => ({ ...prev, last_sold_min_years: '10', last_sold_max_years: '15' })); break;
+                    case '15+': setFilters((prev) => ({ ...prev, last_sold_min_years: '15', last_sold_max_years: '' })); break;
+                    case 'all': setFilters((prev) => ({ ...prev, last_sold_min_years: '', last_sold_max_years: '' })); break;
+                    case 'none': setFilters((prev) => ({ ...prev, last_sold_min_years: '', last_sold_max_years: '' })); break;
+                  }
+                }}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: lastSoldPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
+                  color: lastSoldPreset === preset ? 'white' : '#4a5568',
+                  border: lastSoldPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
+                  borderRadius: '10px', cursor: 'pointer', fontSize: '0.9rem',
+                  fontWeight: lastSoldPreset === preset ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: lastSoldPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (lastSoldPreset !== preset) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {preset === 'all' ? 'All' : preset === '5-10' ? '5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end", marginBottom: "16px" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
@@ -1220,6 +1387,7 @@ export default function RealestatePage() {
                 { key: 'floor_area', label: 'Floor Area (m²)', type: 'number' },
                 { key: 'property_type', label: 'Property Type', type: 'select', options: ['', 'House', 'Townhouse', 'Unit', 'Apartment', 'Retirement Living'] },
                 { key: 'listing_number', label: 'Listing Number', type: 'text' },
+                { key: 'last_sold_date', label: 'Last Sold Date', type: 'date' },
               ].map((field) => (
                 <div key={field.key}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
@@ -1269,6 +1437,12 @@ export default function RealestatePage() {
                   fontFamily: 'inherit',
                 }}
               />
+            </div>
+            <div style={{ marginTop: "16px" }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                Property History
+              </label>
+              <PropertyHistoryView raw={editFormData.property_history?.toString() || ''} />
             </div>
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
               <button

@@ -22,6 +22,7 @@ export async function PATCH(
     'address', 'region', 'suburb', 'city', 'bedroom_count', 'bathroom_count',
     'land_area', 'floor_area', 'car_spaces', 'property_url', 'cover_image_url',
     'property_type', 'description', 'listing_number',
+    'last_sold_date', 'property_history',
   ];
 
   const updates: string[] = [];

@@ -216,7 +216,7 @@ describe('Realestate Page', () => {
     render(<RealestatePage />);
 
     expect(screen.getByText('Property Type')).toBeDefined();
-    expect(screen.getByText('All')).toBeDefined();
+    expect(screen.getAllByText('All').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Townhouse')).toBeDefined();
     expect(screen.getByText('Unit')).toBeDefined();
     expect(screen.getByText('Apartment')).toBeDefined();

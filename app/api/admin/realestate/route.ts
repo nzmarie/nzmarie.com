@@ -31,7 +31,9 @@ const COLUMNS = `
   r.property_type,
   r.description,
   r.listing_number,
-  r.listing_date_parsed
+  r.listing_date_parsed,
+  r.last_sold_date,
+  r.property_history
 `;
 
 function buildQuery(
@@ -47,6 +49,9 @@ function buildQuery(
   minBathrooms: string | null,
   maxBathrooms: string | null,
   propertyType: string | null,
+  lastSoldMinYears: string | null,
+  lastSoldMaxYears: string | null,
+  lastSoldNone: string | null,
   limit: number,
   offset: number
 ) {
@@ -138,6 +143,23 @@ function buildQuery(
     paramIndex++;
   }
 
+  if (lastSoldNone === 'true') {
+    query += ` AND r.last_sold_date IS NULL`;
+  } else {
+    if (lastSoldMinYears) {
+      const years = parseInt(lastSoldMinYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND r.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+      }
+    }
+    if (lastSoldMaxYears) {
+      const years = parseInt(lastSoldMaxYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND r.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+      }
+    }
+  }
+
   query += ` ORDER BY r.listing_date DESC NULLS LAST, r.address ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
 
@@ -156,7 +178,10 @@ function buildCountQuery(
   maxBedrooms: string | null,
   minBathrooms: string | null,
   maxBathrooms: string | null,
-  propertyType: string | null
+  propertyType: string | null,
+  lastSoldMinYears: string | null,
+  lastSoldMaxYears: string | null,
+  lastSoldNone: string | null
 ) {
   let paramIndex = 1;
 
@@ -242,6 +267,23 @@ function buildCountQuery(
     paramIndex++;
   }
 
+  if (lastSoldNone === 'true') {
+    query += ` AND r.last_sold_date IS NULL`;
+  } else {
+    if (lastSoldMinYears) {
+      const years = parseInt(lastSoldMinYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND r.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+      }
+    }
+    if (lastSoldMaxYears) {
+      const years = parseInt(lastSoldMaxYears);
+      if (!isNaN(years) && years > 0) {
+        query += ` AND r.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+      }
+    }
+  }
+
   return query;
 }
 
@@ -263,6 +305,9 @@ export async function GET(request: Request) {
   const maxBathrooms = searchParams.get('max_bathrooms');
   const propertyType = searchParams.get('property_type');
   const listingType = searchParams.get('type') || 'sale';
+  const lastSoldMinYears = searchParams.get('last_sold_min_years');
+  const lastSoldMaxYears = searchParams.get('last_sold_max_years');
+  const lastSoldNone = searchParams.get('last_sold_none');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
@@ -270,13 +315,15 @@ export async function GET(request: Request) {
   const dataParams: unknown[] = [];
   const { query } = buildQuery(
     listingType, COLUMNS, dataParams,
-    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType, limit, offset
+    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType,
+    lastSoldMinYears, lastSoldMaxYears, lastSoldNone, limit, offset
   );
 
   const countParams: unknown[] = [];
   const countQuery = buildCountQuery(
     listingType, COLUMNS, countParams,
-    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType
+    search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType,
+    lastSoldMinYears, lastSoldMaxYears, lastSoldNone
   );
 
   try {
@@ -312,6 +359,8 @@ export async function GET(request: Request) {
       description: string | null;
       listing_number: string | null;
       listing_date_parsed: string | null;
+      last_sold_date: string | null;
+      property_history: string | null;
       listing_type: string;
     }>(query, dataParams);
 
@@ -344,6 +393,8 @@ export async function GET(request: Request) {
       description: row.description ?? null,
       listing_number: row.listing_number ?? null,
       listing_date_parsed: row.listing_date_parsed ?? null,
+      last_sold_date: row.last_sold_date ?? null,
+      property_history: row.property_history ?? null,
       listing_type: row.listing_type,
     }));
 
