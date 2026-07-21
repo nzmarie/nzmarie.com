@@ -118,9 +118,17 @@ export function parseREINZExcel(buffer: ArrayBuffer): ParseResult {
 }
 
 export function validateREINZData(row: REINZRow): boolean {
-  return (
-    row.median_price !== null &&
-    row.median_price > 0 &&
-    row.sales_count > 0
-  );
+  const hasDate = Boolean(row.period_month);
+  const hasMeaningfulMetric =
+    row.sales_count > 0 ||
+    row.total_volume != null ||
+    row.median_price != null ||
+    row.days_to_sell != null ||
+    row.price_diff_1yr_pct != null ||
+    row.median_valuation != null ||
+    row.median_list_price != null ||
+    row.house_price_index != null ||
+    row.pct_of_national_sales != null;
+
+  return hasDate && hasMeaningfulMetric;
 }
