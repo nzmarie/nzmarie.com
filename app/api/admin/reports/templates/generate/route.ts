@@ -232,6 +232,47 @@ function previousQuarter(quarter: string): string | null {
   return `${year}-Q${q - 1}`;
 }
 
+// Extract "Days to Sell" description from introduction content blocks
+function extractDaysToSellDescription(blocks: unknown[] | null): string | null {
+  if (!Array.isArray(blocks)) return null;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i] as any;
+
+    if (block.type === 'paragraph' && Array.isArray(block.content)) {
+      const blockText = block.content
+        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+        .join('')
+        .trim();
+      // Check if this paragraph starts with "The average Days to Sell"
+      if (blockText.startsWith('The average Days to Sell')) {
+        return blockText;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Filter out "Days to Sell" description paragraph from introduction content
+function filterOutDaysToSellFromIntro(blocks: unknown[] | null): unknown[] | null {
+  if (!Array.isArray(blocks)) return blocks;
+
+  return blocks.filter((block: any) => {
+    // Filter out paragraphs that contain "The average Days to Sell"
+    if (block.type === 'paragraph' && Array.isArray(block.content)) {
+      const blockText = block.content
+        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+        .join('')
+        .trim();
+      if (blockText.startsWith('The average Days to Sell')) {
+        return false; // Remove this block
+      }
+    }
+    return true; // Keep all other blocks
+  });
+}
+
 function buildBlocks(
   suburbName: string,
   quarter: string,
@@ -249,11 +290,16 @@ function buildBlocks(
     ? `${formatQuarterLabel(quarter)} – ${formatQuarterLabel(endQuarter)}`
     : formatQuarterLabel(quarter);
 
+  // Extract Days to Sell description from introduction content
+  const daysToSellFromIntro = extractDaysToSellDescription(suburbIntroContent);
+
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
-  if (suburbIntroContent && suburbIntroContent.length > 0) {
-    blocks.push(...suburbIntroContent);
+  // Add filtered introduction content (without "Days to Sell" description)
+  const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
+  if (filteredIntroContent && filteredIntroContent.length > 0) {
+    blocks.push(...filteredIntroContent);
   }
 
   // Page 2: Quarterly Data — custom card block
@@ -342,9 +388,12 @@ function buildBlocks(
     const priceChange = pricePct != null && !Number.isNaN(pricePct) ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
 
     const hasCompare = pricePct != null || salesDiff != null;
-    const insightText = kpiDays
-      ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
-      : '';
+    // Use description extracted from introduction document if available, otherwise use generic default
+    const insightText = daysToSellFromIntro && daysToSellFromIntro.includes('The average Days to Sell')
+      ? daysToSellFromIntro
+      : (kpiDays
+        ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
+        : '');
 
     blocks.push({
       type: 'quarterlyData',

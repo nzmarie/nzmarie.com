@@ -48,6 +48,7 @@ export interface ReportMetrics {
   compareDaysChange: string;
   compareDaysUp: boolean;
   trendRows: TrendRow[];
+  daysToSellDescription?: string;
 }
 
 export const slugMap: Record<string, { suburb: string; version: string }> = {

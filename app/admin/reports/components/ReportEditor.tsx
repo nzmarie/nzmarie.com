@@ -221,15 +221,14 @@ const quarterlyDataBlock = createBlockSpec(
             ${kpiCard('Avg Days to Sell', p.avgDaysToSell ? p.avgDaysToSell + ' Days' : '\u2014')}
           </div>
           ${p.avgDaysToSell ? `
-          <div style="background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%);border:1px solid #ddd6fe;border-radius:12px;padding:20px 24px;">
+          <div style="background:rgba(226,242,254,0.7);border:1px solid #cbd5e1;border-radius:12px;padding:20px 24px;">
             <div style="margin-bottom:12px;">
-              <span style="font-size:28px;font-weight:800;color:#6d28d9;">${p.avgDaysToSell}</span>
-              <span style="font-size:16px;font-weight:600;color:#7c3aed;margin-left:8px;">Days to Sell</span>
+              <span style="font-size:28px;font-weight:800;color:#1e3a8a;">${p.avgDaysToSell}</span>
             </div>
             ${p.insightText ? `<p style="font-size:13px;color:#475569;line-height:1.6;margin:0 0 16px;">${p.insightText}</p>` : ''}
             ${p.compareLabel ? `
-            <div style="border-top:1px solid #c4b5fd;padding-top:14px;margin-top:4px;">
-              <div style="font-size:11px;font-weight:700;color:#6d28d9;margin-bottom:10px;">${p.compareLabel}</div>
+            <div style="border-top:1px solid #cbd5e1;padding-top:14px;margin-top:4px;">
+              <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:10px;">${p.compareLabel}</div>
               <div style="display:flex;gap:8px;">
                 ${statCol('Median Price', p.comparePriceChange || '\u2014', priceUp)}
                 ${statCol('Sales Count', p.compareSalesChange || '\u2014', salesUp)}

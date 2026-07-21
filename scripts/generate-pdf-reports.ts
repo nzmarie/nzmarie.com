@@ -91,25 +91,24 @@ function generateHTML(metrics: ReportMetrics, mariePhotoBase64: string) {
               <span class="text-lg font-bold text-slate-900 mt-1 block">${metrics.avgDaysToSell} Days</span>
             </div>
           </div>
-          <div class="bg-[#F3E8FF]/30 p-4 rounded-xl border border-[#E9D5FF] space-y-2">
+          <div class="bg-slate-100/70 p-4 rounded-xl border border-slate-200 space-y-2">
             <div class="flex items-baseline space-x-2">
-              <span class="text-3xl font-extrabold text-purple-900">${metrics.avgDaysToSell}</span>
-              <span class="text-lg font-bold text-purple-900">Days to Sell</span>
+              <span class="text-3xl font-extrabold text-blue-900">${metrics.avgDaysToSell}</span>
             </div>
-            <p class="text-xs text-purple-950 leading-relaxed">The current average Days to Sell of ${metrics.avgDaysToSell} days reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.</p>
-            <div class="border-t border-[#E9D5FF] pt-2">
-              <h4 class="text-xs font-bold tracking-wider text-purple-900 mb-2">${metrics.compareLabel}</h4>
+            <p class="text-xs text-slate-700 leading-relaxed">The current average Days to Sell of ${metrics.avgDaysToSell} days reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.</p>
+            <div class="border-t border-slate-200 pt-2">
+              <h4 class="text-xs font-bold tracking-wider text-slate-700 mb-2">${metrics.compareLabel}</h4>
               <div class="grid grid-cols-3 gap-2 text-center">
                 <div>
-                  <div class="text-[10px] text-purple-700 font-medium">Median Price</div>
+                  <div class="text-[10px] text-slate-600 font-medium">Median Price</div>
                   <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.comparePriceUp ? "text-green-600" : "text-red-600"}"><span>${metrics.comparePriceUp ? "▲" : "▼"}</span><span>${metrics.comparePriceChange}</span></div>
                 </div>
                 <div>
-                  <div class="text-[10px] text-purple-700 font-medium">Sales Count</div>
+                  <div class="text-[10px] text-slate-600 font-medium">Sales Count</div>
                   <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.compareSalesUp ? "text-green-600" : "text-red-600"}"><span>${metrics.compareSalesUp ? "▲" : "▼"}</span><span>${metrics.compareSalesChange}</span></div>
                 </div>
                 <div>
-                  <div class="text-[10px] text-purple-700 font-medium">Days to Sell</div>
+                  <div class="text-[10px] text-slate-600 font-medium">Days to Sell</div>
                   <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.compareDaysUp ? "text-green-600" : "text-red-600"}"><span>${metrics.compareDaysUp ? "▼" : "▲"}</span><span>${metrics.compareDaysChange}</span></div>
                 </div>
               </div>
@@ -147,20 +146,29 @@ function generateHTML(metrics: ReportMetrics, mariePhotoBase64: string) {
                 <span class="text-2xl font-bold text-slate-900 mt-1 block">${metrics.avgDaysToSell} Days</span>
               </div>
             </div>
-            <div class="bg-indigo-50/40 border border-indigo-100/60 rounded-2xl p-5">
-              <div class="flex items-start gap-3 mb-3">
-                <span class="bg-indigo-100 text-indigo-900 font-bold text-xs px-3 py-1 rounded-full whitespace-nowrap">${metrics.avgDaysToSell} Days to Sell</span>
-                <p class="text-sm text-slate-600 leading-relaxed">The average Days to Sell of ${metrics.avgDaysToSell} days during ${metrics.periodText} reflects healthy buyer interest and quick turnover for realistically priced family homes in the Northcross region.</p>
-              </div>
-              <div class="border-t border-slate-200/60 pt-4 mt-3">
-                <span class="text-xs font-semibold text-slate-500 block mb-2">${metrics.compareLabel}</span>
-                <div class="grid grid-cols-3 text-center gap-2">
-                  <div><span class="text-xs text-slate-500 block">Median Price</span><span class="text-sm font-bold ${metrics.comparePriceUp ? "text-emerald-600" : "text-red-500"}">${metrics.comparePriceUp ? "▲" : "▼"} ${metrics.comparePriceChange}</span></div>
-                  <div><span class="text-xs text-slate-500 block">Sales Count</span><span class="text-sm font-bold ${metrics.compareSalesUp ? "text-emerald-600" : "text-red-500"}">${metrics.compareSalesUp ? "▲" : "▼"} ${metrics.compareSalesChange}</span></div>
-                  <div><span class="text-xs text-slate-500 block">Days to Sell</span><span class="text-sm font-bold ${metrics.compareDaysUp ? "text-emerald-600" : "text-red-500"}">${metrics.compareDaysUp ? "▼" : "▲"} ${metrics.compareDaysChange}</span></div>
+            <div class="bg-slate-100/70 p-4 rounded-xl border border-slate-200 space-y-2">
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-blue-900">${metrics.avgDaysToSell}</span>
+            </div>
+            <p class="text-xs text-slate-700 leading-relaxed">The current average Days to Sell of ${metrics.avgDaysToSell} days reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.</p>
+            <div class="border-t border-slate-200 pt-2">
+              <h4 class="text-xs font-bold tracking-wider text-slate-700 mb-2">${metrics.compareLabel}</h4>
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div class="text-[10px] text-slate-600 font-medium">Median Price</div>
+                  <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.comparePriceUp ? "text-green-600" : "text-red-600"}"><span>${metrics.comparePriceUp ? "▲" : "▼"}</span><span>${metrics.comparePriceChange}</span></div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-600 font-medium">Sales Count</div>
+                  <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.compareSalesUp ? "text-green-600" : "text-red-600"}"><span>${metrics.compareSalesUp ? "▲" : "▼"}</span><span>${metrics.compareSalesChange}</span></div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-600 font-medium">Days to Sell</div>
+                  <div class="text-sm font-bold flex items-center justify-center space-x-1 mt-1 ${metrics.compareDaysUp ? "text-green-600" : "text-red-600"}"><span>${metrics.compareDaysUp ? "▼" : "▲"}</span><span>${metrics.compareDaysChange}</span></div>
                 </div>
               </div>
             </div>
+          </div>
           </div>
           <div class="space-y-2">
             <h2 class="font-serif text-3xl font-bold tracking-tight text-slate-800">Northcross Region Trends</h2>

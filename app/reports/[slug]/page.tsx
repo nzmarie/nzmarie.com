@@ -69,14 +69,10 @@ export default async function ReportPage({ params }: { params: Promise<{ slug: s
             <QuarterlyKpiCard title="Avg Days to Sell" value={`${metrics.avgDaysToSell} Days`} />
           </div>
 
-          <div className="bg-indigo-50/40 border border-indigo-100/60 rounded-2xl p-6">
+          <div className="bg-slate-100/70 border border-slate-200 rounded-2xl p-6">
             <div className="flex items-start gap-3 mb-3">
-              <span className="bg-indigo-100 text-indigo-900 font-bold text-xs px-3 py-1 rounded-full whitespace-nowrap">
-                {metrics.avgDaysToSell} Days to Sell
-              </span>
               <p className="text-sm text-slate-600 leading-relaxed">
-                The average Days to Sell of {metrics.avgDaysToSell} days during {metrics.periodText} reflects healthy buyer interest
-                and quick turnover for realistically priced family homes in the Northcross region.
+                {metrics.daysToSellDescription || `The average Days to Sell of ${metrics.avgDaysToSell} days during ${metrics.periodText} reflects healthy buyer interest and quick turnover for realistically priced family homes in the Northcross region.`}
               </p>
             </div>
 
@@ -127,13 +123,10 @@ export default async function ReportPage({ params }: { params: Promise<{ slug: s
               </div>
             </div>
 
-            <div className="bg-indigo-50/40 border border-indigo-100/60 rounded-2xl p-5">
+            <div className="bg-slate-100/70 border border-slate-200 rounded-2xl p-5">
               <div className="flex items-start gap-3 mb-3">
-                <span className="bg-indigo-100 text-indigo-900 font-bold text-xs px-3 py-1 rounded-full whitespace-nowrap">
-                  30 Days to Sell
-                </span>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  The average Days to Sell of 30 days during Q1 reflects healthy buyer interest and quick turnover for realistically priced family homes in the Northcross region.
+                  {metrics.daysToSellDescription || ''}
                 </p>
               </div>
               <div className="border-t border-slate-200/60 pt-4 mt-3">
