@@ -109,8 +109,10 @@ async function fetchQuarterlyAggregates(suburbName: string, startQuarter: string
      FROM market_monthly_snapshots
      WHERE region_name IN ($1, 'North Shore City')
        AND period_month >= $2::date AND period_month < $3::date
-     GROUP BY region_name, region_type, 2, 3
-     ORDER BY region_name`,
+     GROUP BY region_name, region_type,
+       EXTRACT(YEAR FROM period_month)::int,
+       CEIL(EXTRACT(MONTH FROM period_month) / 3.0)::int
+     ORDER BY region_name, year, quarter`,
     [suburbName, startDate, endDate]
   );
 

@@ -54,7 +54,7 @@ function renderBlock(block: any, i: number) {
   const { type } = block as { type: string };
   if (type === 'heading') {
     const level = (block.props?.level ?? 2) as number;
-    const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+    const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
     const text = Array.isArray(block.content) ? block.content.join('') : (block.content || '');
     return <Tag key={i} className="text-xl font-bold text-slate-900 mb-4">{text}</Tag>;
   }
