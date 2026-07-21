@@ -96,6 +96,8 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
     window.print();
   }, []);
 
+  const toSlug = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
+
   const handleDelete = useCallback(async () => {
     setDeleting(true);
     try {
@@ -103,7 +105,14 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       const data = await res.json();
       if (data.success) {
         setToast('Document deleted successfully.');
-        setTimeout(() => { onNavigate?.(null); router.push('/admin/reports'); }, 800);
+        setTimeout(() => {
+          if (doc?.suburb_name) {
+            const introSlug = `${toSlug(doc.suburb_name)}-introduction`;
+            router.replace(`/admin/reports/${introSlug}`, { scroll: false });
+          } else {
+            router.replace('/admin/reports', { scroll: false });
+          }
+        }, 800);
       }
     } catch {
       setToast('Failed to delete document.');
@@ -111,7 +120,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       setDeleting(false);
       setShowDeleteModal(false);
     }
-  }, [docId, router, onNavigate]);
+  }, [docId, router, doc?.suburb_name]);
 
   useEffect(() => {
     if (toast) {

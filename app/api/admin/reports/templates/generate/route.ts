@@ -106,6 +106,38 @@ async function fetchCampaignStats(suburbName: string): Promise<CampaignRow | nul
   return result.rows[0];
 }
 
+async function fetchSuburbIntroduction(suburbId: string): Promise<unknown[] | null> {
+  const result = await marieQuery<{ content: unknown | null }>(
+    `SELECT content
+     FROM report_documents
+     WHERE suburb_id = $1
+       AND doc_type = 'suburb_intro'
+       AND status != 'archived'
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [suburbId]
+  );
+  if (result.rows.length === 0) {
+    return null;
+  }
+  const raw = result.rows[0].content;
+  if (!raw) {
+    return null;
+  }
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function agg(arr: (number | null)[]): number | null {
   const vals = arr.filter((v): v is number => v != null).map(v => Number(v));
   return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
@@ -115,6 +147,10 @@ function sum(arr: (number | null)[]): number {
   return arr.filter((v): v is number => v != null).map(v => Number(v)).reduce((a, b) => a + b, 0);
 }
 
+function formatQuarterLabel(quarter: string): string {
+  return quarter.replace(/-Q/, ' Q');
+}
+
 function buildBlocks(
   suburbName: string,
   quarter: string,
@@ -122,20 +158,23 @@ function buildBlocks(
   lastSold: LastSoldRow | null,
   campaign: CampaignRow | null,
   chartImageUrl: string | null,
+  suburbIntroContent: unknown[] | null,
   endQuarter?: string
 ): unknown[] {
   const blocks: unknown[] = [];
-  const displayQuarter = endQuarter && endQuarter !== quarter ? `${quarter} – ${endQuarter}` : quarter;
+  const displayQuarter = endQuarter && endQuarter !== quarter
+    ? `${formatQuarterLabel(quarter)} – ${formatQuarterLabel(endQuarter)}`
+    : formatQuarterLabel(quarter);
 
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
-  blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Prepared by Marie Nian — nzmarie.co.nz`] });
-  blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: [`Date: ${new Date().toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`] });
-  blocks.push({ type: 'divider' });
+  if (suburbIntroContent && suburbIntroContent.length > 0) {
+    blocks.push(...suburbIntroContent);
+  }
 
-  // Page 2: Northcross Quarterly Data — custom card block
-  blocks.push({ type: 'heading', props: { level: 2 }, content: ['Northcross Quarterly Data'] });
+  // Page 2: Quarterly Data — custom card block
+  blocks.push({ type: 'heading', props: { level: 2 }, content: [`${suburbName} Quarterly Data`] });
 
   if (marketTrends && marketTrends.length > 0) {
     const subData = marketTrends.filter((r) => r.region_type === 'suburb');
@@ -144,9 +183,10 @@ function buildBlocks(
     const kpiDays = agg(subData.map(r => r.days_to_sell));
 
     const lastSub = subData[subData.length - 1];
-    const pricePct = lastSub?.price_diff_1yr_pct ?? null;
+    const pricePctRaw = lastSub?.price_diff_1yr_pct;
+    const pricePct = pricePctRaw != null ? Number(pricePctRaw) : null;
     const priceUp = (pricePct ?? 0) >= 0;
-    const priceChange = pricePct != null ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
+    const priceChange = pricePct != null && !Number.isNaN(pricePct) ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
 
     const halfLen = Math.floor(subData.length / 2);
     const prevSalesVal = halfLen > 0 ? sum(subData.slice(0, halfLen).map(r => r.sales_count)) : 0;
@@ -180,8 +220,6 @@ function buildBlocks(
   } else {
     blocks.push({ type: 'paragraph', content: ['Quarterly data is not yet available for this suburb.'] });
   }
-
-  blocks.push({ type: 'divider' });
 
   // Page 3: REINZ Market Trends
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['REINZ Market Trends'] });
@@ -271,8 +309,6 @@ function buildBlocks(
     blocks.push({ type: 'paragraph', content: ['Market trend data is not yet available for this suburb. Upload REINZ data via the Analytics page to populate this section.'] });
   }
 
-  blocks.push({ type: 'divider' });
-
   // Page 3: Sales Analysis
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['Sales Analysis'] });
 
@@ -327,20 +363,6 @@ function buildBlocks(
     blocks.push({ type: 'paragraph', content: [`Downloads: ${campaign.downloads ?? 0} | Appraisals: ${campaign.appraisals ?? 0} | Conversions: ${campaign.conversions ?? 0}`] });
   }
 
-  blocks.push({ type: 'divider' });
-
-  // Page 4: About Marie
-  blocks.push({ type: 'heading', props: { level: 2 }, content: ['About Marie Nian'] });
-  blocks.push({ type: 'paragraph', content: ['Marie Nian is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.'] });
-  blocks.push({ type: 'heading', props: { level: 3 }, content: ['Services Offered'] });
-  blocks.push({ type: 'bulletListItem', content: ['Free property appraisals and market analysis'] });
-  blocks.push({ type: 'bulletListItem', content: ['Expert negotiation and sales strategy'] });
-  blocks.push({ type: 'bulletListItem', content: ['Comprehensive marketing campaigns'] });
-  blocks.push({ type: 'bulletListItem', content: ['Buyer representation and property search'] });
-  blocks.push({ type: 'bulletListItem', content: ['Investment portfolio advice'] });
-  blocks.push({ type: 'paragraph', content: ['Contact Marie today for a no-obligation discussion about your property goals.'] });
-  blocks.push({ type: 'paragraph', props: { textAlignment: 'center' }, content: ['www.nzmarie.co.nz'] });
-
   return blocks;
 }
 
@@ -377,15 +399,16 @@ export async function POST(request: Request) {
     );
     const userId = adminResult.rows[0].id;
 
-    const [marketTrends, lastSold, campaign, chartImageUrl] = await Promise.all([
+    const [marketTrends, lastSold, campaign, chartImageUrl, suburbIntroContent] = await Promise.all([
       fetchMarketTrends(suburb.name, dataStart, dataEnd),
       fetchLastSoldData(suburb.name),
       fetchCampaignStats(suburb.name),
       generateChartImageUrl(suburb.name, reportQuarter, dataStart, dataEnd).catch(() => null),
+      fetchSuburbIntroduction(suburb_id),
     ]);
 
-    const title = `${suburb.name} ${reportQuarter} Market Report`;
-    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, lastSold, campaign, chartImageUrl);
+    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Market Report`;
+    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, lastSold, campaign, chartImageUrl, suburbIntroContent);
 
     const result = await marieQuery<{ id: string }>(
       `INSERT INTO report_documents (user_id, doc_type, suburb_id, quarter, title, content)

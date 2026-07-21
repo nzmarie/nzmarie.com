@@ -57,7 +57,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const rawBody = await request.text();
+    if (!rawBody) {
+      return NextResponse.json({ success: false, error: 'Request body is required' }, { status: 400 });
+    }
+
+    const body = JSON.parse(rawBody) as Record<string, unknown>;
+
     const { doc_type, suburb_id, quarter, title, content, parent_id } = body;
 
     const adminResult = await marieQuery<{ id: string }>(
@@ -89,7 +95,13 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const rawBody = await request.text();
+    if (!rawBody) {
+      return NextResponse.json({ success: false, error: 'Request body is required' }, { status: 400 });
+    }
+
+    const body = JSON.parse(rawBody) as Record<string, unknown>;
+
     const { id, title, content, status, icon, cover_type, cover_value, sort_order, parent_id } = body;
 
     if (!id) {

@@ -278,7 +278,10 @@ export default function ReportToolbar({
                   <label className="block text-sm text-slate-500 mb-1">Report Quarter</label>
                   <select
                     value={genReportQuarter}
-                    onChange={(e) => setGenReportQuarter(e.target.value)}
+                    onChange={(e) => {
+                      setGenReportQuarter(e.target.value);
+                      setGenEndQuarter(e.target.value);
+                    }}
                     className={fieldStyles}
                   >
                     {REPORT_QUARTERS.map(q => (

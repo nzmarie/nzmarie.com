@@ -91,7 +91,11 @@ export default function TemplateSelector({ onGenerate, open, onClose, preselecte
             <label className="block text-sm text-slate-500 mb-1">Report Quarter</label>
             <select
               value={reportQuarter}
-              onChange={(e) => setReportQuarter(e.target.value)}
+              onChange={(e) => {
+                const q = e.target.value;
+                setReportQuarter(q);
+                setEndQuarter(q);
+              }}
               className={fieldStyles}
             >
               {REPORT_QUARTERS.map((q) => (

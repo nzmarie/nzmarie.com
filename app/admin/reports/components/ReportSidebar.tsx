@@ -121,7 +121,17 @@ export default function ReportSidebar() {
         setRefreshKey(k => k + 1);
         if (selectedDocId === deleteTarget.id) {
           setSelectedDocId(null);
-          router.push('/admin/reports');
+          const suburb = suburbs.find((s) =>
+            s.introDoc?.id === deleteTarget.id ||
+            s.letterDoc?.id === deleteTarget.id ||
+            s.reports.some((report) => report.id === deleteTarget.id)
+          );
+          if (suburb) {
+            const introSlug = `${toSlug(suburb.name)}-introduction`;
+            router.push(`/admin/reports/${introSlug}`);
+          } else {
+            router.push('/admin/reports');
+          }
         }
       }
     } catch {} finally {

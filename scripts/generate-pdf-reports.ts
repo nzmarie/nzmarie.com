@@ -79,15 +79,15 @@ function generateHTML(metrics: ReportMetrics, mariePhotoBase64: string) {
           </div>
           <div class="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <span class="text-[10px] tracking-widest text-slate-400 font-bold block">Total Volume</span>
+              <span class="text-[10px] tracking-widest text-slate-400 font-bold block" style="text-transform:none;">Total Volume</span>
               <span class="text-lg font-bold text-slate-900 mt-1 block">${formatCurrency(metrics.totalVolume)}</span>
             </div>
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <span class="text-[10px] tracking-widest text-slate-400 font-bold block">Transactions</span>
+              <span class="text-[10px] tracking-widest text-slate-400 font-bold block" style="text-transform:none;">Transactions</span>
               <span class="text-lg font-bold text-blue-600 mt-1 block">${metrics.totalSales}</span>
             </div>
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <span class="text-[10px] tracking-widest text-slate-400 font-bold block">Avg Days to Sell</span>
+              <span class="text-[10px] tracking-widest text-slate-400 font-bold block" style="text-transform:none;">Avg Days to Sell</span>
               <span class="text-lg font-bold text-slate-900 mt-1 block">${metrics.avgDaysToSell} Days</span>
             </div>
           </div>

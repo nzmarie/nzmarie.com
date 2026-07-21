@@ -16,9 +16,8 @@ export default function DocumentPage() {
   const resolvedId = isUuid ? rawId : (slugMap[rawId] ?? null);
 
   useEffect(() => {
-    if (!isUuid && resolvedId && resolvedId !== rawId) {
-      router.replace(`/admin/reports/${resolvedId}`, { scroll: false });
-    }
+    // Keep human-readable slugs in the URL for intro and quarterly report pages.
+    // We only resolve slug → document ID internally, without canonicalizing back to UUID.
   }, [isUuid, resolvedId, rawId, router]);
 
   if (!resolvedId) return null;
