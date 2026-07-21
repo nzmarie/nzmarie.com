@@ -111,7 +111,7 @@ async function main() {
       // 尝试从 introduction 文档中提取 "Days to Sell" 描述
       const description = await fetchDaysToSellDescription(entry.suburb);
       if (description) {
-        (metrics as Record<string, unknown>).daysToSellDescription = description;
+        metrics.daysToSellDescription = description;
       }
       
       allMetrics[slug] = metrics;
