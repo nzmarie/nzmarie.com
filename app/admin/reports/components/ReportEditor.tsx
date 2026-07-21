@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createInlineContentSpec, createBlockSpec } from '@blocknote/core';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react';
@@ -295,32 +295,97 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
     },
   });
 
+  // Sanitize editor.document to remove functions and DOM nodes and convert circular refs to null so structure remains
+  const sanitize = useCallback((value: unknown, _seen = new WeakSet()): unknown => {
+    const seen = _seen as WeakSet<object>;
+    if (value === null || typeof value !== 'object') return value;
+    if (seen.has(value as object)) {
+      // preserve placeholder for circular refs rather than removing array items/keys entirely
+      return null;
+    }
+    seen.add(value as object);
+
+    if (Array.isArray(value)) {
+      // keep null placeholders so array positions are preserved
+      const out = (value as unknown[]).map((v) => sanitize(v, seen));
+      return out;
+    }
+
+    const obj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      // skip functions
+      if (typeof v === 'function') continue;
+      // skip DOM nodes (have nodeType number)
+      if (v && typeof v === 'object' && 'nodeType' in (v as any) && typeof (v as any).nodeType === 'number') continue;
+      const sv = sanitize(v, seen);
+      // include nulls (from circular refs) explicitly
+      if (sv !== undefined) obj[k] = sv;
+    }
+    return obj;
+  }, []);
+
+  const lastSaveRef = useRef<Promise<any> | null>(null);
+
   const saveContent = useCallback(async () => {
     const blocks = editor.document;
-    setIsSaving(true);
-    try {
-      const res = await fetch('/api/admin/reports/documents', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: docId, content: blocks }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        setLastSaved(new Date().toLocaleTimeString('en-NZ'));
-        updateDocument(docId, { content: blocks as ReportEditorContent });
-        onContentChange?.(blocks as ReportEditorContent);
+    const safeBlocks = sanitize(blocks) as ReportEditorContent | null;
+
+    // If a save is already in-flight, wait for it to finish to avoid racing writes.
+    if (lastSaveRef.current) {
+      try {
+        await lastSaveRef.current;
+      } catch (e) {
+        // ignore previous save error and continue with a fresh save
       }
-    } catch {
-      // silent
-    } finally {
-      setIsSaving(false);
     }
-  }, [editor, docId, setIsSaving, setLastSaved, updateDocument, onContentChange]);
+
+    setIsSaving(true);
+    const clientModifiedAt = Date.now();
+    const savePromise = (async () => {
+      try {
+        const res = await fetch('/api/admin/reports/documents', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: docId, content: safeBlocks, client_modified_at: clientModifiedAt }),
+        });
+        if (res.status === 409) {
+          // conflict - server rejected because there is a newer version
+          const body = await res.json().catch(() => null);
+          console.warn('Save conflict detected, server has newer content', body);
+          // It's safer to refresh the store with server's content (if provided) than to overwrite
+          if (body?.currentContent) {
+            updateDocument(docId, { content: body.currentContent as ReportEditorContent });
+            onContentChange?.(body.currentContent as ReportEditorContent);
+          }
+          return;
+        }
+        const result = await res.json();
+        if (result.success) {
+          setLastSaved(new Date().toLocaleTimeString('en-NZ'));
+          updateDocument(docId, { content: safeBlocks as ReportEditorContent });
+          onContentChange?.(safeBlocks as ReportEditorContent);
+        }
+      } catch (err) {
+        console.error('Failed to save report document', err);
+        throw err;
+      } finally {
+        setIsSaving(false);
+      }
+    })();
+
+    lastSaveRef.current = savePromise;
+    try {
+      await savePromise;
+    } finally {
+      // clear only if this is the same promise
+      if (lastSaveRef.current === savePromise) lastSaveRef.current = null;
+    }
+  }, [editor, docId, setIsSaving, setLastSaved, updateDocument, onContentChange, sanitize]);
 
   useAutoSave({
     data: editor.document,
     onSave: saveContent,
-    delay: 3000,
+    delay: 6000,
     enabled: true,
   });
 

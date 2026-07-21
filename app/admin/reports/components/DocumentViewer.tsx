@@ -13,7 +13,8 @@ import type { ReportDocument, ReportEditorContent } from '@/types/report';
 
 export default function DocumentViewer({ docId, onNavigate }: { docId: string; onNavigate?: (id: string | null) => void }) {
   const router = useRouter();
-  const { setSelectedDocId, isSaving, updateDocument } = useReportStore();
+  const { setSelectedDocId, isSaving, updateDocument, documents } = useReportStore();
+  const storeDoc = documents.find(d => d.id === docId) || null;
   const [doc, setDoc] = useState<ReportDocument | null>(null);
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(true);
@@ -75,15 +76,40 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
   const handleSaveNow = useCallback(async () => {
     if (!doc) return;
     try {
-      await fetch('/api/admin/reports/documents', {
+      // Prefer latest content from the store (updated by editor autosave). Fall back to local doc state.
+      const contentToSave = storeDoc?.content ?? doc.content ?? null;
+
+      // If autosave is running, wait a short while for it to finish to avoid overwrites
+      const waitForAutosave = async () => {
+        const start = Date.now();
+        while ((useReportStore.getState()?.isSaving) && Date.now() - start < 5000) {
+          // poll briefly
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 120));
+        }
+      };
+      await waitForAutosave();
+
+      const clientModifiedAt = Date.now();
+      const res = await fetch('/api/admin/reports/documents', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: docId, title }),
+        body: JSON.stringify({ id: docId, title, content: contentToSave, client_modified_at: clientModifiedAt }),
       });
-    } catch {
-      // silent
+      if (res.status === 409) {
+        const body = await res.json().catch(() => null);
+        console.warn('Save conflict detected on manual save', body);
+        if (body?.currentContent) {
+          updateDocument(docId, { title, content: body.currentContent as ReportEditorContent });
+        }
+        return;
+      }
+      // update local store copy
+      updateDocument(docId, { title, content: contentToSave });
+    } catch (err) {
+      console.error('Failed to save document', err);
     }
-  }, [docId, title, doc]);
+  }, [docId, title, doc, storeDoc, updateDocument]);
 
   const handleHeaderFooterSave = useCallback((h: string, f: string) => {
     setHeaderContent(h);
