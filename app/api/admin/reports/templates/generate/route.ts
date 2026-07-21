@@ -319,8 +319,10 @@ function buildBlocks(
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
-  // Add filtered introduction content (without "Days to Sell" description)
-  const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
+  // Add introduction content. For Oteha, preserve Days to Sell blocks; otherwise strip the Days to Sell heading/paragraph.
+  const filteredIntroContent = (typeof suburbName === 'string' && suburbName.toLowerCase() === 'oteha')
+    ? suburbIntroContent
+    : filterOutDaysToSellFromIntro(suburbIntroContent);
   if (filteredIntroContent && filteredIntroContent.length > 0) {
     blocks.push(...filteredIntroContent);
   }
