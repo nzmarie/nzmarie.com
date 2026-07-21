@@ -190,6 +190,11 @@ const quarterlyDataBlock = createBlockSpec(
       const salesUp = p.compareSalesUp === 'true';
       const daysUp = p.compareDaysUp === 'true';
 
+      // prefer numeric fields when present to avoid picking up stale formatted monthly values
+      const fmtM = (v: number | null | undefined) => (v == null ? '\u2014' : `$${(v / 1000000).toFixed(1)}M`);
+      const displayTotalVolume = (p.totalVolumeNumeric != null) ? fmtM(Number(p.totalVolumeNumeric)) : (p.totalVolume || '\u2014');
+      const displayTotalSales = (p.totalSalesNumeric != null) ? String(p.totalSalesNumeric) : (p.totalSales || '\u2014');
+
       const kpiCard = (label: string, value: string, color?: string) => `
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;flex:1;min-width:0;box-shadow:0 1px 3px rgba(0,0,0,.06);">
           <span style="font-size:11px;font-weight:600;color:#94a3b8;letter-spacing:.05em;display:block;margin-bottom:8px;text-transform:none;">${label}</span>
@@ -211,8 +216,8 @@ const quarterlyDataBlock = createBlockSpec(
       const html = `
         <div style="font-family:inherit;">
           <div style="display:flex;gap:12px;margin-bottom:16px;">
-            ${kpiCard('Total Volume', p.totalVolume || '\u2014')}
-            ${kpiCard('Transactions', p.totalSales || '\u2014', '#2563eb')}
+            ${kpiCard('Total Volume', displayTotalVolume)}
+            ${kpiCard('Transactions', displayTotalSales, '#2563eb')}
             ${kpiCard('Avg Days to Sell', p.avgDaysToSell ? p.avgDaysToSell + ' Days' : '\u2014')}
           </div>
           ${p.avgDaysToSell ? `
@@ -239,6 +244,7 @@ const quarterlyDataBlock = createBlockSpec(
       container.innerHTML = html;
       return { dom: container };
     },
+
   }
 );
 
