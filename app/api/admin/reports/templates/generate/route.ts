@@ -254,23 +254,46 @@ function extractDaysToSellDescription(blocks: unknown[] | null): string | null {
   return null;
 }
 
-// Filter out "Days to Sell" description paragraph from introduction content
+// Filter out "Days to Sell" description paragraph and its heading from introduction content
 function filterOutDaysToSellFromIntro(blocks: unknown[] | null): unknown[] | null {
   if (!Array.isArray(blocks)) return blocks;
 
-  return blocks.filter((block: any) => {
-    // Filter out paragraphs that contain "The average Days to Sell"
+  const out: unknown[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i] as any;
+
+    // If this is a heading that literally contains "Days to Sell", skip it
+    if (block.type === 'heading' && Array.isArray(block.content)) {
+      const headingText = block.content.map((c: any) => (typeof c === 'string' ? c : c?.text || '')).join('').trim();
+      if (headingText.includes('Days to Sell')) {
+        continue; // omit this heading
+      }
+    }
+
+    // If this is a paragraph that starts with the Days to Sell sentence, skip it
     if (block.type === 'paragraph' && Array.isArray(block.content)) {
       const blockText = block.content
         .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
         .join('')
         .trim();
       if (blockText.startsWith('The average Days to Sell')) {
-        return false; // Remove this block
+        // Also remove a preceding heading if it was the Days to Sell heading
+        const prev = out[out.length - 1] as any;
+        if (prev && prev.type === 'heading' && Array.isArray(prev.content)) {
+          const prevHeadingText = prev.content.map((c: any) => (typeof c === 'string' ? c : c?.text || '')).join('').trim();
+          if (prevHeadingText.includes('Days to Sell')) {
+            out.pop();
+          }
+        }
+        continue; // omit this paragraph
       }
     }
-    return true; // Keep all other blocks
-  });
+
+    // Otherwise keep the block
+    out.push(block);
+  }
+
+  return out;
 }
 
 function buildBlocks(
