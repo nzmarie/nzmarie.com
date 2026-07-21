@@ -14,7 +14,7 @@ function QuarterlyKpiCard({ title, value, color }: { title: string; value: strin
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <span className="text-xs font-medium text-slate-500 block">{title}</span>
-      <span className={`text-2xl font-bold ${color || "text-slate-900"} mt-1 block`}>{value}</span>
+      <span className={`text-2xl font-bold ${color || "text-slate-900"} mt-1 block whitespace-nowrap`}>{value}</span>
     </div>
   );
 }
@@ -115,15 +115,15 @@ export default async function ReportPage({ params }: { params: Promise<{ slug: s
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                 <span className="text-xs font-medium text-slate-500 block">Total Volume</span>
-                <span className="text-2xl font-bold text-slate-900 mt-1 block">$910,000</span>
+                <span className="text-2xl font-bold text-slate-900 mt-1 block whitespace-nowrap">{formatCurrency(metrics.totalVolume)}</span>
               </div>
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                 <span className="text-xs font-medium text-slate-500 block">Transactions / Sales Count</span>
-                <span className="text-2xl font-bold text-blue-600 mt-1 block">8</span>
+                <span className="text-2xl font-bold text-blue-600 mt-1 block whitespace-nowrap">{String(metrics.totalSales)}</span>
               </div>
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                 <span className="text-xs font-medium text-slate-500 block">Avg Days to Sell</span>
-                <span className="text-2xl font-bold text-slate-900 mt-1 block">30 Days</span>
+                <span className="text-2xl font-bold text-slate-900 mt-1 block whitespace-nowrap">{metrics.avgDaysToSell} Days</span>
               </div>
             </div>
 
