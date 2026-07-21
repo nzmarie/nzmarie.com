@@ -20,7 +20,7 @@ export default function OtehaIntroRedirect() {
         const res = await fetch('/api/admin/reports/documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ doc_type: 'introduction', title: 'Oteha Introduction', content }),
+          body: JSON.stringify({ doc_type: 'suburb_intro', title: 'Oteha Introduction', content }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
