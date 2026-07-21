@@ -334,7 +334,7 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
     if (lastSaveRef.current) {
       try {
         await lastSaveRef.current;
-      } catch (e) {
+      } catch {
         // ignore previous save error and continue with a fresh save
       }
     }

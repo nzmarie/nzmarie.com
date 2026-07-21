@@ -84,7 +84,7 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
         const start = Date.now();
         while ((useReportStore.getState()?.isSaving) && Date.now() - start < 5000) {
           // poll briefly
-          // eslint-disable-next-line no-await-in-loop
+          // poll briefly
           await new Promise((r) => setTimeout(r, 120));
         }
       };

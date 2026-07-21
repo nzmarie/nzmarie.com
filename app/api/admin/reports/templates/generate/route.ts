@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { generateChartImageUrl } from '@/lib/report-charts';
+import { extractDaysToSellDescription, filterOutDaysToSellFromIntro } from './intro-utils';
 
 interface TrendRow {
   region_name: string;
@@ -232,70 +233,6 @@ function previousQuarter(quarter: string): string | null {
   return `${year}-Q${q - 1}`;
 }
 
-// Extract "Days to Sell" description from introduction content blocks
-function extractDaysToSellDescription(blocks: unknown[] | null): string | null {
-  if (!Array.isArray(blocks)) return null;
-
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i] as any;
-
-    if (block.type === 'paragraph' && Array.isArray(block.content)) {
-      const blockText = block.content
-        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
-        .join('')
-        .trim();
-      // Check if this paragraph starts with "The average Days to Sell"
-      if (blockText.startsWith('The average Days to Sell')) {
-        return blockText;
-      }
-    }
-  }
-
-  return null;
-}
-
-// Filter out "Days to Sell" description paragraph and its heading from introduction content
-function filterOutDaysToSellFromIntro(blocks: unknown[] | null): unknown[] | null {
-  if (!Array.isArray(blocks)) return blocks;
-
-  const out: unknown[] = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i] as any;
-
-    // If this is a heading that literally contains "Days to Sell", skip it
-    if (block.type === 'heading' && Array.isArray(block.content)) {
-      const headingText = block.content.map((c: any) => (typeof c === 'string' ? c : c?.text || '')).join('').trim();
-      if (headingText.includes('Days to Sell')) {
-        continue; // omit this heading
-      }
-    }
-
-    // If this is a paragraph that starts with the Days to Sell sentence, skip it
-    if (block.type === 'paragraph' && Array.isArray(block.content)) {
-      const blockText = block.content
-        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
-        .join('')
-        .trim();
-      if (blockText.startsWith('The average Days to Sell')) {
-        // Also remove a preceding heading if it was the Days to Sell heading
-        const prev = out[out.length - 1] as any;
-        if (prev && prev.type === 'heading' && Array.isArray(prev.content)) {
-          const prevHeadingText = prev.content.map((c: any) => (typeof c === 'string' ? c : c?.text || '')).join('').trim();
-          if (prevHeadingText.includes('Days to Sell')) {
-            out.pop();
-          }
-        }
-        continue; // omit this paragraph
-      }
-    }
-
-    // Otherwise keep the block
-    out.push(block);
-  }
-
-  return out;
-}
-
 function buildBlocks(
   suburbName: string,
   quarter: string,
@@ -319,10 +256,8 @@ function buildBlocks(
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
-  // Add introduction content. For Oteha, preserve Days to Sell blocks; otherwise strip the Days to Sell heading/paragraph.
-  const filteredIntroContent = (typeof suburbName === 'string' && suburbName.toLowerCase() === 'oteha')
-    ? suburbIntroContent
-    : filterOutDaysToSellFromIntro(suburbIntroContent);
+  // Add introduction content, stripping any Days to Sell heading/paragraph (handled by KPI card instead)
+  const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
   if (filteredIntroContent && filteredIntroContent.length > 0) {
     blocks.push(...filteredIntroContent);
   }
@@ -414,7 +349,7 @@ function buildBlocks(
 
     const hasCompare = pricePct != null || salesDiff != null;
     // Use description extracted from introduction document if available, otherwise use generic default
-    const insightText = daysToSellFromIntro && daysToSellFromIntro.includes('The average Days to Sell')
+    const insightText = daysToSellFromIntro && /the\s+average\s+days?\s*to\s*sell/i.test(daysToSellFromIntro)
       ? daysToSellFromIntro
       : (kpiDays
         ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
