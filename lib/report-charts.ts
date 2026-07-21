@@ -142,10 +142,10 @@ function generateSVG(
   const subPts = points.filter(p => p.sub != null).map(p => ({ x: xS(allQ.indexOf(p.quarter)), y: yS(p.sub!) }));
   const distPts = points.filter(p => p.dist != null).map(p => ({ x: xS(allQ.indexOf(p.quarter)), y: yS(p.dist!) }));
 
-  const yTicks = 5;
+  const yTicks = 8;
   const yGrid: { y: number; label: string }[] = [];
   for (let i = 0; i <= yTicks; i++) {
-    const val = yMin + (yMax / yTicks) * i;
+    const val = yMin + ((yMax - yMin) / yTicks) * i;
     yGrid.push({ y: yS(val), label: `$${(val / 1000000).toFixed(2)}M` });
   }
 
@@ -166,9 +166,10 @@ function generateSVG(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family: Arial, sans-serif;">
 <rect width="${W}" height="${H}" fill="white"/>
 <rect x="${PL}" y="${PT}" width="${CW}" height="${CH}" fill="none" stroke="#f1f5f9" stroke-width="1"/>
-${yGrid.map(g => `<line x1="${PL}" y1="${g.y}" x2="${W - PR}" y2="${g.y}" stroke="#f1f5f9" stroke-width="1"/>
+${yGrid.map(g => `<line x1="${PL}" y1="${g.y}" x2="${W - PR}" y2="${g.y}" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4,4"/>
 <text x="${PL - 6}" y="${g.y + 4}" text-anchor="end" fill="#6b7280" font-size="11">${g.label}</text>`).join('')}
-${points.map((p, i) => `<text x="${xS(i)}" y="${H - PB + 18}" text-anchor="middle" fill="#6b7280" font-size="${points.length > 6 ? 8 : 10}">${p.quarter}</text>`).join('')}
+<line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#d1d5db" stroke-width="1"/>
+${points.map((p, i) => `<text x="${xS(i)}" y="${H - PB + 20}" text-anchor="middle" fill="#6b7280" font-size="11">${p.quarter.replace('-Q', ' Q')}</text>`).join('')}
 <text x="${W / 2}" y="22" text-anchor="middle" fill="#111827" font-size="14" font-weight="bold">${suburbName} vs North Shore City — Median Price</text>
 ${subLine}
 ${subDots}
@@ -181,7 +182,6 @@ ${distDots}
 <line x1="${W / 2 + 5}" y1="${H - 39}" x2="${W / 2 + 28}" y2="${H - 39}" stroke="${distColor}" stroke-width="2" stroke-dasharray="5,5" stroke-linecap="round"/>
 <circle cx="${W / 2 + 16.5}" cy="${H - 39}" r="3" fill="${distColor}" stroke="white" stroke-width="1"/>
 <text x="${W / 2 + 38}" y="${H - 35}" fill="#374151" font-size="10">North Shore City</text>
-<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="#6b7280" font-size="11">Quarter</text>
 <text x="14" y="${H / 2}" text-anchor="middle" fill="#6b7280" font-size="11" transform="rotate(-90, 14, ${H / 2})">Median Price (NZD)</text>
 </svg>`;
 }
