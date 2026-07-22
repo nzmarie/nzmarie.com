@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateVisitorHash, recordCampaignVisit, getCampaignStats } from '../../lib/campaign-tracker';
+import { generateVisitorHash, anonymizeIP, recordCampaignVisit, getCampaignStats } from '../../lib/campaign-tracker';
 import * as db from '../../lib/db';
 
 vi.mock('../../lib/db', () => ({
@@ -12,6 +12,17 @@ vi.mock('../../lib/db', () => ({
 describe('Campaign Tracker Library', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('anonymizeIP', () => {
+    it('truncates IPv4 address last octet with xxx', () => {
+      expect(anonymizeIP('192.168.1.100')).toBe('192.168.1.xxx');
+      expect(anonymizeIP('203.0.113.195')).toBe('203.0.113.xxx');
+    });
+
+    it('masks IPv6 address last segments', () => {
+      expect(anonymizeIP('2001:db8:85a3:8d3:1319:8a2e:370:7334')).toBe('2001:db8:85a3::xxx');
+    });
   });
 
   describe('generateVisitorHash', () => {

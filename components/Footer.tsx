@@ -73,9 +73,20 @@ export default function Footer({ lang = "en" }: { lang?: Language }) {
 
         </div>
 
-        <p className="text-center text-xs text-gray-500">
-          {t.copyright.replace("{year}", new Date().getFullYear().toString())}
-        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-gray-500">
+          <span>
+            {t.copyright.replace("{year}", new Date().getFullYear().toString())}
+          </span>
+          <span className="hidden sm:inline text-gray-600">|</span>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-gray-300 underline underline-offset-2 transition-colors"
+          >
+            Privacy Policy
+          </a>
+        </div>
 
       </div>
     </footer>

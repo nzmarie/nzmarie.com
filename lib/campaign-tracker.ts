@@ -56,6 +56,23 @@ export async function ensureCampaignTablesExist(): Promise<void> {
   }
 }
 
+export function anonymizeIP(ip: string = ''): string {
+  if (!ip) return '0.0.0.xxx';
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) {
+      return `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
+    }
+  }
+  if (ip.includes(':')) {
+    const parts = ip.split(':');
+    if (parts.length > 2) {
+      return `${parts.slice(0, 3).join(':')}::xxx`;
+    }
+  }
+  return ip;
+}
+
 export function generateVisitorHash(ip: string = '', userAgent: string = ''): string {
   return crypto.createHash('sha256').update(`${ip}-${userAgent}`).digest('hex');
 }
@@ -73,6 +90,7 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   await ensureCampaignTablesExist();
 
   const visitorHash = generateVisitorHash(ip, userAgent);
+  const anonymizedIp = anonymizeIP(ip);
 
   const existing = await query<{ count: string }>(
     `SELECT COUNT(*) as count 
@@ -86,7 +104,7 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   await query(
     `INSERT INTO campaign_visit_logs (campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [campaignKey, visitorHash, ip, userAgent, deviceType, referrer, isUnique]
+    [campaignKey, visitorHash, anonymizedIp, userAgent, deviceType, referrer, isUnique]
   );
 
   await query(
