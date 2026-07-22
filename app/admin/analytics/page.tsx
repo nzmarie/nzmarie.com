@@ -80,6 +80,28 @@ export default function AnalyticsPage() {
   } | null>(null);
   const [lastSoldFilterType, setLastSoldFilterType] = useState<'all' | 'house' | 'townhouse'>('all');
 
+  const [scanData, setScanData] = useState<{
+    total_scans: number;
+    total_unique: number;
+    campaigns: Array<{ campaign_key: string; campaign_name: string; total_pv: number; total_uv: number; last_visited_at: string | null }>;
+    logs: Array<{ id: string; campaign_key: string; visitor_hash: string; ip_address: string; user_agent: string; device_type: string; referrer: string; is_unique: boolean; created_at: string }>;
+  }>({ total_scans: 0, total_unique: 0, campaigns: [], logs: [] });
+
+  const [showScanLogsModal, setShowScanLogsModal] = useState(false);
+  const [selectedScanCampaign, setSelectedScanCampaign] = useState<string>('all');
+
+  const fetchScanData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/analytics/scans');
+      const data = await res.json();
+      if (data.success) {
+        setScanData(data);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const chartReqIdRef = React.useRef(0);
 
   const fetchAvailableSuburbs = useCallback(async () => {
@@ -157,8 +179,9 @@ export default function AnalyticsPage() {
         .catch(() => undefined);
 
       fetchLastSoldData(lastSoldFilterType);
+      fetchScanData();
     }
-  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData, lastSoldFilterType]);
+  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData, fetchScanData, lastSoldFilterType]);
 
   const fetchChartData = useCallback(async (suburbs: string[]) => {
     const reqId = ++chartReqIdRef.current;
@@ -285,7 +308,51 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-2xl">📱</span>
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                QR Scans
+              </span>
+            </div>
+            <button
+              onClick={() => setShowScanLogsModal(true)}
+              className="text-left w-full hover:opacity-80 transition-opacity"
+            >
+              <div className="text-3xl font-bold text-gray-900 mb-1">
+                {scanData.total_scans}
+              </div>
+              <div className="text-sm text-gray-600">Total Scans</div>
+            </button>
+          </div>
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {scanData.campaigns.length > 0 ? (
+                scanData.campaigns.map((c) => (
+                  <span
+                    key={c.campaign_key}
+                    className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
+                  >
+                    {c.campaign_name || c.campaign_key}: {c.total_pv}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs bg-gray-50 text-gray-600 px-2 py-0.5 rounded-md font-medium">
+                  Oteha: 0
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowScanLogsModal(true)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              View Log Details &rarr;
+            </button>
+          </div>
+        </div>
+
         {[
           { label: 'Total Campaigns', value: stats.totalMailed.toString(), icon: '📬', color: 'blue' as const },
           { label: 'Download Rate', value: `${stats.totalMailed > 0 ? ((stats.totalDownloads / stats.totalMailed) * 100).toFixed(0) : 0}%`, icon: '📥', color: 'green' as const },
@@ -617,6 +684,109 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {showScanLogsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">QR Code Scan Logs</h2>
+                <p className="text-sm text-gray-500">Detailed record of direct mail visitor scans</p>
+              </div>
+              <button
+                onClick={() => setShowScanLogsModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedScanCampaign('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  selectedScanCampaign === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                All Campaigns ({scanData.logs.length})
+              </button>
+              {scanData.campaigns.map((c) => (
+                <button
+                  key={c.campaign_key}
+                  onClick={() => setSelectedScanCampaign(c.campaign_key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    selectedScanCampaign === c.campaign_key
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  {c.campaign_name || c.campaign_key} ({c.total_pv})
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {scanData.logs.filter(l => selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign).length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  No scan logs recorded yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                        <th className="py-3 px-4">Time</th>
+                        <th className="py-3 px-4">Campaign</th>
+                        <th className="py-3 px-4">Visitor Fingerprint</th>
+                        <th className="py-3 px-4">Device &amp; IP</th>
+                        <th className="py-3 px-4">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm">
+                      {scanData.logs
+                        .filter(l => selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign)
+                        .map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-50/50">
+                            <td className="py-3 px-4 font-mono text-xs text-gray-600">
+                              {new Date(log.created_at).toLocaleString('en-NZ')}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-gray-900 uppercase text-xs bg-gray-100 px-2 py-0.5 rounded">
+                                {log.campaign_key}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-xs text-gray-500">
+                              {log.visitor_hash ? `${log.visitor_hash.substring(0, 12)}...` : 'N/A'}
+                            </td>
+                            <td className="py-3 px-4 text-xs text-gray-600">
+                              <div>{log.ip_address || 'Unknown IP'}</div>
+                              <div className="text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
+                                {log.device_type ? `${log.device_type} · ` : ''}{log.user_agent || 'Unknown UA'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              {log.is_unique ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                  Unique
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                  Repeat
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -112,8 +112,8 @@ const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
 
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ setQueryData: mockSetQueryData, invalidateQueries: vi.fn() }),
-  useInfiniteQuery: (...args: unknown[]) => mockUseInfiniteQuery(...(args as any)),
-  useQuery: (...args: unknown[]) => mockUseQuery(...(args as any)),
+  useInfiniteQuery: (...args: any[]) => (mockUseInfiniteQuery as any)(...args),
+  useQuery: (...args: any[]) => (mockUseQuery as any)(...args),
   keepPreviousData: vi.fn(),
 }));
 

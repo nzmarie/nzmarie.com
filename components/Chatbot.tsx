@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { MessageSquare } from "lucide-react";
 import { useChat } from "@/app/ChatProvider";
+import { usePathname } from "next/navigation";
 
 const Webchat = dynamic(
   () => import("@botpress/webchat").then((mod) => mod.Webchat),
@@ -10,9 +11,11 @@ const Webchat = dynamic(
 );
 
 export default function Chatbot() {
+  const pathname = usePathname();
   const { open, toggleChat } = useChat();
   const clientId = process.env.NEXT_PUBLIC_CHATBOT_CLIENT_ID;
-  if (!clientId) return null;
+
+  if (pathname === "/" || !clientId) return null;
 
   return (
     <>

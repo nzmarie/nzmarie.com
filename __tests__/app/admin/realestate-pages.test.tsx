@@ -82,7 +82,7 @@ vi.mock('@tanstack/react-query', () => ({
     hasNextPage: false,
     fetchNextPage: vi.fn(),
   }),
-  useQuery: (...args: unknown[]) => mockUseQuery(...(args as any)),
+  useQuery: (...args: any[]) => (mockUseQuery as any)(...args),
   keepPreviousData: vi.fn(),
 }));
 
