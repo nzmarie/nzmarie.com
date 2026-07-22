@@ -103,7 +103,7 @@ export async function PUT(request: Request) {
     const body = JSON.parse(rawBody) as Record<string, unknown>;
 
     const { id, title, content, status, icon, cover_type, cover_value, sort_order, parent_id } = body;
-    const clientModifiedAt = body.client_modified_at ? Number(body.client_modified_at) : null;
+    console.log('[Save] PUT received — id:', id, 'hasTitle:', !!title, 'hasContent:', !!content);
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 });
@@ -115,24 +115,6 @@ export async function PUT(request: Request) {
 
     if (title !== undefined) { paramIdx++; sets.push(`title = $${paramIdx}`); params.push(title); }
     if (content !== undefined) {
-      // optimistic-lock: if client provided a client_modified_at timestamp, ensure we do not blindly overwrite a newer server version
-      if (clientModifiedAt) {
-        try {
-          const cur = await marieQuery('SELECT updated_at, content FROM report_documents WHERE id = $1', [id]);
-          if (cur.rows.length > 0 && cur.rows[0].updated_at) {
-            const serverUpdatedAt = new Date(String(cur.rows[0].updated_at)).getTime();
-            if (serverUpdatedAt > clientModifiedAt) {
-              // return conflict with current server content so client can decide how to merge
-              const currentContent = cur.rows[0].content ? (typeof cur.rows[0].content === 'string' ? JSON.parse(cur.rows[0].content) : cur.rows[0].content) : null;
-              return NextResponse.json({ success: false, conflict: true, currentContent }, { status: 409 });
-            }
-          }
-        } catch (e) {
-          console.error('Failed to check optimistic lock', e);
-          // fall through and attempt update — don't block on lock check failures
-        }
-      }
-
       let finalContent = content;
       if (Array.isArray(content)) {
         const getBlockText = (b: { content?: unknown }): string => {
@@ -200,14 +182,19 @@ export async function PUT(request: Request) {
     sets.push(`updated_at = NOW()`);
     params.push(id);
 
-    await marieQuery(
-      `UPDATE report_documents SET ${sets.join(', ')} WHERE id = $${paramIdx}`,
+    console.log('[Save] PUT executing UPDATE — id:', id, 'sets:', sets.length);
+    const updateResult = await marieQuery<{ updated_at: string }>(
+      `UPDATE report_documents SET ${sets.join(', ')} WHERE id = $${paramIdx} RETURNING updated_at`,
       params
     );
+    const updatedAt = updateResult.rows[0]?.updated_at
+      ? new Date(String(updateResult.rows[0].updated_at)).getTime()
+      : null;
+    console.log('[Save] PUT success — id:', id, 'updated_at:', updatedAt);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, updated_at: updatedAt });
   } catch (error) {
-    console.error('Error updating document:', error);
+    console.error('[Save] PUT error —', error);
     return NextResponse.json({ success: false, error: 'Failed to update document' }, { status: 500 });
   }
 }

@@ -64,9 +64,13 @@ export async function GET() {
       if (!row.doc_id) continue;
       const entry = suburbMap.get(row.suburb_id)!;
       if (row.doc_type === 'suburb_intro') {
-        entry.introDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
+        if (!entry.introDoc) {
+          entry.introDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
+        }
       } else if (row.doc_type === 'letter') {
-        entry.letterDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
+        if (!entry.letterDoc) {
+          entry.letterDoc = { id: row.doc_id, title: row.title ?? '', status: row.status ?? 'draft' };
+        }
       } else if (row.doc_type === 'report') {
         entry.reports.push({
           id: row.doc_id,

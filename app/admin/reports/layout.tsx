@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useReportStore } from './stores/report-store';
 import ReportSidebar from './components/ReportSidebar';
-import DocumentViewer from './components/DocumentViewer';
 
 function toSlug(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-');
@@ -31,7 +30,9 @@ function addToSlugMaps(
     counter++;
   }
   slugMap[slug] = id;
-  idToSlug[id] = slug;
+  if (!idToSlug[id]) {
+    idToSlug[id] = slug;
+  }
 }
 
 const ABOUT_MARIE_CONTENT = [
@@ -49,8 +50,9 @@ const ABOUT_MARIE_CONTENT = [
 ];
 
 export default function ReportsLayout({ children }: { children: React.ReactNode }) {
-  const { setDocuments, setSuburbs, selectedDocId, setSelectedDocId, slugMap, setSlugMap, sidebarCollapsed, setSidebarCollapsed } = useReportStore();
+  const { setDocuments, setSuburbs, slugMap, idToSlug, setSlugMap, sidebarCollapsed, setSidebarCollapsed, refreshKey, setOverviewSuburbs } = useReportStore();
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -67,6 +69,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
         if (subData.success) setSuburbs(subData.suburbs);
 
         if (overviewData.success) {
+          setOverviewSuburbs(overviewData.suburbs);
           const slugMap: Record<string, string> = {};
           const idToSlug: Record<string, string> = {};
 
@@ -131,23 +134,21 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
       }
     };
     fetchData();
-  }, [setDocuments, setSuburbs, setSlugMap]);
+  }, [setDocuments, setSuburbs, setSlugMap, setOverviewSuburbs, refreshKey]);
 
+  // Canonicalize UUID URLs → human-readable slugs (only when slugMap has the mapping)
   useEffect(() => {
     const match = pathname.match(/^\/admin\/reports\/(.+)$/);
     if (match) {
       const slug = match[1];
-      if (/^[a-f0-9-]{36}$/.test(slug)) {
-        setSelectedDocId(slug);
-      } else if (slugMap[slug]) {
-        setSelectedDocId(slugMap[slug]);
-      } else {
-        setSelectedDocId(null);
+      if (/^[a-f0-9-]{36}$/.test(slug) && idToSlug[slug]) {
+        const targetSlug = idToSlug[slug];
+        if (slugMap[targetSlug] === slug) {
+          router.replace(`/admin/reports/${targetSlug}`, { scroll: false });
+        }
       }
-    } else if (pathname === '/admin/reports' || pathname === '/admin/reports/') {
-      setSelectedDocId(null);
     }
-  }, [pathname, setSelectedDocId, slugMap]);
+  }, [pathname, idToSlug, slugMap, router]);
 
   return (
     <>
@@ -335,7 +336,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           <ReportSidebar />
         )}
         <main style={{ flex: 1, overflowY: 'auto', background: 'white' }}>
-          {selectedDocId ? <DocumentViewer docId={selectedDocId} /> : children}
+          {children}
         </main>
       </div>
     </>

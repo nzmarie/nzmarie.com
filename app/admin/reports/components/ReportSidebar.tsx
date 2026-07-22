@@ -3,23 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ConfirmModal from './ConfirmModal';
-import { useReportStore } from '../stores/report-store';
-
-interface SuburbDoc {
-  id: string;
-  title: string;
-  quarter: string;
-  status: string;
-  createdAt: string;
-}
-
-interface SuburbEntry {
-  id: string;
-  name: string;
-  introDoc: { id: string; title: string; status: string } | null;
-  letterDoc: { id: string; title: string; status: string } | null;
-  reports: SuburbDoc[];
-}
+import { useReportStore, OverviewSuburb } from '../stores/report-store';
 
 const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
   'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay',
@@ -27,35 +11,21 @@ const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waia
   'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
   'Hillcrest', 'Birkenhead', 'Hauraki'];
 
-function toSlug(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-');
-}
-
-
 export default function ReportSidebar() {
   const router = useRouter();
   const setSelectedDocId = useReportStore(s => s.setSelectedDocId);
-  const [suburbs, setSuburbs] = useState<SuburbEntry[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [isSuburbsOpen, setIsSuburbsOpen] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedSuburb, setSelectedSuburb] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [aboutMarieDoc, setAboutMarieDoc] = useState<{ id: string } | null>(null);
   const [aboutMarieLoading, setAboutMarieLoading] = useState(true);
 
   const selectedDocId = useReportStore(s => s.selectedDocId);
-  const idToSlug = useReportStore(s => s.idToSlug);
   const setSidebarCollapsed = useReportStore(s => s.setSidebarCollapsed);
-
-  useEffect(() => {
-    fetch('/api/admin/reports/overview')
-      .then((r) => r.json())
-      .then((data) => { if (data.success) setSuburbs(data.suburbs); })
-      .catch(() => {});
-  }, [refreshKey, selectedDocId]);
-
+  const bumpRefreshKey = useReportStore(s => s.bumpRefreshKey);
   const slugMap = useReportStore(s => s.slugMap);
+  const suburbs = useReportStore(s => s.overviewSuburbs);
 
   useEffect(() => {
     if (slugMap['about-marie']) {
@@ -75,12 +45,10 @@ export default function ReportSidebar() {
   }, [slugMap]);
 
   const handleClick = (docId: string) => {
-    setSelectedDocId(docId);
-    const slug = idToSlug[docId];
-    router.replace(`/admin/reports/${slug || docId}`, { scroll: false });
+    router.replace(`/admin/reports/${docId}`, { scroll: false });
   };
 
-  const handleSuburbClick = (name: string, suburbs: SuburbEntry[]) => {
+  const handleSuburbClick = (name: string, suburbs: OverviewSuburb[]) => {
     const suburb = suburbs.find((s) => s.name === name);
     let docId: string | null = null;
     if (suburb?.introDoc) {
@@ -93,9 +61,7 @@ export default function ReportSidebar() {
       setSelectedSuburb(selectedSuburb === name ? null : name);
     }
     if (docId) {
-      setSelectedDocId(docId);
-      const slug = idToSlug[docId] || toSlug(name);
-      router.replace(`/admin/reports/${slug}`, { scroll: false });
+      router.replace(`/admin/reports/${docId}`, { scroll: false });
     }
     setTimeout(() => {
       const el = document.getElementById(`sidebar-${name.replace(/\s+/g, '-')}`);
@@ -107,8 +73,7 @@ export default function ReportSidebar() {
 
   const handleAboutMarieClick = () => {
     if (aboutMarieDoc?.id) {
-      setSelectedDocId(aboutMarieDoc.id);
-      router.replace('/admin/reports/about-marie', { scroll: false });
+      router.replace(`/admin/reports/${aboutMarieDoc.id}`, { scroll: false });
     }
   };
 
@@ -118,7 +83,7 @@ export default function ReportSidebar() {
       const res = await fetch(`/api/admin/reports/documents/${deleteTarget.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        setRefreshKey(k => k + 1);
+        bumpRefreshKey();
         if (selectedDocId === deleteTarget.id) {
           setSelectedDocId(null);
           const suburb = suburbs.find((s) =>
@@ -127,8 +92,12 @@ export default function ReportSidebar() {
             s.reports.some((report) => report.id === deleteTarget.id)
           );
           if (suburb) {
-            const introSlug = `${toSlug(suburb.name)}-introduction`;
-            router.push(`/admin/reports/${introSlug}`);
+            const nextDoc = suburb.introDoc || suburb.letterDoc || suburb.reports?.[0];
+            if (nextDoc) {
+              router.push(`/admin/reports/${nextDoc.id}`);
+            } else {
+              router.push('/admin/reports');
+            }
           } else {
             router.push('/admin/reports');
           }
@@ -286,8 +255,7 @@ export default function ReportSidebar() {
                   <div
                     onClick={() => {
                       if (suburb.introDoc) {
-                        const slug = idToSlug[suburb.introDoc.id] || toSlug(suburb.name);
-                        router.push(`/admin/reports/${slug}`);
+                        router.push(`/admin/reports/${suburb.introDoc.id}`);
                       }
                     }}
                   style={{

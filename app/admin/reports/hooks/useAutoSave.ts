@@ -50,6 +50,7 @@ export function useAutoSave<T>({ data, onSave, delay = 3000, enabled = true }: U
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (timerRef.current) clearTimeout(timerRef.current);
+      saveNow();
     };
   }, [saveNow]);
 

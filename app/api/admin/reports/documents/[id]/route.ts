@@ -24,7 +24,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, document: result.rows[0] });
+    return NextResponse.json({ success: true, document: result.rows[0] }, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
   } catch (error) {
     console.error('Error fetching document:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch document' }, { status: 500 });

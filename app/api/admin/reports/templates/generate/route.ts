@@ -255,7 +255,7 @@ function buildBlocks(
 
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
-  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
+  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Report`] });
   // Add introduction content, stripping any Days to Sell heading/paragraph (handled by KPI card instead)
   const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
   if (filteredIntroContent && filteredIntroContent.length > 0) {
@@ -570,7 +570,7 @@ export async function POST(request: Request) {
       fetchSuburbIntroduction(suburb_id),
     ]);
 
-    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Market Report`;
+    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Report`;
     const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, prevQuarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
 
     const result = await marieQuery<{ id: string }>(

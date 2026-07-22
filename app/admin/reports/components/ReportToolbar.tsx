@@ -74,6 +74,7 @@ export default function ReportToolbar({
   const slugMap = useReportStore(s => s.slugMap);
   const idToSlug = useReportStore(s => s.idToSlug);
   const setSlugMap = useReportStore(s => s.setSlugMap);
+  const bumpRefreshKey = useReportStore(s => s.bumpRefreshKey);
   const [showGenerate, setShowGenerate] = useState(false);
   const [genReportQuarter, setGenReportQuarter] = useState(REPORT_QUARTERS[0]);
   const [genStartQuarter, setGenStartQuarter] = useState(REPORT_QUARTERS[0]);
@@ -126,6 +127,7 @@ export default function ReportToolbar({
         const newSlugMap = { ...slugMap, [slug]: docId };
         const newIdToSlug = { ...idToSlug, [docId]: slug };
         setSlugMap(newSlugMap, newIdToSlug);
+        bumpRefreshKey();
         router.push(`/admin/reports/${slug}`);
       }
     } catch {

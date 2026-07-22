@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createInlineContentSpec, createBlockSpec } from '@blocknote/core';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react';
@@ -223,7 +223,7 @@ const quarterlyDataBlock = createBlockSpec(
           ${p.avgDaysToSell ? `
           <div style="background:rgba(226,242,254,0.7);border:1px solid #cbd5e1;border-radius:12px;padding:20px 24px;">
             <div style="margin-bottom:12px;">
-              <span style="font-size:28px;font-weight:800;color:#1e3a8a;">${p.avgDaysToSell}</span>
+              <span style="font-size:28px;font-weight:800;color:#1e3a8a;">${p.avgDaysToSell} Days to Sell</span>
             </div>
             ${p.insightText ? `<p style="font-size:13px;color:#475569;line-height:1.6;margin:0 0 16px;">${p.insightText}</p>` : ''}
             ${p.compareLabel ? `
@@ -274,13 +274,55 @@ interface ReportEditorProps {
   initialContent: ReportEditorContent | null;
   onContentChange?: (content: ReportEditorContent) => void;
   className?: string;
+  getContentRef?: React.MutableRefObject<(() => ReportEditorContent | null) | null>;
+}
+
+function normalizeBlock(block: any): any {
+  if (!block || typeof block !== 'object') return block;
+
+  const id = block.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36));
+  const type = block.type || 'paragraph';
+  const props = block.props || {};
+  const children = Array.isArray(block.children) ? block.children.map(normalizeBlock) : [];
+
+  let content = block.content;
+  if (Array.isArray(content)) {
+    content = content.map((item: any) => {
+      if (typeof item === 'string') {
+        return { type: 'text', text: item, styles: {} };
+      }
+      if (item && typeof item === 'object') {
+        if (!item.type) item.type = 'text';
+        if (!item.styles) item.styles = {};
+        if (item.text === undefined) item.text = '';
+      }
+      return item;
+    });
+  } else if (typeof content === 'string') {
+    content = [{ type: 'text', text: content, styles: {} }];
+  } else if (!content) {
+    content = [];
+  }
+
+  return {
+    ...block,
+    id,
+    type,
+    props,
+    content,
+    children,
+  };
 }
 
 function migrateContent(content: ReportEditorContent | null): ReportEditorContent | null {
+  if (!content) return content;
+  if (Array.isArray(content)) {
+    return content.map(normalizeBlock) as ReportEditorContent;
+  }
   return content;
 }
 
-export default function ReportEditor({ docId, initialContent, onContentChange, className }: ReportEditorProps) {
+export default function ReportEditor({ docId, initialContent, onContentChange, className, getContentRef }: ReportEditorProps) {
   const { isSaving, lastSaved, setIsSaving, setLastSaved, updateDocument } = useReportStore();
   const { handleImageFile } = useImageUpload();
 
@@ -326,6 +368,35 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
 
   const lastSaveRef = useRef<Promise<any> | null>(null);
 
+  const doFetchSave = useCallback(async (docId: string, safeBlocks: ReportEditorContent | null) => {
+    const body = JSON.stringify({ id: docId, content: safeBlocks });
+    console.log('[Save] PUT start — docId:', docId, 'blocks:', safeBlocks?.length);
+
+    let res;
+    try {
+      res = await fetch('/api/admin/reports/documents', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+    } catch {
+      console.log('[Save] PUT network error — docId:', docId);
+      return new Response(null, { status: 0 });
+    }
+    console.log('[Save] PUT response — docId:', docId, 'status:', res.status);
+    if (!res.ok) {
+      return res;
+    }
+    const result = await res.json();
+    if (result.success) {
+      console.log('[Save] PUT success — docId:', docId);
+      setLastSaved(new Date().toLocaleTimeString('en-NZ'));
+      updateDocument(docId, { content: safeBlocks as ReportEditorContent });
+      onContentChange?.(safeBlocks as ReportEditorContent);
+    }
+    return res;
+  }, [setLastSaved, updateDocument, onContentChange]);
+
   const saveContent = useCallback(async () => {
     const blocks = editor.document;
     const safeBlocks = sanitize(blocks) as ReportEditorContent | null;
@@ -340,31 +411,10 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
     }
 
     setIsSaving(true);
-    const clientModifiedAt = Date.now();
+
     const savePromise = (async () => {
       try {
-        const res = await fetch('/api/admin/reports/documents', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: docId, content: safeBlocks, client_modified_at: clientModifiedAt }),
-        });
-        if (res.status === 409) {
-          // conflict - server rejected because there is a newer version
-          const body = await res.json().catch(() => null);
-          console.warn('Save conflict detected, server has newer content', body);
-          // It's safer to refresh the store with server's content (if provided) than to overwrite
-          if (body?.currentContent) {
-            updateDocument(docId, { content: body.currentContent as ReportEditorContent });
-            onContentChange?.(body.currentContent as ReportEditorContent);
-          }
-          return;
-        }
-        const result = await res.json();
-        if (result.success) {
-          setLastSaved(new Date().toLocaleTimeString('en-NZ'));
-          updateDocument(docId, { content: safeBlocks as ReportEditorContent });
-          onContentChange?.(safeBlocks as ReportEditorContent);
-        }
+        await doFetchSave(docId, safeBlocks);
       } catch (err) {
         console.error('Failed to save report document', err);
         throw err;
@@ -380,7 +430,18 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
       // clear only if this is the same promise
       if (lastSaveRef.current === savePromise) lastSaveRef.current = null;
     }
-  }, [editor, docId, setIsSaving, setLastSaved, updateDocument, onContentChange, sanitize]);
+  }, [editor, docId, setIsSaving, doFetchSave, sanitize]);
+
+  useEffect(() => {
+    if (getContentRef) {
+      getContentRef.current = () => sanitize(editor.document) as ReportEditorContent | null;
+    }
+    return () => {
+      if (getContentRef) {
+        getContentRef.current = null;
+      }
+    };
+  }, [editor, getContentRef, sanitize]);
 
   useAutoSave({
     data: editor.document,

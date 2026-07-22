@@ -1,6 +1,22 @@
 import { create } from 'zustand';
 import type { ReportDocumentTree, ReportSuburb } from '@/types/report';
 
+export interface OverviewSuburbDoc {
+  id: string;
+  title: string;
+  quarter: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface OverviewSuburb {
+  id: string;
+  name: string;
+  introDoc: { id: string; title: string; status: string } | null;
+  letterDoc: { id: string; title: string; status: string } | null;
+  reports: OverviewSuburbDoc[];
+}
+
 interface ReportStore {
   documents: ReportDocumentTree[];
   suburbs: ReportSuburb[];
@@ -10,6 +26,8 @@ interface ReportStore {
   isSaving: boolean;
   lastSaved: string | null;
   sidebarCollapsed: boolean;
+  refreshKey: number;
+  overviewSuburbs: OverviewSuburb[];
   setDocuments: (docs: ReportDocumentTree[]) => void;
   setSuburbs: (suburbs: ReportSuburb[]) => void;
   setSelectedDocId: (id: string | null) => void;
@@ -19,6 +37,8 @@ interface ReportStore {
   setSidebarCollapsed: (collapsed: boolean) => void;
   updateDocument: (id: string, updates: Partial<ReportDocumentTree>) => void;
   removeDocument: (id: string) => void;
+  bumpRefreshKey: () => void;
+  setOverviewSuburbs: (data: OverviewSuburb[]) => void;
 }
 
 export const useReportStore = create<ReportStore>((set) => ({
@@ -30,6 +50,8 @@ export const useReportStore = create<ReportStore>((set) => ({
   isSaving: false,
   lastSaved: null,
   sidebarCollapsed: false,
+  refreshKey: 0,
+  overviewSuburbs: [],
 
   setDocuments: (documents) => set({ documents }),
   setSuburbs: (suburbs) => set({ suburbs }),
@@ -48,4 +70,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   removeDocument: (id) => set((state) => ({
     documents: state.documents.filter((d) => d.id !== id),
   })),
+
+  bumpRefreshKey: () => set((state) => ({ refreshKey: state.refreshKey + 1 })),
+  setOverviewSuburbs: (overviewSuburbs) => set({ overviewSuburbs }),
 }));
