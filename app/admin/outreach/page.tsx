@@ -2370,7 +2370,16 @@ export default function OutreachPage() {
                                     ⇨ Pending
                                   </button>
                                 )}
-                                {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                                    className="transition-colors px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded text-xs font-medium border border-slate-200"
+                                    title="View dispatch history"
+                                  >
+                                    <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
+                                    {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                                  </button>
+                                  {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
                                   <button
                                     type="button"
                                     onClick={async () => {
