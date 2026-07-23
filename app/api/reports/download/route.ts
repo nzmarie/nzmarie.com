@@ -6,7 +6,7 @@ import { updateDownloadTracking } from "../../../../lib/tracking";
 
 const DOWNLOAD_LIMIT = 5;
 const DOWNLOAD_WINDOW_DAYS = 30;
-const allowedSuburbs = ["Northcross", "Albany", "Browns Bay", "Glenfield", "Others"];
+const allowedSuburbs = ["Oteha", "Northcross", "Albany", "Browns Bay", "Glenfield", "Pinehill", "Rosedale", "Long Bay", "Torbay", "Mairangi Bay", "Others"];
 
 function isAllowedSuburb(value: unknown): value is string {
   return typeof value === "string" && allowedSuburbs.includes(value);
@@ -72,17 +72,33 @@ export async function POST(req: Request) {
       );
     }
 
-    const reportResult = await query<{ r2_key: string }>(
-      `SELECT r2_key FROM market_reports WHERE suburb = $1 AND is_active = true LIMIT 1`,
+    const suburbReportResult = await query<{ id: string; file_url: string }>(
+      `SELECT id, file_url FROM suburb_reports WHERE suburb = $1 AND status = 'active' ORDER BY year DESC, quarter DESC, uploaded_at DESC LIMIT 1`,
       [suburb]
     );
+    const suburbReportRows = getRows<{ id: string; file_url: string }>(suburbReportResult);
 
-    const reportRows = getRows<{ r2_key: string }>(reportResult);
+    let fileUrlFromSuburbReports: string | null = null;
     let r2Key: string;
-    if (reportRows.length > 0) {
-      r2Key = reportRows[0].r2_key;
-    } else {
+
+    if (suburbReportRows.length > 0 && suburbReportRows[0].file_url) {
+      fileUrlFromSuburbReports = suburbReportRows[0].file_url;
       r2Key = `reports/${suburb}/latest.pdf`;
+      await query(
+        `UPDATE suburb_reports SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1`,
+        [suburbReportRows[0].id]
+      ).catch(() => null);
+    } else {
+      const reportResult = await query<{ r2_key: string }>(
+        `SELECT r2_key FROM market_reports WHERE suburb = $1 AND is_active = true LIMIT 1`,
+        [suburb]
+      );
+      const reportRows = getRows<{ r2_key: string }>(reportResult);
+      if (reportRows.length > 0) {
+        r2Key = reportRows[0].r2_key;
+      } else {
+        r2Key = `reports/${suburb}/latest.pdf`;
+      }
     }
 
     const insertResult = await query<{ id: string }>(
@@ -107,6 +123,11 @@ export async function POST(req: Request) {
 
     if (!eventId) {
       return NextResponse.json({ success: false, message: "Failed to create download event" }, { status: 500 });
+    }
+
+    if (fileUrlFromSuburbReports) {
+      await query(`UPDATE report_download_events SET status = 'completed' WHERE id = $1`, [eventId]);
+      return NextResponse.json({ success: true, action: 'download', downloadUrl: fileUrlFromSuburbReports });
     }
 
     if (process.env.NODE_ENV === 'production') {

@@ -41,6 +41,7 @@ describe("POST /api/reports/download (refactored)", () => {
   it("returns 200 with signed URL on valid request", async () => {
     vi.mocked(query)
       .mockResolvedValueOnce({ rows: [{ count: "0" }] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
       .mockResolvedValueOnce({ rows: [{ r2_key: "reports/Albany/2026-Q2.pdf" }] } as any)
       .mockResolvedValueOnce({ rows: [{ id: "event-uuid" }] } as any)
       .mockResolvedValueOnce({ rows: [] } as any);

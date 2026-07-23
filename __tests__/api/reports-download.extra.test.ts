@@ -44,6 +44,7 @@ describe("reports download route extra cases", () => {
     process.env.NODE_ENV = "test";
     vi.mocked(query)
       .mockResolvedValueOnce({ rows: [{ count: "0" }] } as any) // recent count
+      .mockResolvedValueOnce({ rows: [] } as any) // suburbReportResult empty
       .mockResolvedValueOnce({ rows: [] } as any) // reportResult empty
       .mockResolvedValueOnce({ rows: [{ id: "event-1" }] } as any) // insert
       .mockResolvedValueOnce({ rows: [] } as any); // update

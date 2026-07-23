@@ -32,6 +32,9 @@ export async function GET(request: Request) {
   const standaloneOnly = searchParams.get('standalone_only');
   const townhouseOnly = searchParams.get('townhouse_only');
   const marketStatus = searchParams.get('market_status');
+  const sentStatus = searchParams.get('sent_status');
+  const reportQuarter = searchParams.get('report_quarter');
+  const sortMode = searchParams.get('sort_mode');
 
   try {
     await marieDB.ensureOutreachTablesExist?.();
@@ -39,6 +42,12 @@ export async function GET(request: Request) {
       SELECT 
         op.*,
         COUNT(*) OVER() as total_count,
+        ls.report_title as latest_send_title,
+        ls.sent_at as latest_sent_at,
+        ls.campaign_key as latest_campaign,
+        ls.quarter as latest_send_quarter,
+        ls.year as latest_send_year,
+        ls.report_suburb as latest_send_report_suburb,
         p.id as joined_property_id,
         p.property_url,
         p.cover_image_url as image_url,
@@ -72,18 +81,30 @@ export async function GET(request: Request) {
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
       LEFT JOIN real_estate re ON TRIM(LOWER(SPLIT_PART(re.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(re.suburb)) = TRIM(LOWER(p.suburb))
       LEFT JOIN real_estate_rent rer ON TRIM(LOWER(SPLIT_PART(rer.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(rer.suburb)) = TRIM(LOWER(p.suburb))
+      LEFT JOIN LATERAL (
+        SELECT sl.report_title, sl.sent_at, sl.campaign_key, sr.quarter, sr.year, sr.suburb as report_suburb
+        FROM outreach_send_logs sl
+        LEFT JOIN suburb_reports sr ON sl.suburb_report_id = sr.id
+        WHERE sl.outreach_property_id = op.id
+        ORDER BY sl.sent_at DESC
+        LIMIT 1
+      ) ls ON true
       WHERE 1=1
     `;
     const params: unknown[] = [];
     let idx = 1;
 
-    if (status) {
+    if (status === 'sent') {
+      query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = op.id)`;
+    } else if (status) {
       query += ` AND op.status = $${idx++}`;
       params.push(status);
     }
+
     if (campaign) {
-      query += ` AND op.campaign = $${idx++}`;
+      query += ` AND (op.campaign = $${idx} OR op.last_campaign = $${idx} OR EXISTS (SELECT 1 FROM outreach_send_logs sl WHERE sl.outreach_property_id = op.id AND sl.campaign_key = $${idx}))`;
       params.push(campaign);
+      idx++;
     }
     if (region) {
       query += ` AND op.region ILIKE $${idx++}`;
@@ -141,19 +162,63 @@ export async function GET(request: Request) {
       query += ` AND re.id IS NULL AND rer.id IS NULL`;
     }
 
+    // sent_status + report_quarter filters (for pending tab: show sent/unsent by report)
+    if (sentStatus === 'sent') {
+      if (suburb) {
+        let sub = `SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = op.id AND sr3.suburb = $${idx}`;
+        params.push(suburb);
+        idx++;
+        if (reportQuarter) {
+          const parts = reportQuarter.split('-');
+          if (parts.length === 2) {
+            const y = parseInt(parts[0], 10);
+            sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx+1}`;
+            params.push(parts[1], isNaN(y) ? 0 : y);
+            idx += 2;
+          }
+        }
+        query += ` AND EXISTS (${sub})`;
+      } else {
+        query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id)`;
+      }
+    } else if (sentStatus === 'unsent') {
+      if (suburb) {
+        let sub = `SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = op.id AND sr3.suburb = $${idx}`;
+        params.push(suburb);
+        idx++;
+        if (reportQuarter) {
+          const parts = reportQuarter.split('-');
+          if (parts.length === 2) {
+            const y = parseInt(parts[0], 10);
+            sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx+1}`;
+            params.push(parts[1], isNaN(y) ? 0 : y);
+            idx += 2;
+          }
+        }
+        query += ` AND NOT EXISTS (${sub})`;
+      } else {
+        query += ` AND NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id)`;
+      }
+    }
+
     const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
-    query += ` 
-      ORDER BY 
-        op.suburb ASC,
-        COALESCE(
-          NULLIF(TRIM(op.street), ''),
-          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
-        ) ASC,
-        NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
-        op.created_at ${orderDirection}
-      LIMIT $${idx++} OFFSET $${idx++}
-    `;
-    params.push(limit, offset);
+    if (sortMode === 'time') {
+      query += ` ORDER BY ls.sent_at DESC NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
+      params.push(limit, offset);
+    } else {
+      query += ` 
+        ORDER BY 
+          op.suburb ASC,
+          COALESCE(
+            NULLIF(TRIM(op.street), ''),
+            TRIM(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
+          ) ASC,
+          NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
+          op.created_at ${orderDirection}
+        LIMIT $${idx++} OFFSET $${idx++}
+      `;
+      params.push(limit, offset);
+    }
 
     const result = await marieDB.query(query, params);
     const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;

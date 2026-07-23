@@ -8,11 +8,15 @@ import { SkeletonOutreach, SkeletonOutreachCard, SkeletonOutreachListRow } from 
 import AddressAutocomplete from '@/components/property/AddressAutocomplete';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
+import SendReportModal from './components/SendReportModal';
+import DispatchHistoryDrawer from './components/DispatchHistoryDrawer';
 import {
   FaBed,
   FaBath,
   FaCar,
   FaRulerCombined,
+  FaHistory,
+  FaPaperPlane,
 } from 'react-icons/fa';
 
 interface OutreachProperty {
@@ -27,6 +31,9 @@ interface OutreachProperty {
   campaign: string;
   status: 'pending' | 'sent' | 'interacted' | 'converted' | 'liked';
   sent_at?: string;
+  last_sent_at?: string;
+  total_send_count?: number;
+  last_campaign?: string;
   interacted_at?: string;
   converted_at?: string;
   created_at: string;
@@ -60,6 +67,12 @@ interface OutreachProperty {
   on_market_rent?: boolean;
   rent_listing_status?: string | null;
   rent_price?: string | null;
+  latest_send_title?: string | null;
+  latest_sent_at?: string | null;
+  latest_campaign?: string | null;
+  latest_send_quarter?: string | null;
+  latest_send_year?: number | null;
+  latest_send_report_suburb?: string | null;
 }
 
 interface PaginationMeta {
@@ -206,6 +219,12 @@ export default function OutreachPage() {
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
 
+  const [reportSuburbFilter, setReportSuburbFilter] = useState('');
+  const [reportQuarterFilter, setReportQuarterFilter] = useState('');
+  const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'sent' | 'unsent'>('all');
+  const [sortMode, setSortMode] = useState<'address' | 'time'>('address');
+  const [availableReports, setAvailableReports] = useState<Array<{ suburb: string; quarter: string; year: number; id: string }>>([]);
+
   // Debounce filter changes: only trigger fetch after 300ms of filter stability
   const [debouncedFilterKey, setDebouncedFilterKey] = useState(0);
   const filterDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -222,7 +241,7 @@ export default function OutreachPage() {
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
@@ -235,12 +254,37 @@ export default function OutreachPage() {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const canMarkAsSent = isAdmin(session?.user?.email ?? '');
 
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sendTargetIds, setSendTargetIds] = useState<string[]>([]);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [historyTargetId, setHistoryTargetId] = useState<string | null>(null);
+  const [historyTargetAddress, setHistoryTargetAddress] = useState<string>('');
+
+  const openSendModal = (ids?: string[]) => {
+    const targets = ids || Array.from(selected);
+    if (targets.length === 0) return;
+    setSendTargetIds(targets);
+    setSendModalOpen(true);
+  };
+
+  const openHistoryDrawer = (id: string, address: string) => {
+    setHistoryTargetId(id);
+    setHistoryTargetAddress(address);
+    setHistoryDrawerOpen(true);
+  };
+
   // Edit Property modal (edits the linked properties table record)
   const [editingProperty, setEditingProperty] = useState<OutreachProperty | null>(null);
   const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
   const [saving, setSaving] = useState(false);
+  const [sendHistory, setSendHistory] = useState<Array<{
+    log_id: string; report_title: string; campaign_key: string;
+    sent_at: string; sent_by: string; notes?: string;
+    pdf_file_url?: string; pdf_file_name?: string; scan_count: number;
+  }>>([]);
+  const [sendHistoryLoading, setSendHistoryLoading] = useState(false);
 
-  const openEditModal = (prop: OutreachProperty) => {
+  const openEditModal = async (prop: OutreachProperty) => {
     setEditingProperty(prop);
     setEditFormData({
       address: prop.property_address || '',
@@ -261,6 +305,20 @@ export default function OutreachPage() {
       description: prop.description || '',
       property_history: prop.property_history || '',
     });
+    setSendHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/admin/outreach/${prop.id}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setSendHistory(data.history || []);
+      } else {
+        setSendHistory([]);
+      }
+    } catch {
+      setSendHistory([]);
+    } finally {
+      setSendHistoryLoading(false);
+    }
   };
 
   const handleEditFieldChange = (key: string, value: string) => {
@@ -325,9 +383,10 @@ export default function OutreachPage() {
     return [
       activeTab, suburbFilter, streetFilter, campaignFilter,
       debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset,
+      reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -370,6 +429,9 @@ export default function OutreachPage() {
         params.set('last_sold_min_years', '15');
       }
     }
+    if (sentStatusFilter !== 'all') params.set('sent_status', sentStatusFilter);
+    if (reportQuarterFilter) params.set('report_quarter', reportQuarterFilter);
+    if (sortMode === 'time') params.set('sort_mode', 'time');
 
     const res = await fetch(`/api/admin/outreach?${params}`, { signal: controller.signal });
     if (controller.signal.aborted) {
@@ -385,7 +447,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -550,26 +612,13 @@ export default function OutreachPage() {
     return 'pending';
   };
 
-  const handleMarkAsSentSuccess = (updatedProperties: OutreachProperty[]) => {
-    const removedIds = new Set(updatedProperties.map((u) => u.id));
-    setItems((prev) => prev.filter((item) => !removedIds.has(item.id)));
-    setClassicItems((prev) => prev.filter((item) => !removedIds.has(item.id)));
-    // Keep the cache in sync so a tab switch doesn't resurrect removed items.
-    for (const [key, entry] of cacheRef.current) {
-      const filtered = entry.items.filter((item) => !removedIds.has(item.id));
-      if (filtered.length !== entry.items.length) {
-        cacheRef.current.set(key, {
-          ...entry,
-          items: filtered,
-          pagination: entry.pagination
-            ? { ...entry.pagination, total: Math.max(0, entry.pagination.total - (entry.items.length - filtered.length)) }
-            : entry.pagination,
-        });
-      }
+  const handleMarkAsSentSuccess = () => {
+    cacheRef.current.clear();
+    if (isClassic) {
+      setCurrentPage(currentPage);
+    } else {
+      fetchItems();
     }
-    const dec = (p: PaginationMeta | null) => p ? { ...p, total: Math.max(0, p.total - updatedProperties.length) } : p;
-    setPagination(dec);
-    setClassicPagination(dec);
   };
 
   const toggleStreet = (suburb: string, street: string) => {
@@ -596,28 +645,9 @@ export default function OutreachPage() {
     setSelectedByTab((prev) => ({ ...prev, [activeTab]: new Set() }));
   };
 
-  const markAsSent = async () => {
+  const markAsSent = () => {
     if (selected.size === 0) return;
-    try {
-      const results = await Promise.all(
-        Array.from(selected).map(async (id) => {
-          const response = await fetch(`/api/admin/outreach/${id}/mark-sent`, {
-            method: 'PATCH',
-          });
-          const data = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error(data?.error || 'Failed to mark as sent');
-          }
-          return data.data as OutreachProperty;
-        })
-      );
-      if (results.length === 0) return;
-      showNotification('success', `Marked ${selected.size} address${selected.size === 1 ? '' : 'es'} as sent`);
-      clearSelected();
-      handleMarkAsSentSuccess(results);
-    } catch {
-      showNotification('error', 'Bulk update failed');
-    }
+    openSendModal();
   };
 
   const markAsPending = async () => {
@@ -638,7 +668,7 @@ export default function OutreachPage() {
       if (results.length === 0) return;
       showNotification('success', `Moved ${selected.size} address${selected.size === 1 ? '' : 'es'} to Pending`);
       clearSelected();
-      handleMarkAsSentSuccess(results);
+      handleMarkAsSentSuccess();
     } catch {
       showNotification('error', 'Bulk update failed');
     }
@@ -662,7 +692,7 @@ export default function OutreachPage() {
       if (results.length === 0) return;
       showNotification('success', `Moved ${selected.size} address${selected.size === 1 ? '' : 'es'} to Liked`);
       clearSelected();
-      handleMarkAsSentSuccess(results);
+      handleMarkAsSentSuccess();
     } catch {
       showNotification('error', 'Bulk update failed');
     }
@@ -889,7 +919,7 @@ export default function OutreachPage() {
             {(['liked', 'pending', 'sent'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode('address'); }}
                 style={{
                   padding: '8px 18px',
                   backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
@@ -920,6 +950,48 @@ export default function OutreachPage() {
             ))}
           </div>
         </div>
+
+        {activeTab === 'pending' && (
+          <div style={{ marginBottom: "20px", padding: "16px", backgroundColor: "#f8faff", borderRadius: "12px", border: "1px solid #dbeafe" }}>
+            <ReportFilterSection
+              availableReports={availableReports}
+              setAvailableReports={setAvailableReports}
+              reportSuburbFilter={reportSuburbFilter}
+              setReportSuburbFilter={setReportSuburbFilter}
+              reportQuarterFilter={reportQuarterFilter}
+              setReportQuarterFilter={setReportQuarterFilter}
+              sentStatusFilter={sentStatusFilter}
+              setSentStatusFilter={setSentStatusFilter}
+              setSuburbFilter={setSuburbFilter}
+            />
+          </div>
+        )}
+
+        {activeTab === 'sent' && (
+          <div style={{ marginBottom: "20px", display: "flex", gap: "8px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.875rem", fontWeight: "500", color: "#4a5568" }}>Sort:</span>
+            {([
+              { value: 'address' as const, label: 'By Street' },
+              { value: 'time' as const, label: 'By Time' },
+            ]).map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSortMode(opt.value)}
+                style={{
+                  padding: '6px 14px',
+                  backgroundColor: sortMode === opt.value ? '#8b5cf6' : 'white',
+                  color: sortMode === opt.value ? 'white' : '#4a5568',
+                  border: sortMode === opt.value ? '2px solid #8b5cf6' : '2px solid #e2e8f0',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
+                  fontWeight: sortMode === opt.value ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
@@ -1168,6 +1240,10 @@ export default function OutreachPage() {
               setPropertyFilter('all');
               setMarketStatus('all');
               setActiveTab('liked');
+              setReportSuburbFilter('');
+              setReportQuarterFilter('');
+              setSentStatusFilter('all');
+              setSortMode('address');
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
@@ -1354,7 +1430,7 @@ export default function OutreachPage() {
                 if (results.length === 0) return;
                 showNotification('success', `Moved ${selected.size} address${selected.size === 1 ? '' : 'es'} to Pending`);
                 clearSelected();
-                handleMarkAsSentSuccess(results);
+                handleMarkAsSentSuccess();
               } catch {
                 showNotification('error', 'Bulk update failed');
               }
@@ -1698,6 +1774,22 @@ export default function OutreachPage() {
                         {prop.suburb}, {prop.city}
                       </div>
 
+                      {(activeTab === 'pending' || activeTab === 'sent') && prop.latest_send_title && (
+                        <div style={{
+                          fontSize: '0.8rem', color: '#7c3aed', marginBottom: '14px',
+                          padding: '8px 12px', backgroundColor: '#f5f3ff', borderRadius: '8px',
+                          border: '1px solid #ede9fe', display: 'flex', alignItems: 'center', gap: '6px',
+                        }}>
+                          <span>📄</span>
+                          <span style={{ fontWeight: '500' }}>{prop.latest_send_title}</span>
+                          {prop.latest_sent_at && (
+                            <span style={{ color: '#a78bfa', marginLeft: 'auto', fontSize: '0.75rem' }}>
+                              {new Date(prop.latest_sent_at).toLocaleDateString('en-NZ')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                     {/* Price & RV Section */}
                     <div style={{
                       display: 'flex',
@@ -1832,7 +1924,7 @@ export default function OutreachPage() {
                               if (!res.ok) throw new Error('Failed');
                               const data = await res.json();
                               showNotification('success', 'Moved to Pending');
-                              handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                              handleMarkAsSentSuccess();
                             } catch {
                               showNotification('error', 'Failed to move to Pending');
                             }
@@ -1851,20 +1943,9 @@ export default function OutreachPage() {
                           ⇨ Pending
                         </button>
                       )}
-                      {activeTab === 'pending' && canMarkAsSent && (
+                      {canMarkAsSent && (
                         <button
-                          onClick={async () => {
-                            if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
-                            try {
-                              const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, { method: 'PATCH' });
-                              if (!res.ok) throw new Error('Failed');
-                              const data = await res.json();
-                              showNotification('success', 'Marked as sent');
-                              handleMarkAsSentSuccess([data.data as OutreachProperty]);
-                            } catch {
-                              showNotification('error', 'Failed to mark as sent');
-                            }
-                          }}
+                          onClick={() => openSendModal([prop.id])}
                           style={{
                             fontSize: '0.75rem',
                             padding: '4px 10px',
@@ -1876,9 +1957,27 @@ export default function OutreachPage() {
                             fontWeight: '600',
                           }}
                         >
-                          ✓ Sent
+                          <FaPaperPlane style={{ display: 'inline', marginRight: '4px' }} />
+                          Send Report
                         </button>
                       )}
+                      <button
+                        onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#f8fafc',
+                          color: '#475569',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                        title="View dispatch history"
+                      >
+                        <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
+                        {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                      </button>
                       {activeTab === 'pending' && (
                         <button
                           onClick={async () => {
@@ -1892,7 +1991,7 @@ export default function OutreachPage() {
                                 if (!res.ok) throw new Error('Failed');
                                 const data = await res.json();
                                 showNotification('success', 'Returned to Liked');
-                                handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                handleMarkAsSentSuccess();
                               } catch {
                                 showNotification('error', 'Failed to return to Liked');
                               }
@@ -1925,7 +2024,7 @@ export default function OutreachPage() {
                               if (!res.ok) throw new Error('Failed');
                               const data = await res.json();
                               showNotification('success', 'Returned to Pending');
-                              handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                              handleMarkAsSentSuccess();
                             } catch {
                               showNotification('error', 'Failed to return to Pending');
                             }
@@ -2186,7 +2285,7 @@ export default function OutreachPage() {
                                         if (!res.ok) throw new Error('Failed');
                                         const data = await res.json();
                                         showNotification('success', 'Moved to Pending');
-                                        handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                        handleMarkAsSentSuccess();
                                       } catch {
                                         showNotification('error', 'Failed to move to Pending');
                                       }
@@ -2209,7 +2308,7 @@ export default function OutreachPage() {
                                         if (!res.ok) throw new Error('Failed to mark as sent');
                                         const data = await res.json();
                                         showNotification('success', 'Marked as sent');
-                                        handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                        handleMarkAsSentSuccess();
                                       } catch {
                                         showNotification('error', 'Failed to mark as sent');
                                       }
@@ -2234,7 +2333,7 @@ export default function OutreachPage() {
                                           if (!res.ok) throw new Error('Failed');
                                           const data = await res.json();
                                           showNotification('success', 'Returned to Liked');
-                                          handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                          handleMarkAsSentSuccess();
                                         } catch {
                                           showNotification('error', 'Failed to return to Liked');
                                         }
@@ -2260,7 +2359,7 @@ export default function OutreachPage() {
                                         if (!res.ok) throw new Error('Failed');
                                         const data = await res.json();
                                         showNotification('success', 'Returned to Pending');
-                                        handleMarkAsSentSuccess([data.data as OutreachProperty]);
+                                        handleMarkAsSentSuccess();
                                       } catch {
                                         showNotification('error', 'Failed to return to Pending');
                                       }
@@ -2400,6 +2499,52 @@ export default function OutreachPage() {
               <p style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '24px' }}>
                 {editingProperty.property_address} — edits are saved to the linked Properties record
               </p>
+
+              {/* Send History */}
+              {sendHistoryLoading ? (
+                <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ height: '20px', width: '120px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '12px', animation: 'pulse 2s infinite' }} />
+                  <div style={{ height: '60px', backgroundColor: '#e2e8f0', borderRadius: '8px', animation: 'pulse 2s infinite' }} />
+                </div>
+              ) : sendHistory.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#7c3aed', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>📋</span> Dispatch History
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {sendHistory.map((log) => (
+                      <div key={log.log_id} style={{
+                        padding: '12px 14px', backgroundColor: '#f5f3ff', borderRadius: '10px',
+                        border: '1px solid #ede9fe',
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#7c3aed', backgroundColor: '#ede9fe', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                              {log.campaign_key}
+                            </span>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#2D3748', marginTop: '4px' }}>
+                              {log.report_title}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#a78bfa', whiteSpace: 'nowrap' }}>
+                            {new Date(log.sent_at).toLocaleDateString('en-NZ')}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#718096', marginTop: '6px', display: 'flex', gap: '12px' }}>
+                          <span>By: {log.sent_by}</span>
+                          {log.scan_count > 0 && <span>📷 Scanned: {log.scan_count}</span>}
+                        </div>
+                          {log.notes && (
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
+                              &ldquo;{log.notes}&rdquo;
+                            </div>
+                          )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 {[
                   { key: 'address', label: 'Address', type: 'text' },
@@ -2482,10 +2627,154 @@ export default function OutreachPage() {
             </div>
           </div>
         )}
+
+        <SendReportModal
+          isOpen={sendModalOpen}
+          onClose={() => setSendModalOpen(false)}
+          selectedIds={sendTargetIds}
+          suburb={suburbFilter}
+          onSuccess={() => {
+            showNotification('success', 'Report dispatch logged successfully');
+            clearSelected();
+            cacheRef.current.clear();
+            if (isClassic) {
+              setCurrentPage(currentPage);
+            } else {
+              fetchItems();
+            }
+          }}
+        />
+
+        <DispatchHistoryDrawer
+          isOpen={historyDrawerOpen}
+          onClose={() => setHistoryDrawerOpen(false)}
+          propertyId={historyTargetId}
+          propertyAddress={historyTargetAddress}
+        />
       </div>
     </div>
   );
 }
 
-
-
+function ReportFilterSection({
+  availableReports, setAvailableReports,
+  reportSuburbFilter, setReportSuburbFilter,
+  reportQuarterFilter, setReportQuarterFilter,
+  sentStatusFilter, setSentStatusFilter,
+  setSuburbFilter,
+}: {
+  availableReports: Array<{ suburb: string; quarter: string; year: number; id: string }>;
+  setAvailableReports: React.Dispatch<React.SetStateAction<Array<{ suburb: string; quarter: string; year: number; id: string }>>>;
+  reportSuburbFilter: string;
+  setReportSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
+  reportQuarterFilter: string;
+  setReportQuarterFilter: React.Dispatch<React.SetStateAction<string>>;
+  sentStatusFilter: 'all' | 'sent' | 'unsent';
+  setSentStatusFilter: React.Dispatch<React.SetStateAction<'all' | 'sent' | 'unsent'>>;
+  setSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
+}) {
+  const [loaded, setLoaded] = useState(availableReports.length > 0);
+  const [loading, setLoading] = useState(false);
+  const loadReports = useCallback(async () => {
+    if (loading || loaded) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/pdf/reports?status=active');
+      if (res.ok) {
+        const data = await res.json();
+        const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string }) => ({
+          suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id,
+        }));
+        setAvailableReports(reports);
+        setLoaded(true);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [loading, loaded, setAvailableReports]);
+  return (
+    <>
+      <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+        📋 Filter by Report
+      </label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+        {availableReports.length === 0 ? (
+          <button onClick={loadReports} disabled={loading}
+            style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
+          >{loading ? 'Loading...' : 'Show Reports'}</button>
+        ) : [...new Set(availableReports.map(r => r.suburb))].sort().map(s => (
+          <button
+            key={s}
+            onClick={() => {
+              setSuburbFilter(prev => prev === s ? '' : s);
+              setReportSuburbFilter(prev => prev === s ? '' : s);
+              setReportQuarterFilter('');
+            }}
+            style={{
+              padding: '7px 14px',
+              backgroundColor: reportSuburbFilter === s ? '#2563eb' : 'white',
+              color: reportSuburbFilter === s ? 'white' : '#4a5568',
+              border: reportSuburbFilter === s ? '2px solid #2563eb' : '2px solid #e2e8f0',
+              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+              fontWeight: reportSuburbFilter === s ? '600' : '500',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {s}
+          </button>
+        ))}
+        {reportSuburbFilter && (
+          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); }}
+            style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
+          >✕ Clear</button>
+        )}
+      </div>
+      {reportSuburbFilter && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+          {availableReports.filter(r => r.suburb === reportSuburbFilter).map(r => {
+            const label = `${r.year}-${r.quarter}`;
+            return (
+              <button
+                key={`${r.suburb}-${label}`}
+                onClick={() => setReportQuarterFilter(prev => prev === label ? '' : label)}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: reportQuarterFilter === label ? '#3b82f6' : '#eff6ff',
+                  color: reportQuarterFilter === label ? 'white' : '#2563eb',
+                  border: reportQuarterFilter === label ? '2px solid #3b82f6' : '2px solid #bfdbfe',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
+                  fontWeight: reportQuarterFilter === label ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "8px" }}>
+        {([
+          { value: 'all' as const, label: 'All', color: '#6b7280' },
+          { value: 'unsent' as const, label: 'Unsent', color: '#16a34a' },
+          { value: 'sent' as const, label: 'Sent ✓', color: '#8b5cf6' },
+        ]).map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setSentStatusFilter(opt.value)}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: sentStatusFilter === opt.value ? opt.color : 'white',
+              color: sentStatusFilter === opt.value ? 'white' : '#4a5568',
+              border: sentStatusFilter === opt.value ? `2px solid ${opt.color}` : '2px solid #e2e8f0',
+              borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
+              fontWeight: sentStatusFilter === opt.value ? '600' : '500',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}

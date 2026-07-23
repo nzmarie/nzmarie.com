@@ -145,7 +145,16 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
                 onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-white"
               >
+                <option value="Oteha">Oteha</option>
                 <option value="Northcross">Northcross</option>
+                <option value="Albany">Albany</option>
+                <option value="Browns Bay">Browns Bay</option>
+                <option value="Glenfield">Glenfield</option>
+                <option value="Pinehill">Pinehill</option>
+                <option value="Rosedale">Rosedale</option>
+                <option value="Long Bay">Long Bay</option>
+                <option value="Torbay">Torbay</option>
+                <option value="Mairangi Bay">Mairangi Bay</option>
               </select>
             </div>
             <div className="flex flex-col">
