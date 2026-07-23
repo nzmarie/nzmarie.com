@@ -7,6 +7,8 @@ import Image from 'next/image';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
 import { FaBed, FaBath, FaCar, FaRulerCombined, FaMapMarkerAlt } from 'react-icons/fa';
+import { LeadEditModal } from '@/components/admin/LeadEditModal';
+import { PropertyEditModal } from '@/components/admin/PropertyEditModal';
 
 interface Lead {
   id: string;
@@ -132,6 +134,14 @@ export default function LeadsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Lead>>({});
 
+  const [leadEditOpen, setLeadEditOpen] = useState(false);
+  const [leadEditData, setLeadEditData] = useState<Partial<Lead>>({});
+  const [leadEditLoading, setLeadEditLoading] = useState(false);
+
+  const [propertyEditOpen, setPropertyEditOpen] = useState(false);
+  const [propertyEditData, setPropertyEditData] = useState<Partial<Lead>>({});
+  const [propertyEditLoading, setPropertyEditLoading] = useState(false);
+
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [eventForm, setEventForm] = useState({ event_type: 'note', title: '', description: '' });
 
@@ -197,6 +207,128 @@ export default function LeadsPage() {
   const openEdit = (lead: Lead) => {
     setEditData({ ...lead });
     setEditOpen(true);
+  };
+
+  const openLeadEdit = (lead: Lead) => {
+    setLeadEditData({ ...lead });
+    setLeadEditOpen(true);
+  };
+
+  const openPropertyEdit = (lead: Lead) => {
+    setPropertyEditData({ ...lead });
+    setPropertyEditOpen(true);
+  };
+
+  // Listen for global edit/convert events to maintain consistency with properties page
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as any;
+      // payload may be a Lead or Property-like object; treat it as the selected lead
+      setSelectedLead(payload);
+      setPropertyEditData({ ...payload });
+      setPropertyEditOpen(true);
+    };
+    window.addEventListener('open-edit-modal', handler);
+    return () => window.removeEventListener('open-edit-modal', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as any;
+      // Open the lead edit modal for the given payload
+      setSelectedLead(payload);
+      setLeadEditData({ ...payload });
+      setLeadEditOpen(true);
+    };
+    window.addEventListener('open-convert-modal', handler);
+    return () => window.removeEventListener('open-convert-modal', handler);
+  }, []);
+
+  const handleLeadEditDataChange = (key: string, value: string | number | boolean) => {
+    setLeadEditData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handlePropertyEditDataChange = (key: string, value: string | number | boolean) => {
+    setPropertyEditData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const saveLeadEdit = async () => {
+    if (!selectedLead) return;
+    setLeadEditLoading(true);
+    try {
+      const res = await fetch(`/api/admin/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leadEditData),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      const json = await res.json();
+      setSelectedLead(json.data);
+      setLeads(prev => prev.map(l => l.id === json.data.id ? json.data : l));
+      setLeadEditOpen(false);
+      notify('success', 'Lead updated');
+    } catch {
+      notify('error', 'Failed to update lead');
+    } finally {
+      setLeadEditLoading(false);
+    }
+  };
+
+  const savePropertyEdit = async () => {
+    if (!selectedLead || !selectedLead.joined_property_id) return;
+    setPropertyEditLoading(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: Record<string, any> = {};
+      
+      const fieldMappings: Record<string, string> = {
+        address: 'address',
+        suburb: 'suburb',
+        city: 'city',
+        region: 'region',
+        postcode: 'postcode',
+        bedrooms: 'bedrooms',
+        bathrooms: 'bathrooms',
+        car_spaces: 'garages',
+        year_built: 'build_year',
+        floor_size: 'floor_area',
+        land_area: 'land_area',
+        last_sold_price: 'last_sold_price',
+        last_sold_date: 'last_sold_date',
+        capital_value: 'rv',
+        property_url: 'property_url',
+        cover_image_url: 'image_url',
+        description: 'description',
+      };
+
+      Object.entries(fieldMappings).forEach(([editKey, dbKey]) => {
+        if (propertyEditData[editKey as keyof typeof propertyEditData] !== undefined) {
+          const value = propertyEditData[editKey as keyof typeof propertyEditData];
+          payload[dbKey] = value === '' ? null : value;
+        }
+      });
+
+      const res = await fetch(`/api/admin/properties/${selectedLead.joined_property_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update property');
+      
+      const updated = await res.json();
+      setLeads(prev => prev.map(l => 
+        l.joined_property_id === selectedLead.joined_property_id 
+          ? { ...l, ...updated.data }
+          : l
+      ));
+      setPropertyEditOpen(false);
+      notify('success', 'Property updated');
+    } catch {
+      notify('error', 'Failed to update property');
+    } finally {
+      setPropertyEditLoading(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -555,7 +687,7 @@ export default function LeadsPage() {
                     {/* Body */}
                     <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column" }}>
                       {/* Address + Actions */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", gap: "12px" }}>
                         <h3 style={{
                           margin: 0,
                           fontSize: "1.1rem",
@@ -566,6 +698,58 @@ export default function LeadsPage() {
                         }}>
                           {lead.property_address}
                         </h3>
+                        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              // dispatch global convert-modal event for consistency with properties page
+                              window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: lead }));
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              backgroundColor: '#f5f3ff',
+                              color: '#a78bfa',
+                              border: '1px solid #c4b5fd',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              fontSize: '0.85rem',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ede9fe'; e.currentTarget.style.borderColor = '#a78bfa'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f5f3ff'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+                          >
+                            Lead
+                          </button>
+                          {lead.joined_property_id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                // dispatch global edit-modal event for consistency with properties page
+                                window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: lead }));
+                              }}
+                              style={{
+                                padding: '6px 14px',
+                                backgroundColor: '#f0fdf4',
+                                color: '#16a34a',
+                                border: '1px solid #bbf7d0',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                fontSize: '0.85rem',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div style={{
@@ -1047,6 +1231,26 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      <LeadEditModal
+        isOpen={leadEditOpen}
+        data={leadEditData}
+        onClose={() => setLeadEditOpen(false)}
+        onDataChange={handleLeadEditDataChange}
+        onSave={saveLeadEdit}
+        loading={leadEditLoading}
+        leadAddress={selectedLead?.property_address || ''}
+      />
+      
+      <PropertyEditModal
+        isOpen={propertyEditOpen}
+        data={propertyEditData}
+        onClose={() => setPropertyEditOpen(false)}
+        onDataChange={handlePropertyEditDataChange}
+        onSave={savePropertyEdit}
+        loading={propertyEditLoading}
+        propertyAddress={selectedLead?.property_address || ''}
+      />
 
       {/* Notification */}
       {notification && (
