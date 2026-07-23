@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryLouis } from '@/lib/db';
+import { query } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const query = searchParams.get('q')?.trim();
+  const queryParam = searchParams.get('q')?.trim();
   const city = searchParams.get('city')?.trim();
 
-  if (!query || query.length < 2) {
+  if (!queryParam || queryParam.length < 2) {
     return NextResponse.json([]);
   }
 
   try {
-    const params: unknown[] = [`%${query}%`];
+    const params: unknown[] = [`%${queryParam}%`];
     let whereClause = 'address ILIKE $1';
 
     const CITY_TO_DB: Record<string, string> = {
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       LIMIT 10
     `;
 
-    const result = await queryLouis(sql, params);
+    const result = await query(sql, params);
     return NextResponse.json(result.rows);
   } catch (error) {
     console.error('Autocomplete route error:', error);

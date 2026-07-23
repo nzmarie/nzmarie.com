@@ -69,9 +69,9 @@ export async function GET(request: Request) {
         rer.status as rent_listing_status,
         rer.price_display as rent_price
       FROM outreach_properties op
-      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id OR op.louis_property_id = p.id
-      LEFT JOIN real_estate re ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(re.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(re.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
-      LEFT JOIN real_estate_rent rer ON LOWER(REGEXP_REPLACE(TRIM(SPLIT_PART(rer.address, ',', 1)), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.address), '  +', ' ', 'g')) AND LOWER(REGEXP_REPLACE(TRIM(rer.suburb), '  +', ' ', 'g')) = LOWER(REGEXP_REPLACE(TRIM(p.suburb), '  +', ' ', 'g'))
+      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
+      LEFT JOIN real_estate re ON TRIM(LOWER(SPLIT_PART(re.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(re.suburb)) = TRIM(LOWER(p.suburb))
+      LEFT JOIN real_estate_rent rer ON TRIM(LOWER(SPLIT_PART(rer.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(rer.suburb)) = TRIM(LOWER(p.suburb))
       WHERE 1=1
     `;
     const params: unknown[] = [];
@@ -141,14 +141,16 @@ export async function GET(request: Request) {
       query += ` AND re.id IS NULL AND rer.id IS NULL`;
     }
 
-    // 智能排序：suburb → street → 录入日期 → 门牌号
     const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
     query += ` 
       ORDER BY 
         op.suburb ASC,
-        op.street ASC NULLS LAST,
-        op.created_at ${orderDirection},
-        NULLIF(REGEXP_REPLACE(op.property_address, '\\D', '', 'g'), '')::INTEGER ASC NULLS LAST
+        COALESCE(
+          NULLIF(TRIM(op.street), ''),
+          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
+        ) ASC,
+        NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
+        op.created_at ${orderDirection}
       LIMIT $${idx++} OFFSET $${idx++}
     `;
     params.push(limit, offset);

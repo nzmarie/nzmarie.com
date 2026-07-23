@@ -18,11 +18,26 @@ export async function GET(request: Request) {
       return NextResponse.json({ liked_ids: [] });
     }
 
+    const formatUuid = (id: string) => {
+      const clean = id.replace(/-/g, '');
+      if (clean.length === 32) {
+        return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
+      }
+      return id;
+    };
+
+    const formattedUuids = propertyIds.map(formatUuid);
+
     const result = await marieDB.query(
-      `SELECT property_id FROM outreach_properties WHERE REPLACE(property_id::text, '-', '') = ANY($1::text[]) AND status = 'liked'`,
-      [propertyIds]
+      `SELECT property_id, louis_property_id FROM outreach_properties 
+       WHERE (property_id = ANY($1::uuid[]) OR louis_property_id = ANY($2::text[])) 
+         AND status = 'liked'`,
+      [formattedUuids, propertyIds]
     );
-    const likedIds = result.rows.map(r => r.property_id.replace(/-/g, ''));
+
+    const likedIds = result.rows
+      .map(r => (r.property_id ? r.property_id.replace(/-/g, '') : r.louis_property_id))
+      .filter(Boolean);
 
     return NextResponse.json({ liked_ids: likedIds });
   } catch (error) {

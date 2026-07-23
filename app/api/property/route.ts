@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { queryLouis } from "@/lib/db";
+import { query } from "@/lib/db";
 
 const mapRowToProperty = (row: Record<string, unknown>) => ({
   id: row.id,
@@ -41,13 +41,11 @@ export async function GET(request: Request) {
   const propertyId = searchParams.get("id");
 
   try {
-    // Search by property ID
     if (propertyId) {
-      const result = await queryLouis("SELECT * FROM properties WHERE id = $1 LIMIT 1", [propertyId]);
+      const result = await query("SELECT * FROM properties WHERE id = $1 LIMIT 1", [propertyId]);
       return NextResponse.json(result.rows.map(mapRowToProperty));
     }
 
-    // Require city for general searches
     if (!city) {
       return NextResponse.json([]);
     }
@@ -56,7 +54,6 @@ export async function GET(request: Request) {
     const params: unknown[] = [city];
     let nextParamIndex = 2;
 
-    // Filter by suburbs if provided
     if (suburbs.length > 0) {
       const suburbPlaceholders = suburbs.map((_, idx) => `$${nextParamIndex + idx}`);
       whereClauses.push(`suburb IN (${suburbPlaceholders.join(", ")})`);
@@ -64,7 +61,6 @@ export async function GET(request: Request) {
       nextParamIndex += suburbs.length;
     }
 
-    // Add search query if provided
     if (search) {
       if (exact) {
         whereClauses.push(`address ILIKE $${nextParamIndex}`);
@@ -78,7 +74,7 @@ export async function GET(request: Request) {
 
     const offset = page * pageSize;
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-    const query = `
+    const sqlQuery = `
       SELECT *
       FROM properties
       ${whereClause}
@@ -88,7 +84,7 @@ export async function GET(request: Request) {
     `;
     params.push(pageSize, offset);
 
-    const result = await queryLouis(query, params);
+    const result = await query(sqlQuery, params);
     return NextResponse.json(result.rows.map(mapRowToProperty));
   } catch (error) {
     console.error("Property route error:", error);

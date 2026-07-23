@@ -1,20 +1,11 @@
 import { Pool, QueryResult, QueryResultRow } from 'pg';
 
-// Marie DB (Singapore) - Admin system data (read/write)
 const mariePool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 20,
 });
 
-// Louis DB (Jakarta) - Property data (read-only)
-const louisPool = new Pool({
-  connectionString: process.env.LOUIS_DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 10,
-});
-
-// Helper function for Marie DB (read/write)
 export async function query<T extends QueryResultRow = Record<string, unknown>>(
   text: string,
   params?: unknown[]
@@ -22,23 +13,11 @@ export async function query<T extends QueryResultRow = Record<string, unknown>>(
   return mariePool.query<T>(text, params);
 }
 
-// Helper function for Louis DB (read-only)
-export async function queryLouis<T extends QueryResultRow = Record<string, unknown>>(
-  text: string,
-  params?: unknown[]
-): Promise<QueryResult<T>> {
-  return louisPool.query<T>(text, params);
-}
-
-// Export pools for direct access
 export interface MarieDBPool extends Pool {
   ensureOutreachTablesExist?: () => Promise<void>;
 }
 
 export const marieDB: MarieDBPool = mariePool as MarieDBPool;
-export const louisDB = louisPool;
-
-// Legacy export for backward compatibility
 export const pool = mariePool;
 
 let _outreachTableEnsured = false;
@@ -46,15 +25,11 @@ let _outreachTableEnsured = false;
 export async function ensureOutreachTablesExist(): Promise<void> {
   if (_outreachTableEnsured) return;
   try {
-    // Create pg_trgm extension if available (may require superuser on some hosts)
     try {
       await mariePool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
     } catch {
-      // Extension creation may fail due to permissions — the trigram index
-      // will simply be skipped (GIN index requires the extension).
     }
 
-    // Create outreach_properties and outreach_qr_tokens if they don't exist.
     const sql = `
     CREATE TABLE IF NOT EXISTS outreach_properties (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -87,10 +62,8 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_outreach_suburb ON outreach_properties(suburb);
     CREATE INDEX IF NOT EXISTS idx_outreach_campaign ON outreach_properties(campaign);
     CREATE INDEX IF NOT EXISTS idx_outreach_property_id ON outreach_properties(property_id);
-
-    -- Performance indexes for JOIN with properties table
     CREATE INDEX IF NOT EXISTS idx_outreach_louis_property_id ON outreach_properties(louis_property_id);
-    CREATE INDEX IF NOT EXISTS idx_outreach_property_id_clean ON outreach_properties (REPLACE(property_id::text, '-', ''));
+    CREATE INDEX IF NOT EXISTS idx_outreach_suburb_street ON outreach_properties(suburb, street, created_at);
 
     CREATE TABLE IF NOT EXISTS outreach_qr_tokens (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,11 +80,9 @@ export async function ensureOutreachTablesExist(): Promise<void> {
 
     await mariePool.query(sql);
 
-    // Trigram index for ILIKE search on property_address (requires pg_trgm extension)
     try {
       await mariePool.query(`CREATE INDEX IF NOT EXISTS idx_outreach_address_trgm ON outreach_properties USING gin (property_address gin_trgm_ops)`);
     } catch {
-      // Trigram index may fail if pg_trgm extension isn't available — non-critical.
     }
 
     _outreachTableEnsured = true;
@@ -121,8 +92,6 @@ export async function ensureOutreachTablesExist(): Promise<void> {
   }
 }
 
-// Attach helper to the exported pool object for backwards-compatible runtime access
-// so tests that partially mock `marieDB` won't require a named export.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 mariePool.ensureOutreachTablesExist = ensureOutreachTablesExist;

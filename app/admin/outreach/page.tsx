@@ -743,22 +743,22 @@ export default function OutreachPage() {
     }
   };
 
-  // Extract house number helper
-  function extractHouseNumber(address: string): number {
-    const match = address.match(/^(\d+)/);
-    return match ? parseInt(match[1], 10) : 999999;
+  function extractHouseNumber(address: string): { houseNumber: number; unitNumber: number } {
+    const clean = address.trim();
+    const unitMatch = clean.match(/^(\d+)\/(\d+)/);
+    if (unitMatch) {
+      return { houseNumber: parseInt(unitMatch[2], 10), unitNumber: parseInt(unitMatch[1], 10) };
+    }
+    const numMatch = clean.match(/^(\d+)/);
+    return { houseNumber: numMatch ? parseInt(numMatch[1], 10) : 999999, unitNumber: 0 };
   }
 
-  // Extract street name from address when database street field is null
   function extractStreetName(address: string): string {
     let s = address.replace(/^\d+\//, '');
     s = s.replace(/^\d+[A-Za-z]?\s*/, '');
     return s.trim() || 'Unknown Street';
   }
 
-  // Group by suburb and street with smart sorting
-  // Stable content key: only recompute groupedBySuburb when item IDs or sortOrder
-  // actually change, not just because displayItems got a new array ref.
   const currentContentKey = useMemo(() => {
     return displayItems.map((i) => i.id).join(',') + '|' + sortOrder;
   }, [displayItems, sortOrder]);
@@ -781,23 +781,22 @@ export default function OutreachPage() {
       streetMap.get(street)!.push(item);
     });
     
-    // Convert to array and sort
     return Array.from(groups.entries())
       .map(([suburb, streetMap]) => {
         const streets = Array.from(streetMap.entries())
           .map(([street, properties]) => ({
             street,
             properties: properties.sort((a, b) => {
-              // Within same street: always sort by house number first
-              const houseNumberA = extractHouseNumber(a.property_address);
-              const houseNumberB = extractHouseNumber(b.property_address);
+              const houseA = extractHouseNumber(a.property_address);
+              const houseB = extractHouseNumber(b.property_address);
               
-              // If house numbers are different, sort by number
-              if (houseNumberA !== houseNumberB) {
-                return houseNumberA - houseNumberB;
+              if (houseA.houseNumber !== houseB.houseNumber) {
+                return houseA.houseNumber - houseB.houseNumber;
+              }
+              if (houseA.unitNumber !== houseB.unitNumber) {
+                return houseA.unitNumber - houseB.unitNumber;
               }
               
-              // If house numbers are the same, sort by created_at
               const dateCompare = sortOrder === 'asc' 
                 ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                 : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -806,7 +805,7 @@ export default function OutreachPage() {
             }),
             totalCount: properties.length,
           }))
-          .sort((a, b) => a.street.localeCompare(b.street));
+          .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }));
         
         return {
           suburb,
@@ -814,7 +813,7 @@ export default function OutreachPage() {
           totalCount: streets.reduce((sum, s) => sum + s.totalCount, 0),
         };
       })
-      .sort((a, b) => a.suburb.localeCompare(b.suburb));
+      .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
     }, [currentContentKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Synchronously restore classic items from the shared per-page cache
