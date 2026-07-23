@@ -225,7 +225,10 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
             overflow: visible !important;
             padding: 0 !important;
             margin: 0 !important;
-            background: transparent !important;
+            background: white !important;
+          }
+          .reports-layout-wrapper > main > div {
+            background: white !important;
           }
 
           @page {
@@ -244,17 +247,17 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           .bn-editor {
             padding: 0 !important;
           }
-          .bn-container .bn-editor {
+          .is-quarterly-report .bn-container .bn-editor {
             font-size: 13px !important;
             line-height: 1.45 !important;
           }
-          .bn-container [data-content-type="heading"][data-level="1"] {
+          .is-quarterly-report .bn-container [data-content-type="heading"][data-level="1"] {
             font-size: 1.5rem !important;
           }
-          .bn-container [data-content-type="heading"][data-level="2"] {
+          .is-quarterly-report .bn-container [data-content-type="heading"][data-level="2"] {
             font-size: 1.25rem !important;
           }
-          .bn-container [data-content-type="heading"][data-level="3"] {
+          .is-quarterly-report .bn-container [data-content-type="heading"][data-level="3"] {
             font-size: 1.1rem !important;
           }
 

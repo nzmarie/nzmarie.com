@@ -251,17 +251,20 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 margin: 0 !important;
                 border: none !important;
                 box-shadow: none !important;
-                background: transparent !important;
+                background: white !important;
                 box-sizing: border-box !important;
                 page-break-after: avoid !important;
                 page-break-before: avoid !important;
+              }
+              .max-w-6xl {
+                background: white !important;
               }
             }
           `}</style>
 
           <div>
             <div id="am-header" className="border-b border-slate-200/80 pb-4 mb-6 text-left">
-              <div className="am-badge inline-block px-3 py-1 bg-slate-100 rounded-full tracking-widest text-xs font-light text-slate-400 mb-2">
+              <div className="am-badge tracking-widest text-xs font-light text-slate-400 mb-1">
                 {subtitle}
               </div>
               <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">
@@ -333,10 +336,10 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                       const boldPart = parts[0];
                       const normalPart = parts.slice(1).join(':');
                       return (
-                        <div key={idx} className="flex items-start gap-3">
-                          <div className="am-step-num w-6 h-6 rounded-full bg-slate-900 text-white font-serif font-semibold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">
-                            {idx + 1}
-                          </div>
+                        <div key={idx} className="flex items-start gap-2.5">
+                          <span className="am-step-num font-semibold text-slate-900 text-xs md:text-sm flex-shrink-0 mt-0.5">
+                            {idx + 1}.
+                          </span>
                           <div className="am-step-text text-slate-600 text-xs md:text-sm leading-relaxed">
                             {boldPart && (
                               <strong className="font-semibold text-slate-900 mr-1">
