@@ -2203,6 +2203,25 @@ export default function OutreachPage() {
                             className="w-full px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors"
                           >
                             <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={streetTotal > 0 && properties.every(p => selected.has(p.id))}
+                                ref={el => { if (el) { const n = properties.filter(p => selected.has(p.id)).length; el.indeterminate = n > 0 && n < properties.length; } }}
+                                onChange={() => {
+                                  const allSelected = properties.every(p => selected.has(p.id));
+                                  setSelectedByTab((prev) => {
+                                    const next = new Set(prev[activeTab]);
+                                    if (allSelected) {
+                                      properties.forEach(p => next.delete(p.id));
+                                    } else {
+                                      properties.forEach(p => next.add(p.id));
+                                    }
+                                    return { ...prev, [activeTab]: next };
+                                  });
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
                               <span className="text-lg">📍</span>
                               <span className="font-medium text-slate-700">{street}</span>
                             </div>
