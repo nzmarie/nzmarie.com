@@ -485,10 +485,34 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
+              window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: property }));
+            }}
+            style={{
+              marginLeft: '8px',
+              padding: '6px 10px',
+              backgroundColor: '#f5f3ff',
+              color: '#7c3aed',
+              border: '1px solid #c4b5fd',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ede9fe'; e.currentTarget.style.borderColor = '#a78bfa'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f5f3ff'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+          >
+            Lead
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
               window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: property }));
             }}
             style={{
-              marginLeft: '12px',
+              marginLeft: '8px',
               padding: '6px 14px',
               backgroundColor: '#f0fdf4',
               color: '#16a34a',
@@ -1238,6 +1262,58 @@ export default function PropertiesPage() {
   const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
   const [saving, setSaving] = useState(false);
 
+  // Convert to Lead
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const [convertingProperty, setConvertingProperty] = useState<Property | null>(null);
+  const [convertForm, setConvertForm] = useState({ owner_name: '', owner_email: '', owner_phone: '', summary: '', notes: '' });
+  const [converting, setConverting] = useState(false);
+
+  const openConvertModal = (prop: Property) => {
+    setConvertingProperty(prop);
+    setConvertForm({
+      owner_name: '',
+      owner_email: '',
+      owner_phone: '',
+      summary: '',
+      notes: '',
+    });
+    setConvertModalOpen(true);
+  };
+
+  const handleConvertToLead = async () => {
+    if (!convertingProperty) return;
+    setConverting(true);
+    try {
+      const res = await fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_address: convertingProperty.address,
+          property_id: convertingProperty.id,
+          suburb: convertingProperty.suburb,
+          city: convertingProperty.city,
+          region: convertingProperty.region,
+          owner_name: convertForm.owner_name || null,
+          owner_email: convertForm.owner_email || null,
+          owner_phone: convertForm.owner_phone || null,
+          source: 'property',
+          status: 'new',
+          priority: 'medium',
+          summary: convertForm.summary || null,
+          notes: convertForm.notes || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to convert');
+      showNotification('success', `Lead created for ${convertingProperty.address}`);
+      setConvertModalOpen(false);
+      setConvertingProperty(null);
+    } catch {
+      showNotification('error', 'Failed to convert to lead');
+    } finally {
+      setConverting(false);
+    }
+  };
+
   useEffect(() => {
     const handler = (e: Event) => {
       const prop = (e as CustomEvent).detail as Property;
@@ -1265,6 +1341,15 @@ export default function PropertiesPage() {
     };
     window.addEventListener('open-edit-modal', handler);
     return () => window.removeEventListener('open-edit-modal', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const prop = (e as CustomEvent).detail as Property;
+      openConvertModal(prop);
+    };
+    window.addEventListener('open-convert-modal', handler);
+    return () => window.removeEventListener('open-convert-modal', handler);
   }, []);
 
   const handleEditFieldChange = (key: string, value: string) => {
@@ -2505,6 +2590,60 @@ export default function PropertiesPage() {
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert to Lead Modal */}
+      {convertModalOpen && convertingProperty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConvertModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold">Convert to Lead</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{convertingProperty.address}</p>
+              </div>
+              <button onClick={() => setConvertModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Owner Name</label>
+                <input type="text" value={convertForm.owner_name}
+                  onChange={e => setConvertForm(p => ({ ...p, owner_name: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Owner name" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Owner Email</label>
+                <input type="email" value={convertForm.owner_email}
+                  onChange={e => setConvertForm(p => ({ ...p, owner_email: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="owner@example.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Owner Phone</label>
+                <input type="text" value={convertForm.owner_phone}
+                  onChange={e => setConvertForm(p => ({ ...p, owner_phone: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="021 123 4567" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Summary</label>
+                <input type="text" value={convertForm.summary}
+                  onChange={e => setConvertForm(p => ({ ...p, summary: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="e.g., Owner called about appraisal" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+                <textarea value={convertForm.notes}
+                  onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))}
+                  rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div className="pt-2 flex items-center justify-end space-x-3">
+                <button onClick={() => setConvertModalOpen(false)} className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+                <button onClick={handleConvertToLead} disabled={converting}
+                  className="px-5 py-2.5 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
+                  {converting ? 'Converting...' : 'Create Lead'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -273,6 +273,59 @@ export default function OutreachPage() {
     setHistoryDrawerOpen(true);
   };
 
+  // Convert to Lead modal
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const [convertingProperty, setConvertingProperty] = useState<OutreachProperty | null>(null);
+  const [convertForm, setConvertForm] = useState({ owner_email: '', owner_phone: '', summary: '', notes: '' });
+  const [converting, setConverting] = useState(false);
+
+  const openConvertModal = (prop: OutreachProperty) => {
+    setConvertingProperty(prop);
+    setConvertForm({
+      owner_email: '',
+      owner_phone: '',
+      summary: '',
+      notes: prop.notes || '',
+    });
+    setConvertModalOpen(true);
+  };
+
+  const handleConvertToLead = async () => {
+    if (!convertingProperty) return;
+    setConverting(true);
+    try {
+      const res = await fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_address: convertingProperty.property_address,
+          property_id: convertingProperty.joined_property_id || null,
+          street: convertingProperty.street,
+          suburb: convertingProperty.suburb,
+          city: convertingProperty.city,
+          region: convertingProperty.region,
+          owner_name: convertingProperty.owner_name,
+          owner_email: convertForm.owner_email || null,
+          owner_phone: convertForm.owner_phone || null,
+          source: 'outreach',
+          source_outreach_id: convertingProperty.id,
+          status: 'new',
+          priority: 'medium',
+          summary: convertForm.summary || null,
+          notes: convertForm.notes || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to convert');
+      showNotification('success', `Lead created for ${convertingProperty.property_address}`);
+      setConvertModalOpen(false);
+      setConvertingProperty(null);
+    } catch {
+      showNotification('error', 'Failed to convert to lead');
+    } finally {
+      setConverting(false);
+    }
+  };
+
   // Edit Property modal (edits the linked properties table record)
   const [editingProperty, setEditingProperty] = useState<OutreachProperty | null>(null);
   const [editFormData, setEditFormData] = useState<Record<string, string | number | boolean | null>>({});
@@ -1978,6 +2031,22 @@ export default function OutreachPage() {
                         <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
                         {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
                       </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openConvertModal(prop); }}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #c4b5fd',
+                          backgroundColor: '#f5f3ff',
+                          color: '#7c3aed',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                        title="Convert to Lead"
+                      >
+                        ⇨ Lead
+                      </button>
                       {activeTab === 'pending' && (
                         <button
                           onClick={async () => {
@@ -2398,6 +2467,14 @@ export default function OutreachPage() {
                                     <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
                                     {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openConvertModal(prop)}
+                                    className="transition-colors px-3 py-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded text-xs font-medium border border-violet-200"
+                                    title="Convert to Lead"
+                                  >
+                                    ⇨ Lead
+                                  </button>
                                   {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
                                   <button
                                     type="button"
@@ -2651,6 +2728,54 @@ export default function OutreachPage() {
                 >
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Convert to Lead Modal */}
+        {convertModalOpen && convertingProperty && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConvertModalOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold">Convert to Lead</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{convertingProperty.property_address}</p>
+                </div>
+                <button onClick={() => setConvertModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Owner Email</label>
+                  <input type="email" value={convertForm.owner_email}
+                    onChange={e => setConvertForm(p => ({ ...p, owner_email: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="owner@example.com" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Owner Phone</label>
+                  <input type="text" value={convertForm.owner_phone}
+                    onChange={e => setConvertForm(p => ({ ...p, owner_phone: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="021 123 4567" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Summary</label>
+                  <input type="text" value={convertForm.summary}
+                    onChange={e => setConvertForm(p => ({ ...p, summary: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="e.g., Called owner, interested in selling" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Notes (pre-filled from outreach)</label>
+                  <textarea value={convertForm.notes}
+                    onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))}
+                    rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+                <div className="pt-2 flex items-center justify-end space-x-3">
+                  <button onClick={() => setConvertModalOpen(false)} className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+                  <button onClick={handleConvertToLead} disabled={converting}
+                    className="px-5 py-2.5 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
+                    {converting ? 'Converting...' : 'Create Lead'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

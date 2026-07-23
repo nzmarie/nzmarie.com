@@ -150,7 +150,8 @@ describe('Admin pages', () => {
     const suburbGroup = await screen.findByText(/Takapuna/i);
     fireEvent.click(suburbGroup);
 
-    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+    const checkboxes = screen.getAllByRole('checkbox');
+    const checkbox = (checkboxes[1] || checkboxes[0]) as HTMLInputElement;
     fireEvent.click(checkbox);
 
     await waitFor(() => {
