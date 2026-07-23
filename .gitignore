@@ -27,7 +27,7 @@ build/
 *.pem
 
 # ignore generated PDF reports (stored on R2 only)
-pdf/
+/pdf/
 *.pdf
 public/reports/
 public/pdfs/

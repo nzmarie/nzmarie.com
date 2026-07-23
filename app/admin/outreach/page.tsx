@@ -1922,7 +1922,7 @@ export default function OutreachPage() {
                                 body: JSON.stringify({ status: 'pending' }),
                               });
                               if (!res.ok) throw new Error('Failed');
-                              const data = await res.json();
+                              await res.json();
                               showNotification('success', 'Moved to Pending');
                               handleMarkAsSentSuccess();
                             } catch {
@@ -1989,7 +1989,7 @@ export default function OutreachPage() {
                                   body: JSON.stringify({ status: 'liked' }),
                                 });
                                 if (!res.ok) throw new Error('Failed');
-                                const data = await res.json();
+                                await res.json();
                                 showNotification('success', 'Returned to Liked');
                                 handleMarkAsSentSuccess();
                               } catch {
@@ -2022,7 +2022,7 @@ export default function OutreachPage() {
                                 body: JSON.stringify({ status: 'pending' }),
                               });
                               if (!res.ok) throw new Error('Failed');
-                              const data = await res.json();
+                              await res.json();
                               showNotification('success', 'Returned to Pending');
                               handleMarkAsSentSuccess();
                             } catch {
@@ -2283,7 +2283,7 @@ export default function OutreachPage() {
                                           body: JSON.stringify({ status: 'pending' }),
                                         });
                                         if (!res.ok) throw new Error('Failed');
-                                        const data = await res.json();
+                                        await res.json();
                                         showNotification('success', 'Moved to Pending');
                                         handleMarkAsSentSuccess();
                                       } catch {
@@ -2306,7 +2306,7 @@ export default function OutreachPage() {
                                           method: 'PATCH',
                                         });
                                         if (!res.ok) throw new Error('Failed to mark as sent');
-                                        const data = await res.json();
+                                        await res.json();
                                         showNotification('success', 'Marked as sent');
                                         handleMarkAsSentSuccess();
                                       } catch {
@@ -2331,7 +2331,7 @@ export default function OutreachPage() {
                                             body: JSON.stringify({ status: 'liked' }),
                                           });
                                           if (!res.ok) throw new Error('Failed');
-                                          const data = await res.json();
+                                          await res.json();
                                           showNotification('success', 'Returned to Liked');
                                           handleMarkAsSentSuccess();
                                         } catch {
@@ -2357,7 +2357,7 @@ export default function OutreachPage() {
                                           body: JSON.stringify({ status: 'pending' }),
                                         });
                                         if (!res.ok) throw new Error('Failed');
-                                        const data = await res.json();
+                                        await res.json();
                                         showNotification('success', 'Returned to Pending');
                                         handleMarkAsSentSuccess();
                                       } catch {
