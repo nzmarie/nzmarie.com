@@ -56,6 +56,10 @@
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"
   },
+  "overrides": {
+    "embla-carousel-react": "8.6.0",
+    "embla-carousel": "8.6.0"
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
