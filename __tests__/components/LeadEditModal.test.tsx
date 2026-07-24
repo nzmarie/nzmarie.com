@@ -65,6 +65,10 @@ describe("LeadEditModal", () => {
     expect(screen.getByText("Notes")).toBeTruthy();
     expect(screen.getByText("Next Action")).toBeTruthy();
     expect(screen.getByText("Next Action Date")).toBeTruthy();
+    // Should NOT show property-only fields
+    expect(screen.queryByText("Bedrooms")).toBeNull();
+    expect(screen.queryByText("Bathrooms")).toBeNull();
+    expect(screen.queryByText("Year Built")).toBeNull();
   });
 
   it("should populate fields with lead data", () => {
@@ -178,4 +182,42 @@ describe("LeadEditModal", () => {
     );
     expect(container).toBeTruthy();
   });
+
+  it("should show 'Edit Lead' title not 'Edit Property'", () => {
+    render(<LeadEditModal {...baseProps} leadAddress="123 Main St" />);
+    expect(screen.getByText("Edit Lead - 123 Main St")).toBeTruthy();
+    expect(screen.queryByText("Edit Property")).toBeNull();
+  });
+
+  it("should render address field as property_address key", () => {
+    const dataWithAddress = { ...leadData, property_address: "2/23 Sartors Avenue" };
+    render(<LeadEditModal {...baseProps} data={dataWithAddress} />);
+    expect(screen.getByDisplayValue("2/23 Sartors Avenue")).toBeTruthy();
+  });
+
+  it("should NOT render property-specific fields (postcode, car_spaces, capital_value)", () => {
+    render(<LeadEditModal {...baseProps} />);
+    expect(screen.queryByText("Postcode")).toBeNull();
+    expect(screen.queryByText("Car Spaces")).toBeNull();
+    expect(screen.queryByText("Capital Value (RV)")).toBeNull();
+    expect(screen.queryByText("Floor Size (m²)")).toBeNull();
+    expect(screen.queryByText("Last Sold Price")).toBeNull();
+    expect(screen.queryByText("Cover Image URL")).toBeNull();
+  });
+
+  it("should render lead-specific fields", () => {
+    render(<LeadEditModal {...baseProps} />);
+    expect(screen.getByText("Next Action")).toBeTruthy();
+    expect(screen.getByText("Next Action Date")).toBeTruthy();
+    expect(screen.getByText("Owner Name")).toBeTruthy();
+    expect(screen.getByText("Owner Email")).toBeTruthy();
+    expect(screen.getByText("Owner Phone")).toBeTruthy();
+  });
+
+  it("should render status and priority as select dropdowns", () => {
+    render(<LeadEditModal {...baseProps} />);
+    const selects = screen.getAllByRole("combobox");
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+  });
+
 });

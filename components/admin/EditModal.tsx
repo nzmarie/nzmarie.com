@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface EditFieldConfig {
   key: string;
@@ -35,23 +35,39 @@ export const EditModal: React.FC<EditModalProps> = ({
   columns = 'auto',
   renderExtra,
 }) => {
+  const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      setIsMobile(window.innerWidth < 640);
+      setIsTablet(window.innerWidth >= 640 && window.innerWidth < 1024);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   if (!isOpen) return null;
 
   const handleFieldChange = (key: string, value: string) => {
     onDataChange(key, value);
   };
 
+  const effectiveColumns = isMobile ? 1 : (typeof columns === 'number' ? columns : undefined);
   let gridColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
   
-  if (columns === 'auto') {
-    // Auto-detect based on textarea fields
+  if (effectiveColumns === 1) {
+    gridColumns = '1fr';
+  } else if (columns === 'auto') {
     gridColumns = fields.some(f => f.type === 'textarea') 
       ? '1fr' 
       : 'repeat(auto-fit, minmax(180px, 1fr))';
   } else if (typeof columns === 'number') {
-    // Use specified number of columns
     gridColumns = `repeat(${columns}, 1fr)`;
   }
+
+  const modalPadding = isMobile ? '16px' : (isTablet ? '24px' : '32px');
 
   return (
     <div style={{
@@ -74,8 +90,8 @@ export const EditModal: React.FC<EditModalProps> = ({
         style={{
           position: 'relative',
           backgroundColor: 'white',
-          borderRadius: '16px',
-          padding: '32px',
+          borderRadius: isMobile ? '12px' : '16px',
+          padding: modalPadding,
           maxWidth,
           width: '95%',
           maxHeight: '90vh',
@@ -85,10 +101,10 @@ export const EditModal: React.FC<EditModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{
-          fontSize: '1.5rem',
+          fontSize: isMobile ? '1.15rem' : '1.5rem',
           fontWeight: '700',
           color: '#2D3748',
-          marginBottom: '24px',
+          marginBottom: isMobile ? '16px' : '24px',
         }}>
           {title}
         </h2>
@@ -189,31 +205,31 @@ export const EditModal: React.FC<EditModalProps> = ({
             onClick={onClose}
             disabled={loading}
             style={{
-              padding: '12px 24px',
+              padding: isMobile ? '10px 16px' : '12px 24px',
               backgroundColor: '#f3f4f6',
               color: '#4a5568',
               borderRadius: '10px',
               border: 'none',
               cursor: loading ? 'not-allowed' : 'pointer',
               fontWeight: '600',
-              fontSize: '0.95rem',
+              fontSize: isMobile ? '0.85rem' : '0.95rem',
               opacity: loading ? 0.5 : 1,
             }}
           >
-            Cancel
+            {isMobile ? 'Cancel' : 'Cancel'}
           </button>
           <button
             onClick={onSave}
             disabled={loading}
             style={{
-              padding: '12px 24px',
+              padding: isMobile ? '10px 16px' : '12px 24px',
               backgroundColor: loading ? '#9ca3af' : '#3b82f6',
               color: 'white',
               borderRadius: '10px',
               border: 'none',
               cursor: loading ? 'not-allowed' : 'pointer',
               fontWeight: '600',
-              fontSize: '0.95rem',
+              fontSize: isMobile ? '0.85rem' : '0.95rem',
             }}
           >
             {loading ? 'Saving...' : 'Save Changes'}

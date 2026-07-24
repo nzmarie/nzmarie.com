@@ -212,4 +212,40 @@ describe("PropertyEditModal", () => {
     fireEvent.change(capitalValueInput, { target: { value: "950000" } });
     expect(mockOnDataChange).toHaveBeenCalledWith("capital_value", "950000");
   });
+
+  it("should show 'Edit Property' title not 'Edit Lead'", () => {
+    render(<PropertyEditModal {...baseProps} propertyAddress="123 Main St" />);
+    expect(screen.getByText("Edit Property - 123 Main St")).toBeTruthy();
+    expect(screen.queryByText("Edit Lead")).toBeNull();
+  });
+
+  it("should render property-specific fields not in LeadEditModal", () => {
+    render(<PropertyEditModal {...baseProps} />);
+    expect(screen.getByText("Postcode")).toBeTruthy();
+    expect(screen.getByText("Car Spaces")).toBeTruthy();
+    expect(screen.getByText("Capital Value (RV)")).toBeTruthy();
+    expect(screen.getByText("Floor Size (m²)")).toBeTruthy();
+    expect(screen.getByText("Cover Image URL")).toBeTruthy();
+  });
+
+  it("should use 'address' key for property address", () => {
+    const dataWithAddress = { ...propertyData, address: "123 Main Street" };
+    render(<PropertyEditModal {...baseProps} data={dataWithAddress} />);
+    expect(screen.getByDisplayValue("123 Main Street")).toBeTruthy();
+  });
+
+  it("should NOT render lead-specific fields (next_action, owner_name, status select, priority select)", () => {
+    render(<PropertyEditModal {...baseProps} />);
+    expect(screen.queryByText("Next Action")).toBeNull();
+    expect(screen.queryByText("Next Action Date")).toBeNull();
+    expect(screen.queryByText("Owner Name")).toBeNull();
+    expect(screen.queryByText("Owner Email")).toBeNull();
+    expect(screen.queryByText("Owner Phone")).toBeNull();
+  });
+
+  it("should render property history section", () => {
+    const dataWithHistory = { ...propertyData, property_history: "Sold 2020" };
+    render(<PropertyEditModal {...baseProps} data={dataWithHistory} />);
+    expect(screen.getByText("Property History")).toBeTruthy();
+  });
 });

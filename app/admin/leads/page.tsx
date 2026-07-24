@@ -9,6 +9,7 @@ import { getFixedImageUrl } from '@/lib/google-maps';
 import { FaBed, FaBath, FaCar, FaRulerCombined, FaMapMarkerAlt } from 'react-icons/fa';
 import { LeadEditModal } from '@/components/admin/LeadEditModal';
 import { PropertyEditModal } from '@/components/admin/PropertyEditModal';
+import { PropertyHistoryView } from '@/components/admin/PropertyHistoryView';
 
 interface Lead {
   id: string;
@@ -194,9 +195,28 @@ export default function LeadsPage() {
   useEffect(() => {
     const handler = (e: Event) => {
       const payload = (e as CustomEvent).detail as Record<string, unknown>;
-      // payload may be a Lead or Property-like object; treat it as the selected lead
       setSelectedLead(payload as unknown as Lead);
-      setPropertyEditData({ ...payload } as unknown as Partial<Lead>);
+      setLeadEditOpen(false);
+      const mapped: Record<string, unknown> = {
+        address: payload.property_address,
+        suburb: payload.suburb,
+        city: payload.city,
+        region: payload.region,
+        bedrooms: payload.bedrooms,
+        bathrooms: payload.bathrooms,
+        car_spaces: payload.garages,
+        year_built: payload.build_year,
+        floor_size: payload.floor_area,
+        land_area: payload.land_area,
+        last_sold_price: payload.last_sold_price,
+        last_sold_date: payload.last_sold_date,
+        capital_value: payload.rv,
+        property_url: payload.property_url,
+        cover_image_url: payload.image_url,
+        description: payload.description,
+        property_history: payload.property_history,
+      };
+      setPropertyEditData(mapped as unknown as Partial<Lead>);
       setPropertyEditOpen(true);
     };
     window.addEventListener('open-edit-modal', handler);
@@ -206,9 +226,9 @@ export default function LeadsPage() {
   useEffect(() => {
     const handler = (e: Event) => {
       const payload = (e as CustomEvent).detail as Record<string, unknown>;
-      // Open the lead edit modal for the given payload
       setSelectedLead(payload as unknown as Lead);
-      setLeadEditData({ ...payload } as Partial<Lead>);
+      setPropertyEditOpen(false);
+      setLeadEditData({ ...payload } as unknown as Partial<Lead>);
       setLeadEditOpen(true);
     };
     window.addEventListener('open-convert-modal', handler);
@@ -239,8 +259,9 @@ export default function LeadsPage() {
   };
 
   const openEdit = (lead: Lead) => {
-    setEditData({ ...lead });
-    setEditOpen(true);
+    setPropertyEditOpen(false);
+    setLeadEditData(lead as unknown as Partial<Lead>);
+    setLeadEditOpen(true);
   };
 
   const handleLeadEditDataChange = (key: string, value: string | number | boolean) => {
@@ -547,7 +568,6 @@ export default function LeadsPage() {
                       (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
                       (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.08)";
                     }}
-                    onClick={() => openDetail(lead)}
                   >
                     {/* Image section */}
                     <div style={{ position: "relative" }}>
@@ -756,8 +776,7 @@ export default function LeadsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               e.preventDefault();
-                              // dispatch global convert-modal event for consistency with properties page
-                              window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: lead }));
+                              openDetail(lead);
                             }}
                             style={{
                               padding: '6px 14px',
@@ -781,8 +800,29 @@ export default function LeadsPage() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
-                                // dispatch global edit-modal event for consistency with properties page
-                                window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: lead }));
+                                setSelectedLead(lead);
+                                setLeadEditOpen(false);
+                                const mappedProp: Record<string, unknown> = {
+                                  address: lead.property_address,
+                                  suburb: lead.suburb,
+                                  city: lead.city,
+                                  region: lead.region,
+                                  bedrooms: lead.bedrooms,
+                                  bathrooms: lead.bathrooms,
+                                  car_spaces: lead.garages,
+                                  year_built: lead.build_year,
+                                  floor_size: lead.floor_area,
+                                  land_area: lead.land_area,
+                                  last_sold_price: lead.last_sold_price,
+                                  last_sold_date: lead.last_sold_date,
+                                  capital_value: lead.rv,
+                                  property_url: lead.property_url,
+                                  cover_image_url: lead.image_url,
+                                  description: lead.description,
+                                  property_history: lead.property_history,
+                                };
+                                setPropertyEditData(mappedProp as unknown as Partial<Lead>);
+                                setPropertyEditOpen(true);
                               }}
                               style={{
                                 padding: '6px 14px',
@@ -799,7 +839,7 @@ export default function LeadsPage() {
                               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
                               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
                             >
-                              Edit
+                              Property
                             </button>
                           )}
                         </div>
@@ -1142,6 +1182,10 @@ export default function LeadsPage() {
                   <p className="text-xs text-slate-400 mb-0.5">Phone</p>
                   <p className="text-sm font-medium text-slate-700">{selectedLead.owner_phone || '-'}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Created</p>
+                  <p className="text-sm font-medium text-slate-700">{new Date(selectedLead.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</p>
+                </div>
               </div>
 
               {/* Summary */}
@@ -1168,6 +1212,14 @@ export default function LeadsPage() {
                   {selectedLead.next_action_at && (
                     <p className="text-xs text-orange-600 mt-1">Due: {new Date(selectedLead.next_action_at).toLocaleDateString()}</p>
                   )}
+                </div>
+              )}
+
+              {/* Property History */}
+              {selectedLead.property_history && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Property History</p>
+                  <PropertyHistoryView raw={selectedLead.property_history.toString()} />
                 </div>
               )}
 
@@ -1327,16 +1379,6 @@ export default function LeadsPage() {
         </div>
       )}
 
-      <LeadEditModal
-        isOpen={leadEditOpen}
-        data={leadEditData}
-        onClose={() => setLeadEditOpen(false)}
-        onDataChange={handleLeadEditDataChange}
-        onSave={saveLeadEdit}
-        loading={leadEditLoading}
-        leadAddress={selectedLead?.property_address || ''}
-      />
-      
       <PropertyEditModal
         isOpen={propertyEditOpen}
         data={propertyEditData}
@@ -1345,6 +1387,16 @@ export default function LeadsPage() {
         onSave={savePropertyEdit}
         loading={propertyEditLoading}
         propertyAddress={selectedLead?.property_address || ''}
+      />
+      
+      <LeadEditModal
+        isOpen={leadEditOpen}
+        data={leadEditData}
+        onClose={() => setLeadEditOpen(false)}
+        onDataChange={handleLeadEditDataChange}
+        onSave={saveLeadEdit}
+        loading={leadEditLoading}
+        leadAddress={selectedLead?.property_address || ''}
       />
 
       {/* Notification */}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { EditModal, EditFieldConfig, EditModalProps } from './EditModal';
-import { PropertyHistoryView } from './PropertyHistoryView';
 
 const LEAD_EDIT_FIELDS: EditFieldConfig[] = [
   { key: 'property_address', label: 'Address', type: 'text' },
@@ -10,9 +9,6 @@ const LEAD_EDIT_FIELDS: EditFieldConfig[] = [
   { key: 'owner_name', label: 'Owner Name', type: 'text' },
   { key: 'owner_email', label: 'Owner Email', type: 'email' },
   { key: 'owner_phone', label: 'Owner Phone', type: 'text' },
-  { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
-  { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
-  { key: 'build_year', label: 'Year Built', type: 'number' },
   { key: 'status', label: 'Status', type: 'select', options: [
     { value: 'new', label: 'New' },
     { value: 'contacted', label: 'Contacted' },
@@ -30,6 +26,7 @@ const LEAD_EDIT_FIELDS: EditFieldConfig[] = [
   { key: 'notes', label: 'Notes', type: 'textarea' },
   { key: 'next_action', label: 'Next Action', type: 'text' },
   { key: 'next_action_at', label: 'Next Action Date', type: 'date' },
+  { key: 'created', label: 'Created', type: 'text' },
 ];
 
 interface LeadEditModalProps extends Omit<EditModalProps, 'fields' | 'title'> {
@@ -46,11 +43,18 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   leadAddress = 'Lead',
   maxWidth = '700px',
 }) => {
+  const createdDate = (data as Record<string, unknown>).created_at || (data as Record<string, unknown>).created;
+  const formattedData = {
+    ...data,
+    created: createdDate
+      ? new Date(createdDate as string).toLocaleDateString("en-US", { year: "numeric", month: "numeric", day: "numeric" })
+      : '',
+  };
   return (
     <EditModal
       isOpen={isOpen}
       title={`Edit Lead - ${leadAddress}`}
-      data={data}
+      data={formattedData}
       fields={LEAD_EDIT_FIELDS}
       onClose={onClose}
       onDataChange={onDataChange}
@@ -58,14 +62,6 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       loading={loading}
       maxWidth={maxWidth}
       columns={2}
-      renderExtra={() => data.property_history ? (
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '8px' }}>
-            Property History
-          </label>
-          <PropertyHistoryView raw={data.property_history.toString()} />
-        </div>
-      ) : null}
     />
   );
 };
