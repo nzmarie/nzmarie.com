@@ -12,21 +12,25 @@ export async function GET() {
   }
 
   try {
-    // Query overall statistics
-    const result = await marieDB.query(`
-      SELECT 
-        SUM(c.printing_cost + c.postage_cost) as total_cost,
-        SUM(dma.conversion_value) FILTER (WHERE dma.is_converted) as total_revenue,
-        COUNT(DISTINCT dma.id) as total_mailed,
-        COUNT(DISTINCT dma.id) FILTER (WHERE dma.has_downloaded) as total_downloads,
-        COUNT(DISTINCT dma.id) FILTER (WHERE dma.has_requested_appraisal) as total_appraisals,
-        COUNT(DISTINCT dma.id) FILTER (WHERE dma.is_converted) as total_conversions
-      FROM direct_mail_campaigns c
-      LEFT JOIN direct_mail_addresses dma ON c.id = dma.campaign_id
-    `);
+    const [costResult, addressResult] = await Promise.all([
+      marieDB.query(`
+        SELECT COALESCE(SUM(printing_cost + postage_cost), 0) as total_cost
+        FROM direct_mail_campaigns
+      `),
+      marieDB.query(`
+        SELECT
+          COUNT(*) as total_mailed,
+          COUNT(*) FILTER (WHERE has_downloaded) as total_downloads,
+          COUNT(*) FILTER (WHERE has_requested_appraisal) as total_appraisals,
+          COUNT(*) FILTER (WHERE is_converted) as total_conversions,
+          COALESCE(SUM(conversion_value) FILTER (WHERE is_converted), 0) as total_revenue
+        FROM direct_mail_addresses
+      `),
+    ]);
 
-    const stats = result.rows[0];
-    const totalCost = parseFloat(stats.total_cost) || 0;
+    const cost = costResult.rows[0];
+    const stats = addressResult.rows[0];
+    const totalCost = parseFloat(cost.total_cost) || 0;
     const totalRevenue = parseFloat(stats.total_revenue) || 0;
     const netProfit = totalRevenue - totalCost;
     const roi = totalCost > 0 ? ((netProfit / totalCost) * 100).toFixed(1) : 0;

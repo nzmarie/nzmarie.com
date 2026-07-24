@@ -149,13 +149,21 @@ function buildQuery(
     if (lastSoldMinYears) {
       const years = parseInt(lastSoldMinYears);
       if (!isNaN(years) && years > 0) {
-        query += ` AND r.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND r.last_sold_date <= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
     }
     if (lastSoldMaxYears) {
       const years = parseInt(lastSoldMaxYears);
       if (!isNaN(years) && years > 0) {
-        query += ` AND r.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND r.last_sold_date >= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
     }
   }
@@ -187,11 +195,14 @@ function buildCountQuery(
 
   let fromClause: string;
   if (listingType === 'all') {
-    const rentColumns = columns.replace(/\br\./g, '');
     fromClause = `(
-      SELECT ${rentColumns}, 'sale' AS listing_type FROM real_estate
+      SELECT id, address, region, city, suburb,
+             bedroom_count, bathroom_count, property_type, last_sold_date
+      FROM real_estate
       UNION ALL
-      SELECT ${rentColumns}, 'rent' AS listing_type FROM real_estate_rent
+      SELECT id, address, region, city, suburb,
+             bedroom_count, bathroom_count, property_type, last_sold_date
+      FROM real_estate_rent
     ) r`;
   } else if (listingType === 'rent') {
     fromClause = `real_estate_rent r`;
@@ -273,13 +284,21 @@ function buildCountQuery(
     if (lastSoldMinYears) {
       const years = parseInt(lastSoldMinYears);
       if (!isNaN(years) && years > 0) {
-        query += ` AND r.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND r.last_sold_date <= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
     }
     if (lastSoldMaxYears) {
       const years = parseInt(lastSoldMaxYears);
       if (!isNaN(years) && years > 0) {
-        query += ` AND r.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND r.last_sold_date >= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
     }
   }

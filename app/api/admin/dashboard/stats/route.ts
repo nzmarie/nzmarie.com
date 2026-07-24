@@ -48,14 +48,15 @@ export async function GET(request: Request) {
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
-         WHERE follow_up_at::date = CURRENT_DATE 
+         WHERE follow_up_at >= CURRENT_DATE 
+         AND follow_up_at < CURRENT_DATE + INTERVAL '1 day'
          AND contact_status NOT IN ('converted', 'lost')
          ${suburbCondition}`,
         suburbParams
       ),
       marieDB.query(
         `SELECT COUNT(*) as count FROM appraisal_leads 
-         WHERE follow_up_at::date < CURRENT_DATE 
+         WHERE follow_up_at < CURRENT_DATE 
          AND contact_status NOT IN ('converted', 'lost')
          ${suburbCondition}`,
         suburbParams
