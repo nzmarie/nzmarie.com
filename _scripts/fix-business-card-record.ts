@@ -26,20 +26,76 @@ const pool = new Pool({
 
 async function main() {
   try {
-    console.log('Inserting Business Card into campaign_analytics...');
+    // 1. Check current logs
+    const logsBefore = await pool.query(
+      'SELECT id, campaign_key, visitor_hash, created_at FROM campaign_visit_logs ORDER BY created_at DESC LIMIT 10'
+    );
+    console.log('campaign_visit_logs (latest 10):');
+    logsBefore.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash?.substring(0,12)}... | ${r.id}`));
+
+    const pvBefore = await pool.query('SELECT campaign_key, total_pv, total_uv FROM campaign_analytics ORDER BY total_pv DESC');
+    console.log('\ncampaign_analytics before:');
+    pvBefore.rows.forEach(r => console.log(`  ${r.campaign_key}: pv=${r.total_pv} uv=${r.total_uv}`));
+
+    // 2. Delete the fake business_card entry we created earlier (no matching logs)
+    await pool.query("DELETE FROM campaign_analytics WHERE campaign_key = 'business_card'");
+    console.log('\nDeleted fake business_card entry from campaign_analytics');
+
+    // 3. Update the most recent campaign_visit_logs that are from the business card scan
+    //    The user says the latest records (25/07/2026) are actually from the business card.
+    //    These records have campaign_key='oteha' because the business card QR code wasn't
+    //    properly set up. Move the 3 most recent oteha visitor records to business_card.
+    const updateResult = await pool.query(`
+      WITH latest_oteha AS (
+        SELECT id FROM campaign_visit_logs
+        WHERE campaign_key = 'oteha'
+        ORDER BY created_at DESC
+        LIMIT 3
+      )
+      UPDATE campaign_visit_logs
+      SET campaign_key = 'business_card'
+      WHERE id IN (SELECT id FROM latest_oteha)
+      RETURNING id, campaign_key, created_at
+    `);
+    console.log(`\nUpdated ${updateResult.rowCount} records from oteha → business_card:`);
+    updateResult.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.id}`));
+
+    // 4. Recalculate campaign_analytics from campaign_visit_logs
     await pool.query(`
       INSERT INTO campaign_analytics (campaign_key, campaign_name, total_pv, total_uv, last_visited_at)
-      VALUES ('business_card', 'Business Card', 3, 2, NOW())
+      SELECT
+        cvl.campaign_key,
+        CASE
+          WHEN cvl.campaign_key = 'business_card' THEN 'Business Card'
+          WHEN cvl.campaign_key = 'oteha' THEN 'Oteha Campaign'
+          ELSE cvl.campaign_key
+        END,
+        COUNT(*) AS total_pv,
+        COUNT(DISTINCT visitor_hash) AS total_uv,
+        MAX(created_at) AS last_visited_at
+      FROM campaign_visit_logs cvl
+      WHERE cvl.campaign_key IN ('oteha', 'business_card')
+      GROUP BY cvl.campaign_key
       ON CONFLICT (campaign_key)
       DO UPDATE SET
-        campaign_name = 'Business Card',
-        last_visited_at = NOW(),
-        updated_at = NOW()
+        total_pv = EXCLUDED.total_pv,
+        total_uv = EXCLUDED.total_uv,
+        last_visited_at = EXCLUDED.last_visited_at,
+        updated_at = NOW(),
+        campaign_name = EXCLUDED.campaign_name
     `);
-    console.log('OK');
+    console.log('\nRecalculated campaign_analytics from actual visit logs');
 
-    const r = await pool.query('SELECT * FROM campaign_analytics ORDER BY last_visited_at DESC');
-    console.log('campaign_analytics:', JSON.stringify(r.rows, null, 2));
+    // 5. Verify
+    const logsAfter = await pool.query(
+      'SELECT id, campaign_key, visitor_hash, created_at FROM campaign_visit_logs ORDER BY created_at DESC LIMIT 10'
+    );
+    console.log('\ncampaign_visit_logs after:');
+    logsAfter.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash?.substring(0,12)}...`));
+
+    const pvAfter = await pool.query('SELECT campaign_key, campaign_name, total_pv, total_uv FROM campaign_analytics ORDER BY total_pv DESC');
+    console.log('\ncampaign_analytics after:');
+    pvAfter.rows.forEach(r => console.log(`  ${r.campaign_key} (${r.campaign_name}): pv=${r.total_pv} uv=${r.total_uv}`));
 
     await pool.end();
     console.log('\nDone.');

@@ -59,10 +59,7 @@ export async function GET(request: Request) {
         total_uv: parseInt(row.total_uv || '0', 10),
         last_visited_at: row.last_visited_at,
       })),
-      logs: logsResult.rows.map(row => ({
-        ...row,
-        campaign_key: capitalize(row.campaign_key),
-      })),
+      logs: logsResult.rows,
     });
   } catch (error) {
     console.error('Error fetching scan analytics:', error);

@@ -754,7 +754,7 @@ export default function AnalyticsPage() {
                             </td>
                             <td className="py-3 px-4">
                               <span className="font-semibold text-gray-900 text-xs bg-gray-100 px-2 py-0.5 rounded">
-                                {log.campaign_key}
+                                {log.campaign_key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                               </span>
                             </td>
                             <td className="py-3 px-4 font-mono text-xs text-gray-500">
