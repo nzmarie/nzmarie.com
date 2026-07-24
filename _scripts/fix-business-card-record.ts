@@ -26,53 +26,39 @@ const pool = new Pool({
 
 async function main() {
   try {
-    // 1. Check current logs
-    const logsBefore = await pool.query(
-      'SELECT id, campaign_key, visitor_hash, created_at FROM campaign_visit_logs ORDER BY created_at DESC LIMIT 10'
+    // 1. Find records with visitor hash starting with a56f459e8bba
+    const hashResult = await pool.query(
+      "SELECT id, campaign_key, visitor_hash, created_at FROM campaign_visit_logs WHERE visitor_hash LIKE 'a56f459e8bba%' ORDER BY created_at DESC"
     );
-    console.log('campaign_visit_logs (latest 10):');
-    logsBefore.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash?.substring(0,12)}... | ${r.id}`));
+    console.log('Records with a56f459e8bba...:');
+    hashResult.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash.substring(0,15)}...`));
 
-    const pvBefore = await pool.query('SELECT campaign_key, total_pv, total_uv FROM campaign_analytics ORDER BY total_pv DESC');
-    console.log('\ncampaign_analytics before:');
-    pvBefore.rows.forEach(r => console.log(`  ${r.campaign_key}: pv=${r.total_pv} uv=${r.total_uv}`));
+    // 2. Move them back to oteha
+    const updateResult = await pool.query(
+      "UPDATE campaign_visit_logs SET campaign_key = 'oteha' WHERE visitor_hash LIKE 'a56f459e8bba%' RETURNING id, campaign_key"
+    );
+    console.log(`\nMoved ${updateResult.rowCount} records back to oteha`);
 
-    // 2. Delete the fake business_card entry we created earlier (no matching logs)
-    await pool.query("DELETE FROM campaign_analytics WHERE campaign_key = 'business_card'");
-    console.log('\nDeleted fake business_card entry from campaign_analytics');
+    // 3. Update oteha campaign_name to just "Oteha" (remove "Campaign")
+    await pool.query(
+      "UPDATE campaign_analytics SET campaign_name = 'Oteha' WHERE campaign_key = 'oteha'"
+    );
+    console.log('Updated oteha campaign_name to "Oteha"');
 
-    // 3. Update the most recent campaign_visit_logs that are from the business card scan
-    //    The user says the latest records (25/07/2026) are actually from the business card.
-    //    These records have campaign_key='oteha' because the business card QR code wasn't
-    //    properly set up. Move the 3 most recent oteha visitor records to business_card.
-    const updateResult = await pool.query(`
-      WITH latest_oteha AS (
-        SELECT id FROM campaign_visit_logs
-        WHERE campaign_key = 'oteha'
-        ORDER BY created_at DESC
-        LIMIT 3
-      )
-      UPDATE campaign_visit_logs
-      SET campaign_key = 'business_card'
-      WHERE id IN (SELECT id FROM latest_oteha)
-      RETURNING id, campaign_key, created_at
-    `);
-    console.log(`\nUpdated ${updateResult.rowCount} records from oteha → business_card:`);
-    updateResult.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.id}`));
-
-    // 4. Recalculate campaign_analytics from campaign_visit_logs
+    // 4. Recalculate all campaign_analytics from actual visit logs
     await pool.query(`
-      INSERT INTO campaign_analytics (campaign_key, campaign_name, total_pv, total_uv, last_visited_at)
+      INSERT INTO campaign_analytics (campaign_key, campaign_name, total_pv, total_uv, last_visited_at, updated_at)
       SELECT
         cvl.campaign_key,
         CASE
           WHEN cvl.campaign_key = 'business_card' THEN 'Business Card'
-          WHEN cvl.campaign_key = 'oteha' THEN 'Oteha Campaign'
+          WHEN cvl.campaign_key = 'oteha' THEN 'Oteha'
           ELSE cvl.campaign_key
         END,
         COUNT(*) AS total_pv,
         COUNT(DISTINCT visitor_hash) AS total_uv,
-        MAX(created_at) AS last_visited_at
+        MAX(created_at) AS last_visited_at,
+        NOW()
       FROM campaign_visit_logs cvl
       WHERE cvl.campaign_key IN ('oteha', 'business_card')
       GROUP BY cvl.campaign_key
@@ -84,18 +70,20 @@ async function main() {
         updated_at = NOW(),
         campaign_name = EXCLUDED.campaign_name
     `);
-    console.log('\nRecalculated campaign_analytics from actual visit logs');
+    console.log('Recalculated campaign_analytics');
 
     // 5. Verify
-    const logsAfter = await pool.query(
-      'SELECT id, campaign_key, visitor_hash, created_at FROM campaign_visit_logs ORDER BY created_at DESC LIMIT 10'
+    const finalLogs = await pool.query(
+      'SELECT campaign_key, visitor_hash, created_at FROM campaign_visit_logs ORDER BY created_at DESC LIMIT 6'
     );
-    console.log('\ncampaign_visit_logs after:');
-    logsAfter.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash?.substring(0,12)}...`));
+    console.log('\nFinal visit logs (latest 6):');
+    finalLogs.rows.forEach(r => console.log(`  ${r.created_at} | ${r.campaign_key} | ${r.visitor_hash.substring(0,12)}...`));
 
-    const pvAfter = await pool.query('SELECT campaign_key, campaign_name, total_pv, total_uv FROM campaign_analytics ORDER BY total_pv DESC');
-    console.log('\ncampaign_analytics after:');
-    pvAfter.rows.forEach(r => console.log(`  ${r.campaign_key} (${r.campaign_name}): pv=${r.total_pv} uv=${r.total_uv}`));
+    const finalAnalytics = await pool.query(
+      'SELECT campaign_key, campaign_name, total_pv, total_uv FROM campaign_analytics ORDER BY total_pv DESC'
+    );
+    console.log('\nFinal campaign_analytics:');
+    finalAnalytics.rows.forEach(r => console.log(`  ${r.campaign_key} (${r.campaign_name}): pv=${r.total_pv} uv=${r.total_uv}`));
 
     await pool.end();
     console.log('\nDone.');
