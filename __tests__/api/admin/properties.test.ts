@@ -205,12 +205,78 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     await GET(req);
 
     const sqlCalls = mockQuery.mock.calls as Array<[string, unknown[]]>;
-    const mainQuery = sqlCalls.find(c => c[0].includes('FROM properties'));
-    expect(mainQuery).toBeDefined();
-    const sql = mainQuery![0];
+    // Data query is the second call (first is COUNT, second is data)
+    const dataQuery = sqlCalls.length >= 2 ? sqlCalls[1] : sqlCalls.find(c => !c[0].startsWith('SELECT COUNT(*)'));
+    expect(dataQuery).toBeDefined();
+    const sql = dataQuery![0];
     expect(sql).toContain('SPLIT_PART(re.address');
     expect(sql).toContain('SPLIT_PART(rer.address');
     expect(sql).not.toContain('address_fingerprint = re.address_fingerprint');
+  });
+
+  it('COUNT skips JOINs when no marketStatus filter', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '5' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow()] });
+
+    const req = new Request('http://localhost/api/admin/properties?suburb=Takapuna');
+    await GET(req);
+
+    const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const countSql = calls[0][0];
+    expect(countSql).toContain('SELECT COUNT(*) as total');
+    expect(countSql).toContain('FROM properties p WHERE');
+    expect(countSql).not.toContain('LEFT JOIN');
+    expect(countSql).not.toContain('real_estate');
+  });
+
+  it('COUNT includes JOINs when marketStatus=for_sale', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow({ on_market_sale: true })] });
+
+    const req = new Request('http://localhost/api/admin/properties?market_status=for_sale');
+    await GET(req);
+
+    const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const countSql = calls[0][0];
+    expect(countSql).toContain('SELECT COUNT(*) as total');
+    expect(countSql).toContain('LEFT JOIN real_estate');
+    expect(countSql).toContain('AND re.id IS NOT NULL');
+  });
+
+  it('COUNT includes JOINs when marketStatus=not_listed', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow()] });
+
+    const req = new Request('http://localhost/api/admin/properties?market_status=not_listed');
+    await GET(req);
+
+    const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const countSql = calls[0][0];
+    expect(countSql).toContain('LEFT JOIN real_estate');
+    expect(countSql).toContain('AND re.id IS NULL AND rer.id IS NULL');
+  });
+
+  it('uses parameterized date for last_sold_min_years', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow()] });
+
+    const req = new Request('http://localhost/api/admin/properties?last_sold_min_years=5');
+    await GET(req);
+
+    const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const sql = calls[0][0];
+    const params = calls[0][1];
+    // Should use $n::date not INTERVAL '5 years'
+    expect(sql).toContain('::date');
+    expect(sql).not.toContain("INTERVAL '5 years'");
+    expect(sql).not.toContain("INTERVAL '");
+    // First param should be a date string (from last_sold_min_years)
+    expect(typeof params[0]).toBe('string');
+    expect(params[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('sets on_market_sale=false when no real_estate match', async () => {

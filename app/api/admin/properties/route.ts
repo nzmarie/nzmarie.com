@@ -152,13 +152,21 @@ export async function GET(request: Request) {
       if (lastSoldMinYears) {
         const years = parseInt(lastSoldMinYears);
         if (!isNaN(years) && years > 0) {
-          query += ` AND p.last_sold_date <= NOW() - INTERVAL '${years} years'`;
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - years);
+          query += ` AND p.last_sold_date <= $${paramIndex}::date`;
+          params.push(d.toISOString().split('T')[0]);
+          paramIndex++;
         }
       }
       if (lastSoldMaxYears) {
         const years = parseInt(lastSoldMaxYears);
         if (!isNaN(years) && years > 0) {
-          query += ` AND p.last_sold_date >= NOW() - INTERVAL '${years} years'`;
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - years);
+          query += ` AND p.last_sold_date >= $${paramIndex}::date`;
+          params.push(d.toISOString().split('T')[0]);
+          paramIndex++;
         }
       }
     }
@@ -274,8 +282,15 @@ export async function GET(request: Request) {
     query += ` AND re.id IS NULL AND rer.id IS NULL`;
   }
 
-  // Get total count
-  const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
+  // Get total count — avoid expensive JOINs when filters only touch properties table
+  const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
+  let countQuery: string;
+  if (needsJoinForCount) {
+    countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
+  } else {
+    const wherePos = query.indexOf('WHERE 1=1');
+    countQuery = 'SELECT COUNT(*) as total FROM properties p ' + query.substring(wherePos);
+  }
   const countResult = await marieQuery<{ total: string }>(countQuery, params);
   const total = parseInt(countResult.rows[0]?.total || '0');
 
