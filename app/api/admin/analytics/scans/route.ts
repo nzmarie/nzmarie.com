@@ -45,18 +45,24 @@ export async function GET(request: Request) {
 
     const logsResult = await marieDB.query(logsQuery, params);
 
+    const capitalize = (s: string) =>
+      s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
     return NextResponse.json({
       success: true,
       total_scans: parseInt(summaryResult.rows[0]?.total_pv || '0', 10),
       total_unique: parseInt(summaryResult.rows[0]?.total_uv || '0', 10),
       campaigns: campaignsResult.rows.map(row => ({
         campaign_key: row.campaign_key,
-        campaign_name: row.campaign_name,
+        campaign_name: capitalize(row.campaign_name || row.campaign_key),
         total_pv: parseInt(row.total_pv || '0', 10),
         total_uv: parseInt(row.total_uv || '0', 10),
         last_visited_at: row.last_visited_at,
       })),
-      logs: logsResult.rows,
+      logs: logsResult.rows.map(row => ({
+        ...row,
+        campaign_key: capitalize(row.campaign_key),
+      })),
     });
   } catch (error) {
     console.error('Error fetching scan analytics:', error);

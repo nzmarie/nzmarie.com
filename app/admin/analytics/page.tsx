@@ -736,7 +736,7 @@ export default function AnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                      <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500">
                         <th className="py-3 px-4">Time</th>
                         <th className="py-3 px-4">Campaign</th>
                         <th className="py-3 px-4">Visitor Fingerprint</th>
@@ -753,7 +753,7 @@ export default function AnalyticsPage() {
                               {new Date(log.created_at).toLocaleString('en-NZ')}
                             </td>
                             <td className="py-3 px-4">
-                              <span className="font-semibold text-gray-900 uppercase text-xs bg-gray-100 px-2 py-0.5 rounded">
+                              <span className="font-semibold text-gray-900 text-xs bg-gray-100 px-2 py-0.5 rounded">
                                 {log.campaign_key}
                               </span>
                             </td>

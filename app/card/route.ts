@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { marieDB } from '@/lib/db';
+import { recordCampaignVisit } from '@/lib/campaign-tracker';
 
 export async function GET(request: Request) {
   const redirectUrl = new URL('/', request.url);
@@ -13,7 +15,7 @@ export async function GET(request: Request) {
     request.headers.get('x-real-ip') ||
     'unknown';
 
-  (async () => {
+  after(async () => {
     try {
       await marieDB.ensureOutreachTablesExist?.();
       await marieDB.query(
@@ -21,9 +23,22 @@ export async function GET(request: Request) {
         ['card', userAgent, ipAddress]
       );
     } catch (err) {
-      console.error('Failed to log business card QR scan asynchronously:', err);
+      console.error('Failed to log business card QR scan:', err);
     }
-  })();
+
+    try {
+      await recordCampaignVisit({
+        campaignKey: 'business_card',
+        campaignName: 'Business Card',
+        ip: ipAddress,
+        userAgent,
+        referrer: 'qr_scan',
+        deviceType: 'mobile',
+      });
+    } catch (err) {
+      console.error('Failed to record business card campaign visit:', err);
+    }
+  });
 
   return NextResponse.redirect(redirectUrl);
 }
