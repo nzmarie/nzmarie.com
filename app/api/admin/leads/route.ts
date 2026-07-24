@@ -48,11 +48,19 @@ export async function GET(request: Request) {
         re.agent_name as sale_agent,
         CASE WHEN rer.id IS NOT NULL THEN true ELSE false END as on_market_rent,
         rer.status as rent_listing_status,
-        rer.price_display as rent_price
+        rer.price_display as rent_price,
+        -- Outreach fields
+        op.id as outreach_id,
+        op.campaign as outreach_campaign,
+        op.status as outreach_status,
+        op.sent_at,
+        op.last_sent_at,
+        op.total_send_count
       FROM leads l
       LEFT JOIN properties p ON REPLACE(l.property_id::text, '-', '') = p.id
       LEFT JOIN real_estate re ON TRIM(LOWER(SPLIT_PART(re.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(re.suburb)) = TRIM(LOWER(p.suburb))
       LEFT JOIN real_estate_rent rer ON TRIM(LOWER(SPLIT_PART(rer.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(rer.suburb)) = TRIM(LOWER(p.suburb))
+      LEFT JOIN outreach_properties op ON l.source_outreach_id = op.id
       WHERE 1=1
     `;
     const params: unknown[] = [];

@@ -58,6 +58,13 @@ interface Lead {
   on_market_rent?: boolean;
   rent_listing_status?: string | null;
   rent_price?: string | null;
+  // Joined from outreach_properties table
+  outreach_id?: string | null;
+  outreach_campaign?: string | null;
+  outreach_status?: string | null;
+  sent_at?: string | null;
+  last_sent_at?: string | null;
+  total_send_count?: number | null;
 }
 
 interface LeadEvent {
@@ -123,6 +130,7 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [suburbFilter, setSuburbFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
@@ -159,6 +167,7 @@ export default function LeadsPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (priorityFilter) params.set('priority', priorityFilter);
       if (sourceFilter) params.set('source', sourceFilter);
+      if (suburbFilter) params.set('suburb', suburbFilter);
       if (search) params.set('search', search);
       params.set('page', String(page));
       params.set('limit', '50');
@@ -173,13 +182,38 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, sourceFilter, search, page, notify]);
+  }, [statusFilter, priorityFilter, sourceFilter, suburbFilter, search, page, notify]);
 
   useEffect(() => {
     if (session?.user && isAdmin(session.user.email)) {
       fetchLeads();
     }
   }, [session, fetchLeads]);
+
+  // Listen for global edit/convert events to maintain consistency with properties page
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as Record<string, unknown>;
+      // payload may be a Lead or Property-like object; treat it as the selected lead
+      setSelectedLead(payload as Lead);
+      setPropertyEditData({ ...payload } as Partial<Lead>);
+      setPropertyEditOpen(true);
+    };
+    window.addEventListener('open-edit-modal', handler);
+    return () => window.removeEventListener('open-edit-modal', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as Record<string, unknown>;
+      // Open the lead edit modal for the given payload
+      setSelectedLead(payload as Lead);
+      setLeadEditData({ ...payload } as Partial<Lead>);
+      setLeadEditOpen(true);
+    };
+    window.addEventListener('open-convert-modal', handler);
+    return () => window.removeEventListener('open-convert-modal', handler);
+  }, []);
 
   if (!session?.user) {
     return <div className="flex items-center justify-center h-64 text-slate-500">Loading...</div>;
@@ -208,41 +242,6 @@ export default function LeadsPage() {
     setEditData({ ...lead });
     setEditOpen(true);
   };
-
-  const openLeadEdit = (lead: Lead) => {
-    setLeadEditData({ ...lead });
-    setLeadEditOpen(true);
-  };
-
-  const openPropertyEdit = (lead: Lead) => {
-    setPropertyEditData({ ...lead });
-    setPropertyEditOpen(true);
-  };
-
-  // Listen for global edit/convert events to maintain consistency with properties page
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const payload = (e as CustomEvent).detail as any;
-      // payload may be a Lead or Property-like object; treat it as the selected lead
-      setSelectedLead(payload);
-      setPropertyEditData({ ...payload });
-      setPropertyEditOpen(true);
-    };
-    window.addEventListener('open-edit-modal', handler);
-    return () => window.removeEventListener('open-edit-modal', handler);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const payload = (e as CustomEvent).detail as any;
-      // Open the lead edit modal for the given payload
-      setSelectedLead(payload);
-      setLeadEditData({ ...payload });
-      setLeadEditOpen(true);
-    };
-    window.addEventListener('open-convert-modal', handler);
-    return () => window.removeEventListener('open-convert-modal', handler);
-  }, []);
 
   const handleLeadEditDataChange = (key: string, value: string | number | boolean) => {
     setLeadEditData(prev => ({ ...prev, [key]: value }));
@@ -401,6 +400,60 @@ export default function LeadsPage() {
         ))}
       </div>
 
+      {/* Quick Suburb Filter Buttons */}
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>
+          Quick Filter by Suburb
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+          {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
+            <button
+              key={suburb}
+              onClick={() => { setSuburbFilter(prev => prev === suburb ? '' : suburb); setPage(1); }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "20px",
+                border: suburbFilter === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                backgroundColor: suburbFilter === suburb ? '#3b82f6' : 'white',
+                color: suburbFilter === suburb ? 'white' : '#4a5568',
+                fontSize: "0.8rem",
+                fontWeight: suburbFilter === suburb ? '600' : '500',
+                cursor: "pointer",
+                transition: "all 0.2s",
+                boxShadow: suburbFilter === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (suburbFilter !== suburb) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f1f5f9';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (suburbFilter !== suburb) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'white';
+                }
+              }}
+            >
+              {suburb}
+            </button>
+          ))}
+        </div>
+        {suburbFilter && (
+          <button
+            onClick={() => { setSuburbFilter(''); setPage(1); }}
+            style={{
+              padding: "4px 8px",
+              fontSize: "0.75rem",
+              color: "#64748b",
+              fontWeight: "500",
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            Clear suburb filter
+          </button>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <input type="text" placeholder="Search address, name, email, phone..."
@@ -421,8 +474,8 @@ export default function LeadsPage() {
           <option value="email">Email</option>
           <option value="manual">Manual</option>
         </select>
-        {(statusFilter || priorityFilter || sourceFilter || search) && (
-          <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSearch(''); setPage(1); }}
+        {(statusFilter || priorityFilter || sourceFilter || suburbFilter || search) && (
+          <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSuburbFilter(''); setSearch(''); setPage(1); }}
             className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900">
             Clear
           </button>
@@ -904,6 +957,48 @@ export default function LeadsPage() {
                             {lead.owner_phone && <span>📞 {lead.owner_phone}</span>}
                           </div>
                         )}
+                        
+                        {/* Outreach Info */}
+                        {lead.outreach_id && (
+                          <div style={{
+                            backgroundColor: "#f0f9ff",
+                            border: "1px solid #bfdbfe",
+                            borderRadius: "8px",
+                            padding: "8px 10px",
+                            marginBottom: "8px",
+                            fontSize: "0.75rem",
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                              <span style={{ fontWeight: "600", color: "#1e40af" }}>Outreach</span>
+                              <span style={{
+                                color: lead.outreach_status === 'sent' ? '#16a34a' : lead.outreach_status === 'pending' ? '#f59e0b' : '#64748b',
+                                fontWeight: "600",
+                                textTransform: "capitalize",
+                              }}>
+                                {lead.outreach_status}
+                              </span>
+                            </div>
+                            {lead.outreach_campaign && (
+                              <div style={{ color: "#1e40af", marginBottom: "3px" }}>
+                                Campaign: {lead.outreach_campaign}
+                              </div>
+                            )}
+                            {lead.last_sent_at && (
+                              <div style={{ color: "#1e40af" }}>
+                                Sent: {new Date(lead.last_sent_at).toLocaleDateString('en-NZ')}
+                                {lead.total_send_count && lead.total_send_count > 1 && (
+                                  <span> ({lead.total_send_count}x)</span>
+                                )}
+                              </div>
+                            )}
+                            {!lead.last_sent_at && lead.sent_at && (
+                              <div style={{ color: "#1e40af" }}>
+                                Sent: {new Date(lead.sent_at).toLocaleDateString('en-NZ')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {lead.summary && (
                           <div style={{
                             fontSize: "0.8rem",
