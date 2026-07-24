@@ -106,6 +106,16 @@ export async function ensureOutreachTablesExist(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_qr_token ON outreach_qr_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_qr_property ON outreach_qr_tokens(outreach_property_id);
     CREATE INDEX IF NOT EXISTS idx_qr_send_log ON outreach_qr_tokens(send_log_id);
+
+    CREATE TABLE IF NOT EXISTS card_qr_scan_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source VARCHAR(50) NOT NULL DEFAULT 'card',
+      user_agent TEXT,
+      ip_address VARCHAR(100),
+      scanned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_card_qr_scanned_at ON card_qr_scan_logs(scanned_at DESC);
     `;
 
     await mariePool.query(sql);
