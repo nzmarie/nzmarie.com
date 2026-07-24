@@ -195,8 +195,8 @@ export default function LeadsPage() {
     const handler = (e: Event) => {
       const payload = (e as CustomEvent).detail as Record<string, unknown>;
       // payload may be a Lead or Property-like object; treat it as the selected lead
-      setSelectedLead(payload as Lead);
-      setPropertyEditData({ ...payload } as Partial<Lead>);
+      setSelectedLead(payload as unknown as Lead);
+      setPropertyEditData({ ...payload } as unknown as Partial<Lead>);
       setPropertyEditOpen(true);
     };
     window.addEventListener('open-edit-modal', handler);
@@ -207,7 +207,7 @@ export default function LeadsPage() {
     const handler = (e: Event) => {
       const payload = (e as CustomEvent).detail as Record<string, unknown>;
       // Open the lead edit modal for the given payload
-      setSelectedLead(payload as Lead);
+      setSelectedLead(payload as unknown as Lead);
       setLeadEditData({ ...payload } as Partial<Lead>);
       setLeadEditOpen(true);
     };
