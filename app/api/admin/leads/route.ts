@@ -20,9 +20,10 @@ export async function GET(request: Request) {
   const offset = (page - 1) * limit;
 
   try {
-    let query = `
+    // Count query — single table, no JOIN, cheap
+    let countQuery = `SELECT COUNT(*) as total FROM leads l WHERE 1=1`;
+    let dataQuery = `
       SELECT l.*,
-        COUNT(*) OVER() as total_count,
         p.id as joined_property_id,
         p.cover_image_url as image_url,
         p.bedrooms,
@@ -49,7 +50,6 @@ export async function GET(request: Request) {
         CASE WHEN rer.id IS NOT NULL THEN true ELSE false END as on_market_rent,
         rer.status as rent_listing_status,
         rer.price_display as rent_price,
-        -- Outreach fields
         op.id as outreach_id,
         op.campaign as outreach_campaign,
         op.status as outreach_status,
@@ -63,40 +63,60 @@ export async function GET(request: Request) {
       LEFT JOIN outreach_properties op ON l.source_outreach_id = op.id
       WHERE 1=1
     `;
-    const params: unknown[] = [];
+    const countParams: unknown[] = [];
+    const dataParams: unknown[] = [];
     let idx = 1;
 
     if (status) {
-      query += ` AND l.status = $${idx++}`;
-      params.push(status);
+      const clause = ` AND l.status = $${idx++}`;
+      countQuery += clause;
+      dataQuery += clause;
+      countParams.push(status);
+      dataParams.push(status);
     }
     if (priority) {
-      query += ` AND l.priority = $${idx++}`;
-      params.push(priority);
+      const clause = ` AND l.priority = $${idx++}`;
+      countQuery += clause;
+      dataQuery += clause;
+      countParams.push(priority);
+      dataParams.push(priority);
     }
     if (source) {
-      query += ` AND l.source = $${idx++}`;
-      params.push(source);
+      const clause = ` AND l.source = $${idx++}`;
+      countQuery += clause;
+      dataQuery += clause;
+      countParams.push(source);
+      dataParams.push(source);
     }
     if (suburb) {
-      query += ` AND l.suburb ILIKE $${idx++}`;
-      params.push(suburb);
+      const clause = ` AND l.suburb ILIKE $${idx++}`;
+      countQuery += clause;
+      dataQuery += clause;
+      countParams.push(suburb);
+      dataParams.push(suburb);
     }
     if (search) {
-      query += ` AND (l.property_address ILIKE $${idx} OR l.owner_name ILIKE $${idx} OR l.owner_email ILIKE $${idx} OR l.owner_phone ILIKE $${idx} OR l.summary ILIKE $${idx})`;
-      params.push(`%${search}%`);
+      const clause = ` AND (l.property_address ILIKE $${idx} OR l.owner_name ILIKE $${idx} OR l.owner_email ILIKE $${idx} OR l.owner_phone ILIKE $${idx} OR l.summary ILIKE $${idx})`;
+      countQuery += clause;
+      dataQuery += clause;
+      const val = `%${search}%`;
+      countParams.push(val);
+      dataParams.push(val);
       idx++;
     }
 
-    query += ` ORDER BY l.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
-    params.push(limit, offset);
+    dataQuery += ` ORDER BY l.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
+    dataParams.push(limit, offset);
 
-    const result = await marieDB.query(query, params);
-    const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
+    const [countResult, dataResult] = await Promise.all([
+      marieDB.query(countQuery, countParams),
+      marieDB.query(dataQuery, dataParams),
+    ]);
+    const total = parseInt(countResult.rows[0]?.total || '0');
 
     return NextResponse.json({
       success: true,
-      data: result.rows,
+      data: dataResult.rows,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
