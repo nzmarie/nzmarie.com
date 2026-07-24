@@ -7,6 +7,8 @@ import Image from 'next/image';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
 import { FaBed, FaBath, FaCar, FaRulerCombined, FaMapMarkerAlt } from 'react-icons/fa';
+import { LeadEditModal } from '@/components/admin/LeadEditModal';
+import { PropertyEditModal } from '@/components/admin/PropertyEditModal';
 
 interface Lead {
   id: string;
@@ -56,6 +58,13 @@ interface Lead {
   on_market_rent?: boolean;
   rent_listing_status?: string | null;
   rent_price?: string | null;
+  // Joined from outreach_properties table
+  outreach_id?: string | null;
+  outreach_campaign?: string | null;
+  outreach_status?: string | null;
+  sent_at?: string | null;
+  last_sent_at?: string | null;
+  total_send_count?: number | null;
 }
 
 interface LeadEvent {
@@ -121,6 +130,7 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [suburbFilter, setSuburbFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
@@ -131,6 +141,14 @@ export default function LeadsPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Lead>>({});
+
+  const [leadEditOpen, setLeadEditOpen] = useState(false);
+  const [leadEditData, setLeadEditData] = useState<Partial<Lead>>({});
+  const [leadEditLoading, setLeadEditLoading] = useState(false);
+
+  const [propertyEditOpen, setPropertyEditOpen] = useState(false);
+  const [propertyEditData, setPropertyEditData] = useState<Partial<Lead>>({});
+  const [propertyEditLoading, setPropertyEditLoading] = useState(false);
 
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [eventForm, setEventForm] = useState({ event_type: 'note', title: '', description: '' });
@@ -149,6 +167,7 @@ export default function LeadsPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (priorityFilter) params.set('priority', priorityFilter);
       if (sourceFilter) params.set('source', sourceFilter);
+      if (suburbFilter) params.set('suburb', suburbFilter);
       if (search) params.set('search', search);
       params.set('page', String(page));
       params.set('limit', '50');
@@ -163,13 +182,38 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, sourceFilter, search, page, notify]);
+  }, [statusFilter, priorityFilter, sourceFilter, suburbFilter, search, page, notify]);
 
   useEffect(() => {
     if (session?.user && isAdmin(session.user.email)) {
       fetchLeads();
     }
   }, [session, fetchLeads]);
+
+  // Listen for global edit/convert events to maintain consistency with properties page
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as Record<string, unknown>;
+      // payload may be a Lead or Property-like object; treat it as the selected lead
+      setSelectedLead(payload as Lead);
+      setPropertyEditData({ ...payload } as Partial<Lead>);
+      setPropertyEditOpen(true);
+    };
+    window.addEventListener('open-edit-modal', handler);
+    return () => window.removeEventListener('open-edit-modal', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const payload = (e as CustomEvent).detail as Record<string, unknown>;
+      // Open the lead edit modal for the given payload
+      setSelectedLead(payload as Lead);
+      setLeadEditData({ ...payload } as Partial<Lead>);
+      setLeadEditOpen(true);
+    };
+    window.addEventListener('open-convert-modal', handler);
+    return () => window.removeEventListener('open-convert-modal', handler);
+  }, []);
 
   if (!session?.user) {
     return <div className="flex items-center justify-center h-64 text-slate-500">Loading...</div>;
@@ -197,6 +241,93 @@ export default function LeadsPage() {
   const openEdit = (lead: Lead) => {
     setEditData({ ...lead });
     setEditOpen(true);
+  };
+
+  const handleLeadEditDataChange = (key: string, value: string | number | boolean) => {
+    setLeadEditData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handlePropertyEditDataChange = (key: string, value: string | number | boolean) => {
+    setPropertyEditData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const saveLeadEdit = async () => {
+    if (!selectedLead) return;
+    setLeadEditLoading(true);
+    try {
+      const res = await fetch(`/api/admin/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leadEditData),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      const json = await res.json();
+      setSelectedLead(json.data);
+      setLeads(prev => prev.map(l => l.id === json.data.id ? json.data : l));
+      setLeadEditOpen(false);
+      notify('success', 'Lead updated');
+    } catch {
+      notify('error', 'Failed to update lead');
+    } finally {
+      setLeadEditLoading(false);
+    }
+  };
+
+  const savePropertyEdit = async () => {
+    if (!selectedLead || !selectedLead.joined_property_id) return;
+    setPropertyEditLoading(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: Record<string, any> = {};
+      
+      const fieldMappings: Record<string, string> = {
+        address: 'address',
+        suburb: 'suburb',
+        city: 'city',
+        region: 'region',
+        postcode: 'postcode',
+        bedrooms: 'bedrooms',
+        bathrooms: 'bathrooms',
+        car_spaces: 'garages',
+        year_built: 'build_year',
+        floor_size: 'floor_area',
+        land_area: 'land_area',
+        last_sold_price: 'last_sold_price',
+        last_sold_date: 'last_sold_date',
+        capital_value: 'rv',
+        property_url: 'property_url',
+        cover_image_url: 'image_url',
+        description: 'description',
+      };
+
+      Object.entries(fieldMappings).forEach(([editKey, dbKey]) => {
+        if (propertyEditData[editKey as keyof typeof propertyEditData] !== undefined) {
+          const value = propertyEditData[editKey as keyof typeof propertyEditData];
+          payload[dbKey] = value === '' ? null : value;
+        }
+      });
+
+      const res = await fetch(`/api/admin/properties/${selectedLead.joined_property_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update property');
+      
+      const updated = await res.json();
+      setLeads(prev => prev.map(l => 
+        l.joined_property_id === selectedLead.joined_property_id 
+          ? { ...l, ...updated.data }
+          : l
+      ));
+      setPropertyEditOpen(false);
+      notify('success', 'Property updated');
+    } catch {
+      notify('error', 'Failed to update property');
+    } finally {
+      setPropertyEditLoading(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -269,6 +400,60 @@ export default function LeadsPage() {
         ))}
       </div>
 
+      {/* Quick Suburb Filter Buttons */}
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>
+          Quick Filter by Suburb
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+          {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
+            <button
+              key={suburb}
+              onClick={() => { setSuburbFilter(prev => prev === suburb ? '' : suburb); setPage(1); }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "20px",
+                border: suburbFilter === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                backgroundColor: suburbFilter === suburb ? '#3b82f6' : 'white',
+                color: suburbFilter === suburb ? 'white' : '#4a5568',
+                fontSize: "0.8rem",
+                fontWeight: suburbFilter === suburb ? '600' : '500',
+                cursor: "pointer",
+                transition: "all 0.2s",
+                boxShadow: suburbFilter === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (suburbFilter !== suburb) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f1f5f9';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (suburbFilter !== suburb) {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'white';
+                }
+              }}
+            >
+              {suburb}
+            </button>
+          ))}
+        </div>
+        {suburbFilter && (
+          <button
+            onClick={() => { setSuburbFilter(''); setPage(1); }}
+            style={{
+              padding: "4px 8px",
+              fontSize: "0.75rem",
+              color: "#64748b",
+              fontWeight: "500",
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            Clear suburb filter
+          </button>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <input type="text" placeholder="Search address, name, email, phone..."
@@ -289,8 +474,8 @@ export default function LeadsPage() {
           <option value="email">Email</option>
           <option value="manual">Manual</option>
         </select>
-        {(statusFilter || priorityFilter || sourceFilter || search) && (
-          <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSearch(''); setPage(1); }}
+        {(statusFilter || priorityFilter || sourceFilter || suburbFilter || search) && (
+          <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSuburbFilter(''); setSearch(''); setPage(1); }}
             className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900">
             Clear
           </button>
@@ -555,7 +740,7 @@ export default function LeadsPage() {
                     {/* Body */}
                     <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column" }}>
                       {/* Address + Actions */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", gap: "12px" }}>
                         <h3 style={{
                           margin: 0,
                           fontSize: "1.1rem",
@@ -566,6 +751,58 @@ export default function LeadsPage() {
                         }}>
                           {lead.property_address}
                         </h3>
+                        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              // dispatch global convert-modal event for consistency with properties page
+                              window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: lead }));
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              backgroundColor: '#f5f3ff',
+                              color: '#a78bfa',
+                              border: '1px solid #c4b5fd',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              fontSize: '0.85rem',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ede9fe'; e.currentTarget.style.borderColor = '#a78bfa'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f5f3ff'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+                          >
+                            Lead
+                          </button>
+                          {lead.joined_property_id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                // dispatch global edit-modal event for consistency with properties page
+                                window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: lead }));
+                              }}
+                              style={{
+                                padding: '6px 14px',
+                                backgroundColor: '#f0fdf4',
+                                color: '#16a34a',
+                                border: '1px solid #bbf7d0',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                fontSize: '0.85rem',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div style={{
@@ -720,6 +957,48 @@ export default function LeadsPage() {
                             {lead.owner_phone && <span>📞 {lead.owner_phone}</span>}
                           </div>
                         )}
+                        
+                        {/* Outreach Info */}
+                        {lead.outreach_id && (
+                          <div style={{
+                            backgroundColor: "#f0f9ff",
+                            border: "1px solid #bfdbfe",
+                            borderRadius: "8px",
+                            padding: "8px 10px",
+                            marginBottom: "8px",
+                            fontSize: "0.75rem",
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                              <span style={{ fontWeight: "600", color: "#1e40af" }}>Outreach</span>
+                              <span style={{
+                                color: lead.outreach_status === 'sent' ? '#16a34a' : lead.outreach_status === 'pending' ? '#f59e0b' : '#64748b',
+                                fontWeight: "600",
+                                textTransform: "capitalize",
+                              }}>
+                                {lead.outreach_status}
+                              </span>
+                            </div>
+                            {lead.outreach_campaign && (
+                              <div style={{ color: "#1e40af", marginBottom: "3px" }}>
+                                Campaign: {lead.outreach_campaign}
+                              </div>
+                            )}
+                            {lead.last_sent_at && (
+                              <div style={{ color: "#1e40af" }}>
+                                Sent: {new Date(lead.last_sent_at).toLocaleDateString('en-NZ')}
+                                {lead.total_send_count && lead.total_send_count > 1 && (
+                                  <span> ({lead.total_send_count}x)</span>
+                                )}
+                              </div>
+                            )}
+                            {!lead.last_sent_at && lead.sent_at && (
+                              <div style={{ color: "#1e40af" }}>
+                                Sent: {new Date(lead.sent_at).toLocaleDateString('en-NZ')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {lead.summary && (
                           <div style={{
                             fontSize: "0.8rem",
@@ -1047,6 +1326,26 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      <LeadEditModal
+        isOpen={leadEditOpen}
+        data={leadEditData}
+        onClose={() => setLeadEditOpen(false)}
+        onDataChange={handleLeadEditDataChange}
+        onSave={saveLeadEdit}
+        loading={leadEditLoading}
+        leadAddress={selectedLead?.property_address || ''}
+      />
+      
+      <PropertyEditModal
+        isOpen={propertyEditOpen}
+        data={propertyEditData}
+        onClose={() => setPropertyEditOpen(false)}
+        onDataChange={handlePropertyEditDataChange}
+        onSave={savePropertyEdit}
+        loading={propertyEditLoading}
+        propertyAddress={selectedLead?.property_address || ''}
+      />
 
       {/* Notification */}
       {notification && (
