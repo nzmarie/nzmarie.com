@@ -123,6 +123,7 @@ export default function PDFManagerPage() {
   const [qrDotColor, setQrDotColor] = useState('#000000');
   const [qrBgColor, setQrBgColor] = useState('#FFFFFF');
   const [qrCornerColor, setQrCornerColor] = useState('#000000');
+  const [activeTab, setActiveTab] = useState<'qr' | 'pdf'>('qr');
 
   const userEmail = session?.user?.email ?? '';
   const isUserAdmin = isAdmin(userEmail);
@@ -429,6 +430,34 @@ export default function PDFManagerPage() {
         </div>
       )}
 
+      {/* Tab Bar */}
+      <div className="flex space-x-1 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('qr')}
+          className={`px-5 py-3 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer ${
+            activeTab === 'qr'
+              ? 'bg-white text-purple-700 border border-gray-200 border-b-white -mb-px'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <FaQrcode className="inline w-4 h-4 mr-1.5" />
+          QR Codes
+        </button>
+        <button
+          onClick={() => setActiveTab('pdf')}
+          className={`px-5 py-3 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer ${
+            activeTab === 'pdf'
+              ? 'bg-white text-blue-700 border border-gray-200 border-b-white -mb-px'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <FaFilePdf className="inline w-4 h-4 mr-1.5" />
+          PDF Reports
+        </button>
+      </div>
+
+      {activeTab === 'qr' && (
+      <>
       {/* QR Code Manager Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50">
@@ -650,7 +679,11 @@ export default function PDFManagerPage() {
           </div>
         </div>
       )}
+      </>
+      )}
 
+      {activeTab === 'pdf' && (
+      <>
       {/* Upload Modal */}
       <div
         className={`flex items-center justify-between bg-white rounded-xl shadow-sm border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
@@ -895,6 +928,8 @@ export default function PDFManagerPage() {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

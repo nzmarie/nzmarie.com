@@ -24,8 +24,8 @@ export function AdminNavbar() {
     { href: '/admin/realestate', label: '🏡 Realestate', alwaysShow: true },
     { href: '/admin/analytics', label: '📊 Analytics', alwaysShow: false },
     { href: '/admin/reports', label: '📝 Reports', alwaysShow: false },
+    { href: '/admin/assets', label: '☁️ Assets', alwaysShow: false },
     { href: '/admin/downloads', label: '📥 Downloads', alwaysShow: false },
-    { href: '/admin/pdf-manager', label: '☁️ Suburb PDF', alwaysShow: false },
   ];
 
   function NavLink({ href, children }: { href: string; children: React.ReactNode }) {

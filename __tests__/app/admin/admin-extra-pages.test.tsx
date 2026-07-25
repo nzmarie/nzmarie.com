@@ -4,7 +4,7 @@ import React from 'react';
 import DashboardPage from '../../../app/admin/dashboard/page';
 import AnalyticsPage from '../../../app/admin/analytics/page';
 import DownloadsPage from '../../../app/admin/downloads/page';
-import PDFManagerPage from '../../../app/admin/pdf-manager/page';
+import PDFManagerPage from '../../../app/admin/assets/page';
 
 const mockPush = vi.fn();
 let mockSession: { data: { user: { email: string; name?: string } } | null; status: 'authenticated' | 'loading' | 'unauthenticated' } = {
@@ -168,10 +168,11 @@ describe('Extra admin pages', () => {
     expect(screen.getByText('Download Records')).toBeTruthy();
   });
 
-  it('renders pdf manager content for super admins', async () => {
+  it('renders assets page with QR Codes tab by default and tab switching', async () => {
     render(<PDFManagerPage />);
     expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
-    expect(screen.getByText('Uploaded Reports')).toBeTruthy();
+    expect(screen.getByText('QR Codes')).toBeTruthy();
+    expect(screen.getByText('PDF Reports')).toBeTruthy();
   });
 
   it('renders Last Sold Data For Sale table with suburb rows', async () => {
