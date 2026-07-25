@@ -170,7 +170,7 @@ describe('Extra admin pages', () => {
 
   it('renders pdf manager content for super admins', async () => {
     render(<PDFManagerPage />);
-    expect(await screen.findByText('Suburb PDF Manager')).toBeTruthy();
+    expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
     expect(screen.getByText('Uploaded Reports')).toBeTruthy();
   });
 

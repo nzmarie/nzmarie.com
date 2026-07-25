@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
 import { isAdmin } from '@/lib/permissions';
-import { FaFilePdf, FaUpload, FaDownload, FaTimes, FaCheck, FaCloudUploadAlt, FaFolderOpen } from 'react-icons/fa';
+import { FaFilePdf, FaUpload, FaDownload, FaTimes, FaCheck, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash, FaEye, FaArrowRight } from 'react-icons/fa';
 
 interface SuburbReport {
   id: string;
@@ -22,18 +22,74 @@ interface SuburbReport {
   uploaded_at: string;
 }
 
+interface QrCodeRecord {
+  id: string;
+  suburb: string;
+  target_url: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  uploaded_by: string;
+  created_at: string;
+}
+
 const DEFAULT_SUBURBS = [
-  'Oteha',
+  'Business Card',
   'Northcross',
-  'Albany',
-  'Browns Bay',
-  'Glenfield',
-  'Pinehill',
-  'Rosedale',
-  'Long Bay',
+  'Oteha',
   'Torbay',
+  'Fairview Heights',
+  'Waiake',
+  'Browns Bay',
+  'Pinehill',
+  'Rothesay Bay',
+  'Murrays Bay',
+  'Albany',
+  'Long Bay',
+  'Forrest Hill',
+  'Schnapper Rock',
+  'Unsworth Heights',
+  'Sunnynook',
+  'Greenhithe',
+  'Chatswood',
   'Mairangi Bay',
+  'Campbells Bay',
+  'Castor Bay',
+  'Milford',
+  'Glenfield',
+  'Hillcrest',
+  'Birkenhead',
+  'Hauraki',
 ];
+
+const SUBURB_URLS: Record<string, string> = {
+  'Business Card': 'https://nzmarie.com/card',
+  'Northcross': 'https://nzmarie.com/northcross',
+  'Oteha': 'https://nzmarie.com/oteha',
+  'Torbay': 'https://nzmarie.com/torbay',
+  'Fairview Heights': 'https://nzmarie.com/fairview-heights',
+  'Waiake': 'https://nzmarie.com/waiake',
+  'Browns Bay': 'https://nzmarie.com/browns-bay',
+  'Pinehill': 'https://nzmarie.com/pinehill',
+  'Rothesay Bay': 'https://nzmarie.com/rothesay-bay',
+  'Murrays Bay': 'https://nzmarie.com/murrays-bay',
+  'Albany': 'https://nzmarie.com/albany',
+  'Long Bay': 'https://nzmarie.com/long-bay',
+  'Forrest Hill': 'https://nzmarie.com/forrest-hill',
+  'Schnapper Rock': 'https://nzmarie.com/schnapper-rock',
+  'Unsworth Heights': 'https://nzmarie.com/unsworth-heights',
+  'Sunnynook': 'https://nzmarie.com/sunnynook',
+  'Greenhithe': 'https://nzmarie.com/greenhithe',
+  'Chatswood': 'https://nzmarie.com/chatswood',
+  'Mairangi Bay': 'https://nzmarie.com/mairangi-bay',
+  'Campbells Bay': 'https://nzmarie.com/campbells-bay',
+  'Castor Bay': 'https://nzmarie.com/castor-bay',
+  'Milford': 'https://nzmarie.com/milford',
+  'Glenfield': 'https://nzmarie.com/glenfield',
+  'Hillcrest': 'https://nzmarie.com/hillcrest',
+  'Birkenhead': 'https://nzmarie.com/birkenhead',
+  'Hauraki': 'https://nzmarie.com/hauraki',
+};
 
 const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 const CURRENT_YEAR = new Date().getFullYear();
@@ -56,6 +112,18 @@ export default function PDFManagerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const [qrSuburb, setQrSuburb] = useState('Oteha');
+  const [qrLogo, setQrLogo] = useState<File | null>(null);
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [qrGeneratedBlob, setQrGeneratedBlob] = useState<Blob | null>(null);
+  const [qrGenerating, setQrGenerating] = useState(false);
+  const [qrUploading, setQrUploading] = useState(false);
+  const [qrRecords, setQrRecords] = useState<QrCodeRecord[]>([]);
+  const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
+  const [qrDotColor, setQrDotColor] = useState('#000000');
+  const [qrBgColor, setQrBgColor] = useState('#FFFFFF');
+  const [qrCornerColor, setQrCornerColor] = useState('#000000');
+
   const userEmail = session?.user?.email ?? '';
   const isUserAdmin = isAdmin(userEmail);
 
@@ -65,7 +133,7 @@ export default function PDFManagerPage() {
     }
   }, [status, isUserAdmin, router]);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/admin/pdf/reports');
@@ -78,13 +146,26 @@ export default function PDFManagerPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchQrCodes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/qrcode/list');
+      const data = await res.json();
+      if (res.ok && data.qrcodes) {
+        setQrRecords(data.qrcodes);
+      }
+    } catch {
+      setQrRecords([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated' && isUserAdmin) {
       fetchReports();
+      fetchQrCodes();
     }
-  }, [status, isUserAdmin]);
+  }, [status, isUserAdmin, fetchReports, fetchQrCodes]);
 
   const showNotify = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -167,6 +248,145 @@ export default function PDFManagerPage() {
     }
   };
 
+  const handleQrGenerate = async () => {
+    if (!qrLogo) {
+      showNotify('error', 'Please select a logo image first');
+      return;
+    }
+
+    setQrGenerating(true);
+    setQrPreview(null);
+    setQrGeneratedBlob(null);
+
+    try {
+      const QrCodeWithLogo = (await import('qrcode-with-logos')).default;
+      const canvas = document.createElement('canvas');
+
+      const logoUrl = URL.createObjectURL(qrLogo);
+
+      const qrcode = new QrCodeWithLogo({
+        canvas,
+        content: SUBURB_URLS[qrSuburb],
+        width: 3500,
+        logo: {
+          src: logoUrl,
+        },
+        dotsOptions: {
+          color: qrDotColor,
+        },
+        cornersOptions: {
+          color: qrCornerColor,
+        },
+        nodeQrCodeOptions: {
+          color: {
+            dark: qrDotColor,
+            light: qrBgColor,
+          },
+        },
+      });
+
+      const resultCanvas = await qrcode.getCanvas();
+      const blob = await new Promise<Blob | null>((resolve) =>
+        resultCanvas.toBlob((b) => resolve(b), 'image/png')
+      );
+
+      URL.revokeObjectURL(logoUrl);
+
+      if (!blob) {
+        showNotify('error', 'Failed to generate QR code image');
+        setQrGenerating(false);
+        return;
+      }
+
+      const previewUrl = URL.createObjectURL(blob);
+      setQrPreview(previewUrl);
+      setQrGeneratedBlob(blob);
+    } catch (err) {
+      console.error('QR generation error:', err);
+      showNotify('error', 'Failed to generate QR code');
+    } finally {
+      setQrGenerating(false);
+    }
+  };
+
+  const handleQrUpload = async () => {
+    if (!qrGeneratedBlob || !qrPreview) {
+      showNotify('error', 'Please generate a QR code first');
+      return;
+    }
+
+    setQrUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', new File([qrGeneratedBlob], `qrcode-${qrSuburb.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' }));
+      formData.append('suburb', qrSuburb);
+      formData.append('target_url', SUBURB_URLS[qrSuburb]);
+
+      const res = await fetch('/api/admin/qrcode/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showNotify('success', `QR code for ${qrSuburb} uploaded successfully`);
+        URL.revokeObjectURL(qrPreview);
+        setQrPreview(null);
+        setQrGeneratedBlob(null);
+        setQrLogo(null);
+        fetchQrCodes();
+      } else {
+        showNotify('error', data.error || 'Failed to upload QR code');
+      }
+    } catch {
+      showNotify('error', 'Network error while uploading QR code');
+    } finally {
+      setQrUploading(false);
+    }
+  };
+
+  const handleQrDelete = async (id: string) => {
+    if (!confirm('Delete this QR code?')) return;
+
+    try {
+      const res = await fetch('/api/admin/qrcode/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+
+      if (res.ok) {
+        showNotify('success', 'QR code deleted');
+        fetchQrCodes();
+      }
+    } catch {
+      showNotify('error', 'Failed to delete QR code');
+    }
+  };
+
+  const handleQrDownload = async (url: string, suburb: string) => {
+    try {
+      const res = await fetch('/api/admin/qrcode/download-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, filename: `${suburb}.png` }),
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${suburb}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      showNotify('error', 'Failed to download QR code');
+    }
+  };
+
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'N/A';
     const mb = bytes / (1024 * 1024);
@@ -190,6 +410,8 @@ export default function PDFManagerPage() {
     );
   }
 
+  const existingQr = qrRecords.find(r => r.suburb === qrSuburb);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {notification && (
@@ -207,30 +429,237 @@ export default function PDFManagerPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Suburb PDF Manager</h1>
-          <p className="text-gray-600 mt-1">
-            Upload quarterly market reports to Cloudflare R2 and manage active suburb PDFs
-          </p>
+      {/* QR Code Manager Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                <FaQrcode className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Suburb QR Code Manager</h2>
+                <p className="text-sm text-gray-600">
+                  Generate QR codes with logo for each suburb, saved to Cloudflare R2
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => handleOpenUploadModal()}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center space-x-2 cursor-pointer"
-        >
-          <FaUpload />
-          <span>+ Upload Report</span>
-        </button>
+
+        <div className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left: Generator */}
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Suburb <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={qrSuburb}
+                  onChange={(e) => setQrSuburb(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-gray-900"
+                >
+                  {DEFAULT_SUBURBS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Target URL</div>
+                <div className="flex items-center space-x-2 text-sm">
+                  <code className="text-purple-700 bg-purple-50 px-2 py-1 rounded flex-1 break-all">
+                    {SUBURB_URLS[qrSuburb]}
+                  </code>
+                  <FaArrowRight className="text-gray-400 w-3 h-3" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Logo Image <span className="text-red-500">*</span>
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-purple-500 transition-colors bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setQrLogo(e.target.files?.[0] || null)}
+                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer"
+                  />
+                  {qrLogo && (
+                    <div className="mt-2 text-xs font-semibold text-purple-700">
+                      Selected: {qrLogo.name} ({formatFileSize(qrLogo.size)})
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Color Customization */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Dot Color</label>
+                  <input type="color" value={qrDotColor} onChange={(e) => setQrDotColor(e.target.value)} className="w-full h-9 rounded-lg border border-gray-300 cursor-pointer p-0.5" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Background</label>
+                  <input type="color" value={qrBgColor} onChange={(e) => setQrBgColor(e.target.value)} className="w-full h-9 rounded-lg border border-gray-300 cursor-pointer p-0.5" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Corner Color</label>
+                  <input type="color" value={qrCornerColor} onChange={(e) => setQrCornerColor(e.target.value)} className="w-full h-9 rounded-lg border border-gray-300 cursor-pointer p-0.5" />
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleQrGenerate}
+                  disabled={qrGenerating || !qrLogo}
+                  className="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white font-medium text-sm transition-colors flex items-center space-x-2 cursor-pointer"
+                >
+                  <FaQrcode />
+                  <span>{qrGenerating ? 'Generating...' : 'Generate QR Code'}</span>
+                </button>
+
+                {qrPreview && (
+                  <button
+                    onClick={handleQrUpload}
+                    disabled={qrUploading}
+                    className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-medium text-sm transition-colors flex items-center space-x-2 cursor-pointer"
+                  >
+                    <FaCloudUploadAlt />
+                    <span>{qrUploading ? 'Uploading...' : 'Upload to R2'}</span>
+                  </button>
+                )}
+              </div>
+
+              {existingQr && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                  A QR code for {qrSuburb} already exists. Uploading will replace it.
+                </div>
+              )}
+            </div>
+
+            {/* Right: Preview */}
+            <div className="flex flex-col items-center justify-center bg-slate-50 rounded-xl border-2 border-dashed border-gray-300 p-6 min-h-[300px]">
+              {qrPreview ? (
+                <div className="text-center space-y-3">
+                  <img src={qrPreview} alt="QR Code Preview" className="w-48 h-48 mx-auto rounded-lg shadow-sm" />
+                  <p className="text-xs text-gray-500">Preview — save to R2 to publish</p>
+                </div>
+              ) : (
+                <div className="text-center text-gray-400">
+                  <FaQrcode className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Select suburb and logo, then generate</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Saved QR Codes */}
+      {qrRecords.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Saved QR Codes</h3>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full">
+              Total: {qrRecords.length}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-gray-600">
+              <thead className="bg-slate-50 border-b border-gray-200 text-xs font-bold uppercase text-slate-500">
+                <tr>
+                  <th className="px-6 py-3">Suburb</th>
+                  <th className="px-6 py-3">QR Code</th>
+                  <th className="px-6 py-3">Target URL</th>
+                  <th className="px-6 py-3">Size</th>
+                  <th className="px-6 py-3">Created</th>
+                  <th className="px-6 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {qrRecords.map((qr) => (
+                  <tr key={qr.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-semibold text-gray-900">{qr.suburb}</td>
+                    <td className="px-6 py-4">
+                      <img
+                        src={qr.file_url}
+                        alt={`QR for ${qr.suburb}`}
+                        className="w-12 h-12 rounded border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => setQrPreviewUrl(qr.file_url)}
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-500 max-w-[200px] truncate">
+                      <code>{qr.target_url}</code>
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-500">{formatFileSize(qr.file_size)}</td>
+                    <td className="px-6 py-4 text-xs text-gray-500">
+                      {qr.created_at ? new Date(qr.created_at).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => handleQrDownload(qr.file_url, qr.suburb)}
+                          className="inline-flex items-center space-x-1 text-xs font-semibold text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+                        >
+                          <FaDownload className="w-3 h-3" />
+                          <span>Download</span>
+                        </button>
+                        <button
+                          onClick={() => setQrPreviewUrl(qr.file_url)}
+                          className="inline-flex items-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+                        >
+                          <FaEye className="w-3 h-3" />
+                          <span>Review</span>
+                        </button>
+                        <button
+                          onClick={() => handleQrDelete(qr.id)}
+                          className="inline-flex items-center space-x-1 text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+                        >
+                          <FaTrash className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Preview Modal */}
+      {qrPreviewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setQrPreviewUrl(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">QR Code Preview</h3>
+              <button
+                onClick={() => setQrPreviewUrl(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <img src={qrPreviewUrl} alt="QR Code" className="w-full rounded-lg" />
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
       <div
+        className={`flex items-center justify-between bg-white rounded-xl shadow-sm border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+          isDragging ? 'border-blue-500 bg-blue-50/50 scale-[1.01]' : 'border-gray-300 hover:border-blue-400 hover:bg-slate-50/50'
+        }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => handleOpenUploadModal()}
-        className={`bg-white rounded-xl shadow-sm border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
-          isDragging ? 'border-blue-500 bg-blue-50/50 scale-[1.01]' : 'border-gray-300 hover:border-blue-400 hover:bg-slate-50/50'
-        }`}
       >
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4">
           <FaCloudUploadAlt className="w-8 h-8" />
@@ -245,7 +674,7 @@ export default function PDFManagerPage() {
             e.stopPropagation();
             handleOpenUploadModal();
           }}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors inline-flex items-center space-x-2 shadow-sm"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors inline-flex items-center space-x-2 shadow-sm cursor-pointer"
         >
           <FaFolderOpen />
           <span>Browse Files / Open Selector</span>
@@ -278,7 +707,7 @@ export default function PDFManagerPage() {
             </p>
             <button
               onClick={() => handleOpenUploadModal()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors inline-flex items-center space-x-2"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors inline-flex items-center space-x-2 cursor-pointer"
             >
               <FaUpload />
               <span>Upload Quarterly Report</span>
@@ -377,7 +806,7 @@ export default function PDFManagerPage() {
                   onChange={(e) => setSuburb(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
                 >
-                  {DEFAULT_SUBURBS.map((sub) => (
+                  {DEFAULT_SUBURBS.filter(s => s !== 'Business Card').map((sub) => (
                     <option key={sub} value={sub}>
                       {sub}
                     </option>
