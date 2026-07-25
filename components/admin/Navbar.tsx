@@ -17,7 +17,7 @@ export function AdminNavbar() {
   const userInitial = userName.charAt(0).toUpperCase();
 
   const navLinks = [
-    { href: '/admin/bookings', label: '📅 Bookings', alwaysShow: true },
+    { href: '/admin/activity', label: '📋 Activity', alwaysShow: true },
     { href: '/admin/properties', label: '🏠 Properties', alwaysShow: true },
     { href: '/admin/outreach', label: '📬 Outreach', alwaysShow: true },
     { href: '/admin/leads', label: '👤 Leads', alwaysShow: true },
@@ -25,7 +25,6 @@ export function AdminNavbar() {
     { href: '/admin/analytics', label: '📊 Analytics', alwaysShow: false },
     { href: '/admin/reports', label: '📝 Reports', alwaysShow: false },
     { href: '/admin/assets', label: '☁️ Assets', alwaysShow: false },
-    { href: '/admin/downloads', label: '📥 Downloads', alwaysShow: false },
   ];
 
   function NavLink({ href, children }: { href: string; children: React.ReactNode }) {

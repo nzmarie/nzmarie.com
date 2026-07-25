@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 import { SuburbFilter } from "@/components/admin/SuburbFilter";
 
@@ -10,9 +11,35 @@ interface DashboardStats {
   newLeads: number;
   highPriorityLeads: number;
   pendingOutreach: number;
+  sentOutreach: number;
   todayFollowups: number;
   overdueFollowups: number;
   todayDownloads: number;
+  totalDownloads: number;
+  monthDownloads: number;
+  totalBookings: number;
+  monthBookings: number;
+  qrCodesTotal: number;
+  pdfReportsTotal: number;
+  outreachBySuburb: OutreachSuburb[];
+  recentDownloads: RecentDownload[];
+}
+
+interface OutreachSuburb {
+  suburb: string;
+  pending_count: number;
+  sent_count: number;
+  total_count: number;
+}
+
+interface RecentDownload {
+  id: string;
+  email: string;
+  name: string;
+  suburb: string;
+  downloaded_at: string;
+  source: string;
+  tracking_code: string | null;
 }
 
 interface FollowUp {
@@ -31,27 +58,10 @@ interface FollowUp {
 
 const getPriorityColor = (priority: string): string => {
   switch (priority) {
-    case "high":
-      return "bg-red-100 text-red-700";
-    case "medium":
-      return "bg-yellow-100 text-yellow-700";
-    case "low":
-      return "bg-green-100 text-green-700";
-    default:
-      return "bg-slate-100 text-slate-600";
-  }
-};
-
-const getPriorityDot = (priority: string): string => {
-  switch (priority) {
-    case "high":
-      return "🔴";
-    case "medium":
-      return "🟡";
-    case "low":
-      return "🟢";
-    default:
-      return "⚪";
+    case "high": return "bg-red-100 text-red-700";
+    case "medium": return "bg-yellow-100 text-yellow-700";
+    case "low": return "bg-green-100 text-green-700";
+    default: return "bg-slate-100 text-slate-600";
   }
 };
 
@@ -160,11 +170,30 @@ export default function AdminDashboardPage() {
         />
       </div>
 
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/admin/activity"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          View Appraisals
+        </Link>
+        <Link
+          href="/admin/outreach"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          Manage Outreach
+        </Link>
+        <Link
+          href="/admin/assets"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+        >
+          Manage Assets
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            Total Leads
-          </p>
+          <p className="text-xs text-slate-500 font-medium">New Leads</p>
           <p className="text-2xl font-bold text-slate-800 mt-2">
             {stats?.newLeads ?? 0}
           </p>
@@ -172,19 +201,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            Downloads
-          </p>
-          <p className="text-2xl font-bold text-indigo-600 mt-2">
-            {stats?.todayDownloads ?? 0}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">Today</p>
-        </div>
-
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            High Priority
-          </p>
+          <p className="text-xs text-slate-500 font-medium">High Priority</p>
           <p className="text-2xl font-bold text-red-600 mt-2">
             {stats?.highPriorityLeads ?? 0}
           </p>
@@ -192,9 +209,15 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            Outreach
+          <p className="text-xs text-slate-500 font-medium">Downloads</p>
+          <p className="text-2xl font-bold text-indigo-600 mt-2">
+            {stats?.todayDownloads ?? 0}
           </p>
+          <p className="text-xs text-slate-400 mt-1">Today</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
+          <p className="text-xs text-slate-500 font-medium">Outreach</p>
           <p className="text-2xl font-bold text-amber-600 mt-2">
             {stats?.pendingOutreach ?? 0}
           </p>
@@ -202,9 +225,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            Follow-ups
-          </p>
+          <p className="text-xs text-slate-500 font-medium">Follow-ups</p>
           <p className="text-2xl font-bold text-blue-600 mt-2">
             {stats?.todayFollowups ?? 0}
           </p>
@@ -212,9 +233,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">
-            Overdue
-          </p>
+          <p className="text-xs text-slate-500 font-medium">Overdue</p>
           <p className="text-2xl font-bold text-orange-600 mt-2">
             {stats?.overdueFollowups ?? 0}
           </p>
@@ -225,9 +244,17 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-100">
           <div className="p-6 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Today&apos;s Follow-ups
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Today&apos;s Follow-ups
+              </h2>
+              <Link
+                href="/admin/activity"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                View all
+              </Link>
+            </div>
             {followUps.length > 0 && (
               <p className="text-sm text-slate-500 mt-1">
                 {followUps.length} leads need attention
@@ -242,18 +269,12 @@ export default function AdminDashboardPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">
-                          {getPriorityDot(followUp.priority)}
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(followUp.priority)}`}>
+                          {followUp.priority.charAt(0).toUpperCase() + followUp.priority.slice(1)}
                         </span>
                         <h3 className="font-medium text-slate-900">
                           {followUp.name}
                         </h3>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(followUp.priority)}`}
-                        >
-                          {followUp.priority.charAt(0).toUpperCase() +
-                            followUp.priority.slice(1)}
-                        </span>
                       </div>
                       <p className="text-sm text-slate-600 mt-1">
                         {followUp.property_address}
@@ -275,14 +296,14 @@ export default function AdminDashboardPage() {
                         className="inline-flex items-center justify-center w-9 h-9 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
                         title="Call"
                       >
-                        📞
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                       </a>
                       <a
                         href={`mailto:${followUp.email}`}
                         className="inline-flex items-center justify-center w-9 h-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors ml-2"
                         title="Email"
                       >
-                        ✉️
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                       </a>
                     </div>
                   </div>
@@ -296,51 +317,143 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
-          <div className="p-6 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Quick Stats
-            </h2>
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+            <div className="p-6 border-b border-slate-100">
+              <h2 className="text-lg font-semibold text-slate-900">Quick Stats</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <span className="text-sm text-slate-700">Bookings</span>
+                <span className="text-xl font-bold text-blue-600">
+                  {stats?.totalBookings ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
+                <span className="text-sm text-slate-700">Bookings (Month)</span>
+                <span className="text-xl font-bold text-indigo-600">
+                  {stats?.monthBookings ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                <span className="text-sm text-slate-700">Downloads (Month)</span>
+                <span className="text-xl font-bold text-emerald-600">
+                  {stats?.monthDownloads ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                <span className="text-sm text-slate-700">Outreach Sent</span>
+                <span className="text-xl font-bold text-amber-600">
+                  {stats?.sentOutreach ?? 0}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-              <span className="text-sm text-slate-700">Total Bookings</span>
-              <span className="text-xl font-bold text-blue-600">
-                {stats && stats.newLeads + stats.highPriorityLeads}
-              </span>
+          <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+            <div className="p-6 border-b border-slate-100">
+              <h2 className="text-lg font-semibold text-slate-900">Assets</h2>
             </div>
-
-            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-              <span className="text-sm text-slate-700">Urgent</span>
-              <span className="text-xl font-bold text-red-600">
-                {stats?.highPriorityLeads ?? 0}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
-              <span className="text-sm text-slate-700">Pending Outreach</span>
-              <span className="text-xl font-bold text-amber-600">
-                {stats?.pendingOutreach ?? 0}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-              <span className="text-sm text-slate-700">Overdue</span>
-              <span className="text-xl font-bold text-orange-600">
-                {stats?.overdueFollowups ?? 0}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
-              <span className="text-sm text-slate-700">Today Downloads</span>
-              <span className="text-xl font-bold text-indigo-600">
-                {stats?.todayDownloads ?? 0}
-              </span>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                <span className="text-sm text-slate-700">QR Codes</span>
+                <span className="text-xl font-bold text-purple-600">
+                  {stats?.qrCodesTotal ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-rose-50 rounded-lg">
+                <span className="text-sm text-slate-700">PDF Reports</span>
+                <span className="text-xl font-bold text-rose-600">
+                  {stats?.pdfReportsTotal ?? 0}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {stats?.outreachBySuburb && stats.outreachBySuburb.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Outreach by Suburb
+            </h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {stats.outreachBySuburb.map((item) => (
+                <div key={item.suburb} className="rounded-lg border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-800 mb-3">{item.suburb}</div>
+                  <div className="flex gap-3 text-sm">
+                    <div className="flex-1 bg-blue-50 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-blue-700">{item.pending_count}</div>
+                      <div className="text-xs text-blue-600">Pending</div>
+                    </div>
+                    <div className="flex-1 bg-emerald-50 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-emerald-700">{item.sent_count}</div>
+                      <div className="text-xs text-emerald-600">Sent</div>
+                    </div>
+                    <div className="flex-1 bg-slate-100 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-slate-700">{item.total_count}</div>
+                      <div className="text-xs text-slate-600">Total</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stats?.recentDownloads && stats.recentDownloads.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Recent Downloads
+            </h2>
+            <Link
+              href="/admin/activity"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              View all
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Email</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Suburb</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentDownloads.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{item.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{item.email}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{item.suburb}</td>
+                    <td className="px-4 py-3 text-sm text-slate-500">
+                      {new Date(item.downloaded_at).toLocaleDateString('en-NZ', {
+                        year: 'numeric', month: 'short', day: 'numeric'
+                      })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        item.source === 'direct_mail' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {item.source === 'direct_mail' ? 'Direct Mail' : 'Organic'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

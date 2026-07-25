@@ -3,8 +3,8 @@ import { render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 import DashboardPage from '../../../app/admin/dashboard/page';
 import AnalyticsPage from '../../../app/admin/analytics/page';
-import DownloadsPage from '../../../app/admin/downloads/page';
 import PDFManagerPage from '../../../app/admin/assets/page';
+import ActivityPage from '../../../app/admin/activity/page';
 
 const mockPush = vi.fn();
 let mockSession: { data: { user: { email: string; name?: string } } | null; status: 'authenticated' | 'loading' | 'unauthenticated' } = {
@@ -23,6 +23,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonDashboard: () => <div>Loading Dashboard</div>,
   SkeletonAnalytics: () => <div>Loading Analytics</div>,
+  SkeletonBookings: () => <div>Loading Bookings</div>,
   SkeletonDownloads: () => <div>Loading Downloads</div>,
   SkeletonPDFManager: () => <div>Loading PDF Manager</div>,
 }));
@@ -42,21 +43,21 @@ describe('Extra admin pages', () => {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, reports: [] }) }) as any;
       }
       if (url.includes('/api/admin/downloads')) {
-        return Promise.resolve({ 
-          ok: true, 
-          json: () => Promise.resolve({ 
-            data: [], 
-            suburbs: [], 
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            data: [],
+            suburbs: [],
             stats: { total_downloads: '0', this_month: '0', unique_users: '0' },
             pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }
-          }) 
+          })
         }) as any;
       }
       if (url.includes('/api/admin/dashboard/stats')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            stats: { newLeads: 0, highPriorityLeads: 0, pendingOutreach: 0, todayFollowups: 0, overdueFollowups: 0, todayDownloads: 0 },
+            stats: { newLeads: 0, highPriorityLeads: 0, pendingOutreach: 0, todayFollowups: 0, overdueFollowups: 0, todayDownloads: 0, sentOutreach: 0, totalDownloads: 0, monthDownloads: 0, totalBookings: 0, monthBookings: 0, qrCodesTotal: 0, pdfReportsTotal: 0, outreachBySuburb: [], recentDownloads: [] },
             followups: []
           })
         }) as any;
@@ -122,6 +123,16 @@ describe('Extra admin pages', () => {
           }),
         }) as any;
       }
+      if (url.includes('/api/admin/bookings')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            data: [],
+            pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+            locationStats: [],
+          }),
+        }) as any;
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as any;
     }) as any;
   });
@@ -133,7 +144,7 @@ describe('Extra admin pages', () => {
   it('renders a dashboard overview with summary cards', async () => {
     render(<DashboardPage />);
     expect(await screen.findByText('Dashboard')).toBeTruthy();
-    expect(screen.getByText('Total Leads')).toBeTruthy();
+    expect(screen.getByText('New Leads')).toBeTruthy();
     expect(screen.getByText('High Priority')).toBeTruthy();
   });
 
@@ -162,10 +173,11 @@ describe('Extra admin pages', () => {
     expect(await screen.findByText(/North Shore/)).toBeTruthy();
   });
 
-  it('renders downloads content for super admins', async () => {
-    render(<DownloadsPage />);
-    expect(await screen.findByRole('heading', { name: /Downloads/ })).toBeTruthy();
-    expect(screen.getByText('Download Records')).toBeTruthy();
+  it('renders activity page with appraisals and downloads tabs', async () => {
+    render(<ActivityPage />);
+    expect(await screen.findByText('Activity')).toBeTruthy();
+    expect(screen.getByText('Appraisals')).toBeTruthy();
+    expect(screen.getByText('Downloads')).toBeTruthy();
   });
 
   it('renders assets page with QR Codes tab by default and tab switching', async () => {

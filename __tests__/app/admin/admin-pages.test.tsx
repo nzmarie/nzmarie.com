@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
-import BookingsPage from '../../../app/admin/bookings/page';
+import ActivityPage from '../../../app/admin/activity/page';
 import OutreachPage from '../../../app/admin/outreach/page';
 
 const mockPush = vi.fn();
@@ -28,6 +28,7 @@ vi.mock('@/components/property/AddressAutocomplete', () => ({
 
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonBookings: () => <div>Loading Bookings</div>,
+  SkeletonDownloads: () => <div>Loading Downloads</div>,
   SkeletonOutreach: () => <div>Loading Outreach</div>,
 }));
 
@@ -67,6 +68,23 @@ describe('Admin pages', () => {
         }) as any;
       }
 
+      if (url.includes('/api/admin/downloads')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            data: [
+              {
+                id: 'd1', email: 'user@example.com', name: 'Test User',
+                suburb: 'Albany', report_type: 'pdf', downloaded_at: '2026-07-01T00:00:00.000Z',
+                source: 'organic', tracking_code: null, created_at: '2026-07-01T00:00:00.000Z',
+              },
+            ],
+            pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+            stats: { total_downloads: '10', this_month: '3', unique_users: '5' },
+          }),
+        }) as any;
+      }
+
       if (url.includes('/api/admin/outreach')) {
         return Promise.resolve({
           ok: true,
@@ -97,8 +115,8 @@ describe('Admin pages', () => {
     cleanup();
   });
 
-  it('renders booking status labels in a readable format', async () => {
-    render(<BookingsPage />);
+  it('shows activity page with appraisals tab and booking details', async () => {
+    render(<ActivityPage />);
 
     await waitFor(() => {
       expect(screen.getByText('John Smith')).toBeTruthy();
@@ -108,10 +126,10 @@ describe('Admin pages', () => {
     expect(screen.getAllByText('High').length).toBeGreaterThan(0);
   });
 
-  it('shows the booking summary and location filters', async () => {
-    render(<BookingsPage />);
+  it('shows the appraisal summary and location filters', async () => {
+    render(<ActivityPage />);
 
-    expect(await screen.findByText('Total Bookings')).toBeTruthy();
+    expect(await screen.findByText('Activity')).toBeTruthy();
     expect(screen.getByPlaceholderText(/search/i)).toBeTruthy();
     expect(screen.getByLabelText('Region')).toBeTruthy();
     expect(screen.getByLabelText('City / District')).toBeTruthy();
@@ -119,7 +137,11 @@ describe('Admin pages', () => {
   });
 
   it('updates city and suburb options based on the selected region and city', async () => {
-    render(<BookingsPage />);
+    render(<ActivityPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Activity')).toBeTruthy();
+    });
 
     fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'Auckland' } });
 
@@ -133,6 +155,26 @@ describe('Admin pages', () => {
     expect(screen.getByRole('option', { name: 'Northcross' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: 'Aro Valley' })).toBeNull();
     expect(suburbSelect.value).toBe('');
+  });
+
+  it('switches to downloads tab and shows download records', async () => {
+    render(<ActivityPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Activity')).toBeTruthy();
+    });
+
+    const downloadsTab = screen.getByText('Downloads');
+    fireEvent.click(downloadsTab);
+
+    await waitFor(() => {
+      expect(screen.getByText('Download Records')).toBeTruthy();
+    });
+
+    expect(screen.getByText('Total Downloads')).toBeTruthy();
+    expect(screen.getByText('10')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
   });
 
   it('shows the mark as sent action for super admins', async () => {
