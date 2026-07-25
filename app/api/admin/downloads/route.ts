@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { marieDB } from '@/lib/db';
+import { db } from '@/lib/drizzle';
 import { isAdmin } from '@/lib/permissions';
 import { NZ_SUBURBS } from '@/lib/address-parser';
+import { sql, and, or, eq, ilike, desc, count, gte, lte } from 'drizzle-orm';
+import { reportDownloads } from '@/database/schema';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -21,90 +23,60 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get('limit') || '50');
   const offset = (page - 1) * limit;
 
-  let query = `
-    SELECT 
-      id, email, name, suburb, report_type, downloaded_at, 
-      source, tracking_code, created_at
-    FROM report_downloads
-    WHERE 1=1
-  `;
-  const params: unknown[] = [];
-  let idx = 1;
-
-  if (suburb && suburb !== 'all') {
-    if (suburb === 'Other') {
-      query += ` AND (suburb IS NULL OR suburb = '')`;
-    } else {
-      query += ` AND COALESCE(suburb, '') = $${idx++}`;
-      params.push(suburb);
-    }
-  }
-
-  if (source && source !== 'all') {
-    query += ` AND source = $${idx++}`;
-    params.push(source);
-  }
-
-  if (dateFrom) {
-    query += ` AND downloaded_at >= $${idx++}::timestamp`;
-    params.push(dateFrom);
-  }
-  if (dateTo) {
-    query += ` AND downloaded_at <= $${idx++}::timestamp`;
-    params.push(dateTo);
-  }
-
-  if (search) {
-    query += ` AND (email ILIKE $${idx} OR name ILIKE $${idx} OR tracking_code ILIKE $${idx})`;
-    params.push(`%${search}%`);
-    idx++;
-  }
-
-  query += ` ORDER BY downloaded_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
-  params.push(limit, offset);
-
   try {
-    const result = await marieDB.query(query, params);
+    const conditions: any[] = [];
 
-    const mappedRows = result.rows.map(row => ({
+    if (suburb && suburb !== 'all') {
+      if (suburb === 'Other') {
+        conditions.push(
+          or(eq(reportDownloads.suburb, ''), sql`${reportDownloads.suburb} IS NULL`)
+        );
+      } else {
+        conditions.push(eq(reportDownloads.suburb, suburb));
+      }
+    }
+
+    if (source && source !== 'all') {
+      conditions.push(eq(reportDownloads.source, source));
+    }
+
+    if (dateFrom) {
+      conditions.push(gte(reportDownloads.downloaded_at, sql`${dateFrom}::timestamp`));
+    }
+    if (dateTo) {
+      conditions.push(lte(reportDownloads.downloaded_at, sql`${dateTo}::timestamp`));
+    }
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(reportDownloads.email, `%${search}%`),
+          ilike(reportDownloads.name, `%${search}%`),
+          ilike(reportDownloads.tracking_code, `%${search}%`),
+        )
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await db.select().from(reportDownloads)
+      .where(whereClause)
+      .orderBy(desc(reportDownloads.downloaded_at))
+      .limit(limit)
+      .offset(offset);
+
+    const mappedRows = rows.map(row => ({
       ...row,
       suburb: row.suburb || 'Other',
     }));
 
-    let countQuery = `SELECT COUNT(*) FROM report_downloads WHERE 1=1`;
-    const countParams: unknown[] = [];
-    let ci = 1;
-    
-    if (suburb && suburb !== 'all') {
-      if (suburb === 'Other') {
-        countQuery += ` AND (suburb IS NULL OR suburb = '')`;
-      } else {
-        countQuery += ` AND COALESCE(suburb, '') = $${ci++}`;
-        countParams.push(suburb);
-      }
-    }
-    if (source && source !== 'all') { 
-      countQuery += ` AND source = $${ci++}`; 
-      countParams.push(source); 
-    }
-    if (dateFrom) { 
-      countQuery += ` AND downloaded_at >= $${ci++}::timestamp`; 
-      countParams.push(dateFrom); 
-    }
-    if (dateTo) { 
-      countQuery += ` AND downloaded_at <= $${ci++}::timestamp`; 
-      countParams.push(dateTo); 
-    }
-    if (search) { 
-      countQuery += ` AND (email ILIKE $${ci} OR name ILIKE $${ci} OR tracking_code ILIKE $${ci})`; 
-      countParams.push(`%${search}%`); 
-    }
+    const countResult = await db.select({ total: count() }).from(reportDownloads)
+      .where(whereClause);
 
-    const countResult = await marieDB.query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    const total = countResult[0]?.total ?? 0;
 
-    const statsResult = await marieDB.query(`
-      SELECT 
+    const statsResult = await db.execute(sql`
+      SELECT
         COUNT(*) as total_downloads,
         COUNT(*) FILTER (WHERE downloaded_at >= date_trunc('month', CURRENT_TIMESTAMP)) as this_month,
         COUNT(DISTINCT email) as unique_users

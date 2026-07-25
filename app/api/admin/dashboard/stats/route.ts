@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { getCachedOrFetch } from '@/lib/redis';
+import { db } from '@/lib/drizzle';
+import { sql } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -15,46 +16,47 @@ export async function GET(request: Request) {
   const suburb = searchParams.get('suburb');
 
   try {
-    const params = suburb && suburb !== 'all' ? [suburb] : [];
-
     const cacheKey = `dashboard:stats:${suburb || 'all'}`;
 
     const result = await getCachedOrFetch(
       cacheKey,
       async () => {
-        const query = `
+        const suburbFilter = suburb && suburb !== 'all';
+        const suburbCondition = suburbFilter ? sql`AND suburb = ${suburb}` : sql``;
+
+        const dbResult = await db.execute(sql`
           WITH
             new_leads_cte AS (
               SELECT COUNT(*) as count FROM appraisal_leads
               WHERE created_at >= date_trunc('month', CURRENT_TIMESTAMP)
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             high_priority_cte AS (
               SELECT COUNT(*) as count FROM appraisal_leads
               WHERE priority = 'high'
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             pending_outreach_cte AS (
               SELECT COUNT(*) as count FROM outreach_selected_properties
               WHERE status = 'PENDING'
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             sent_outreach_cte AS (
               SELECT COUNT(*) as count FROM outreach_selected_properties
               WHERE status = 'SENT'
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             today_followups_cte AS (
               SELECT COUNT(*) as count FROM appraisal_leads
               WHERE follow_up_at::date = CURRENT_DATE
               AND contact_status NOT IN ('converted', 'lost')
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             overdue_followups_cte AS (
               SELECT COUNT(*) as count FROM appraisal_leads
               WHERE follow_up_at::date < CURRENT_DATE
               AND contact_status NOT IN ('converted', 'lost')
-              ${suburb ? `AND suburb = $1` : ''}
+              ${suburbCondition}
             ),
             today_downloads_cte AS (
               SELECT COUNT(*) as count FROM report_downloads
@@ -116,10 +118,9 @@ export async function GET(request: Request) {
             (SELECT count FROM pdf_reports_cte) as pdf_reports_total,
             (SELECT json_agg(row_to_json(s)) FROM outreach_by_suburb_cte s) as outreach_by_suburb,
             (SELECT json_agg(row_to_json(r)) FROM recent_downloads_cte r) as recent_downloads
-        `;
+        `);
 
-        const dbResult = await marieDB.query(query, params);
-        const row = dbResult.rows[0];
+        const row = dbResult.rows[0] as Record<string, unknown>;
 
         return {
           newLeads: Number(row.new_leads) || 0,

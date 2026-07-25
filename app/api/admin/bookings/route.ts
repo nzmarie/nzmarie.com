@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { marieDB } from '@/lib/db';
+import { db } from '@/lib/drizzle';
 import { isAdmin } from '@/lib/permissions';
 import { findLocationBySuburb } from '@/lib/geo-data';
+import { sql, and, or, eq, ilike, desc, count } from 'drizzle-orm';
+import { appraisalLeads } from '@/database/schema';
 
-// Cache whether region/city columns exist to avoid checking every request
 let hasLocationColumns: boolean | null = null;
 
-function hasMeaningfulLocationValue(value: string | null | undefined): boolean {
+function hasMeaningfulLocationValue(value: string | null | undefined): value is string {
   if (!value) return false;
   return value.trim().toLowerCase() !== 'unknown';
 }
@@ -15,7 +16,7 @@ function hasMeaningfulLocationValue(value: string | null | undefined): boolean {
 async function checkLocationColumns(): Promise<boolean> {
   if (hasLocationColumns !== null) return hasLocationColumns;
   try {
-    const result = await marieDB.query<{ column_name: string }>(`
+    const result = await db.execute(sql`
       SELECT column_name
       FROM information_schema.columns
       WHERE table_name = 'appraisal_leads'
@@ -46,65 +47,60 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get('limit') || '50');
   const offset = (page - 1) * limit;
 
-  // Check whether region/city columns exist before filtering/selecting them
   const useLocationColumns = await checkLocationColumns();
 
-  let query = `SELECT * FROM appraisal_leads WHERE 1=1`;
-  const params: unknown[] = [];
-  let idx = 1;
-
-  // Only apply region/city filters if columns exist
-  if (useLocationColumns) {
-    if (region) {
-      query += ` AND COALESCE(region, '') = $${idx++}`;
-      params.push(region);
-    }
-    if (city) {
-      query += ` AND COALESCE(city, '') = $${idx++}`;
-      params.push(city);
-    }
-  }
-
-  if (suburb) {
-    if (suburb === 'Other') {
-      query += ` AND (suburb IS NULL OR suburb = '')`;
-    } else {
-      query += ` AND COALESCE(suburb, '') = $${idx++}`;
-      params.push(suburb);
-    }
-  }
-  if (status) {
-    query += ` AND contact_status = $${idx++}`;
-    params.push(status);
-  }
-  if (priority) {
-    query += ` AND priority = $${idx++}`;
-    params.push(priority);
-  }
-  if (search) {
-    let searchClause = `(
-      client_name ILIKE $${idx}
-      OR email ILIKE $${idx}
-      OR phone ILIKE $${idx}
-      OR property_address ILIKE $${idx}
-      OR COALESCE(suburb, '') ILIKE $${idx}
-    `;
-    if (useLocationColumns) {
-      searchClause += ` OR COALESCE(region, '') ILIKE $${idx} OR COALESCE(city, '') ILIKE $${idx}`;
-    }
-    searchClause += `)`;
-    query += ` AND ${searchClause}`;
-    params.push(`%${search}%`);
-    idx++;
-  }
-
-  query += ` ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
-  params.push(limit, offset);
-
   try {
-    const result = await marieDB.query(query, params);
+    const conditions: ReturnType<typeof eq>[] = [];
 
-    const mappedRows = result.rows.map(row => {
+    if (useLocationColumns) {
+      if (region) {
+        conditions.push(eq(appraisalLeads.region, region));
+      }
+      if (city) {
+        conditions.push(eq(appraisalLeads.city, city));
+      }
+    }
+
+    if (suburb) {
+      if (suburb === 'Other') {
+        conditions.push(
+          or(eq(appraisalLeads.suburb, ''), sql`${appraisalLeads.suburb} IS NULL`) as any
+        );
+      } else {
+        conditions.push(eq(appraisalLeads.suburb, suburb));
+      }
+    }
+    if (status) {
+      conditions.push(eq(appraisalLeads.contact_status, status));
+    }
+    if (priority) {
+      conditions.push(eq(appraisalLeads.priority, priority));
+    }
+
+    if (search) {
+      const searchConditions: any[] = [
+        ilike(appraisalLeads.client_name, `%${search}%`),
+        ilike(appraisalLeads.email, `%${search}%`),
+        ilike(appraisalLeads.phone, `%${search}%`),
+        ilike(appraisalLeads.property_address, `%${search}%`),
+        ilike(appraisalLeads.suburb, `%${search}%`),
+      ];
+      if (useLocationColumns) {
+        searchConditions.push(ilike(appraisalLeads.region, `%${search}%`));
+        searchConditions.push(ilike(appraisalLeads.city, `%${search}%`));
+      }
+      conditions.push(or(...searchConditions) as any);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await db.select().from(appraisalLeads)
+      .where(whereClause)
+      .orderBy(desc(appraisalLeads.created_at))
+      .limit(limit)
+      .offset(offset);
+
+    const mappedRows = rows.map(row => {
       const fallbackLocation = !hasMeaningfulLocationValue(row.region) || !hasMeaningfulLocationValue(row.city)
         ? findLocationBySuburb(row.suburb || '')
         : null;
@@ -117,48 +113,14 @@ export async function GET(request: Request) {
       };
     });
 
-    // Count query
-    let countQuery = `SELECT COUNT(*) FROM appraisal_leads WHERE 1=1`;
-    const countParams: unknown[] = [];
-    let ci = 1;
+    const countResult = await db.select({ total: count() }).from(appraisalLeads)
+      .where(whereClause);
 
-    if (useLocationColumns) {
-      if (region) { countQuery += ` AND COALESCE(region, '') = $${ci++}`; countParams.push(region); }
-      if (city) { countQuery += ` AND COALESCE(city, '') = $${ci++}`; countParams.push(city); }
-    }
-    if (suburb) {
-      if (suburb === 'Other') {
-        countQuery += ` AND (suburb IS NULL OR suburb = '')`;
-      } else {
-        countQuery += ` AND COALESCE(suburb, '') = $${ci++}`;
-        countParams.push(suburb);
-      }
-    }
-    if (status) { countQuery += ` AND contact_status = $${ci++}`; countParams.push(status); }
-    if (priority) { countQuery += ` AND priority = $${ci++}`; countParams.push(priority); }
-    if (search) {
-      let searchClause = `(
-        client_name ILIKE $${ci}
-        OR email ILIKE $${ci}
-        OR phone ILIKE $${ci}
-        OR property_address ILIKE $${ci}
-        OR COALESCE(suburb, '') ILIKE $${ci}
-      `;
-      if (useLocationColumns) {
-        searchClause += ` OR COALESCE(region, '') ILIKE $${ci} OR COALESCE(city, '') ILIKE $${ci}`;
-      }
-      searchClause += `)`;
-      countQuery += ` AND ${searchClause}`;
-      countParams.push(`%${search}%`);
-    }
+    const total = countResult[0]?.total ?? 0;
 
-    const countResult = await marieDB.query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
-
-    // Location stats — derive effective region/city from suburb when the stored values are empty.
     let locationStats: { region: string; city: string; suburb: string; count: number }[] = [];
     if (useLocationColumns) {
-      const statsResult = await marieDB.query(`
+      const statsResult = await db.execute(sql`
         SELECT
           region,
           city,
@@ -171,7 +133,7 @@ export async function GET(request: Request) {
 
       const aggregated = new Map<string, { region: string; city: string; suburb: string; count: number }>();
 
-      statsResult.rows.forEach((row) => {
+      (statsResult.rows as Array<{ region: string | null; city: string | null; suburb: string; count: number }>).forEach((row) => {
         const fallbackLocation = !hasMeaningfulLocationValue(row.region) || !hasMeaningfulLocationValue(row.city)
           ? findLocationBySuburb(row.suburb || '')
           : null;
