@@ -67,6 +67,7 @@ interface Property {
   on_market_rent?: boolean;
   rent_listing_status?: string | null;
   rent_price?: string | null;
+  no_junk_mail?: boolean;
 }
 
 interface Filters {
@@ -249,6 +250,29 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           </div>
         )}
         
+        {/* No Junk Mail Icon */}
+        {property.no_junk_mail && (
+          <div style={{
+            position: "absolute",
+            top: "12px",
+            right: "54px",
+            background: 'rgba(239, 68, 68, 0.9)',
+            borderRadius: '50%',
+            width: '36px',
+            height: '36px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.1rem',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            lineHeight: 1,
+            zIndex: 2,
+            cursor: 'default',
+          }} title="No Junk Mail">
+            🚫
+          </div>
+        )}
+
         {/* Like Button */}
         <button
           onClick={(e) => {
@@ -679,6 +703,7 @@ export default function PropertiesPage() {
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
+  const [noJunkMail, setNoJunkMail] = useState(false);
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
@@ -777,6 +802,9 @@ export default function PropertiesPage() {
       if (marketStatus !== 'all') {
         params.append('market_status', marketStatus);
       }
+      if (noJunkMail) {
+        params.append('no_junk_mail', 'true');
+      }
 
       const response = await fetch(`/api/admin/outreach?${params}`);
       const result = await response.json();
@@ -809,6 +837,7 @@ export default function PropertiesPage() {
         sale_agent: item.sale_agent ?? null,
         rent_listing_status: item.rent_listing_status ?? null,
         rent_price: item.rent_price ?? null,
+        no_junk_mail: item.no_junk_mail ?? false,
       }));
 
       // Client-side filters for fields the outreach API doesn't support
@@ -921,6 +950,7 @@ export default function PropertiesPage() {
     if (propertyFilter === 'house') params.append("standalone_only", "true");
     if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
     if (marketStatus !== 'all') params.append("market_status", marketStatus);
+    if (noJunkMail) params.append("no_junk_mail", "true");
 
     const response = await fetch(`/api/admin/properties?${params}`);
     const result = await response.json();
@@ -942,7 +972,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, noJunkMail],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -962,7 +992,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, noJunkMail],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated",
@@ -1549,6 +1579,37 @@ export default function PropertiesPage() {
                   {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
                 </button>
               ))}
+              <button
+                onClick={() => setNoJunkMail(!noJunkMail)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: noJunkMail ? '#ef4444' : 'white',
+                  color: noJunkMail ? 'white' : '#4a5568',
+                  border: noJunkMail ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: noJunkMail ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: noJunkMail ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (!noJunkMail) {
+                    e.currentTarget.style.backgroundColor = '#fef2f2';
+                    e.currentTarget.style.borderColor = '#fca5a5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!noJunkMail) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+                title="Filter addresses with No Junk Mail"
+              >
+                🚫 No Junk Mail
+              </button>
             </div>
           </div>
           <div>

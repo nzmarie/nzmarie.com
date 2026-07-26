@@ -73,6 +73,7 @@ interface OutreachProperty {
   latest_send_quarter?: string | null;
   latest_send_year?: number | null;
   latest_send_report_suburb?: string | null;
+  no_junk_mail?: boolean;
 }
 
 interface PaginationMeta {
@@ -218,6 +219,7 @@ export default function OutreachPage() {
   const [lastSoldPreset, setLastSoldPreset] = useState('all');
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
+  const [noJunkMail, setNoJunkMail] = useState(false);
 
   const [reportSuburbFilter, setReportSuburbFilter] = useState('');
   const [reportQuarterFilter, setReportQuarterFilter] = useState('');
@@ -470,6 +472,7 @@ export default function OutreachPage() {
     if (propertyFilter === 'house') params.set('standalone_only', 'true');
     if (propertyFilter === 'townhouse') params.set('townhouse_only', 'true');
     if (marketStatus !== 'all') params.set('market_status', marketStatus);
+    if (noJunkMail) params.set('no_junk_mail', 'true');
     if (lastSoldPreset === 'none') {
       params.set('last_sold_none', 'true');
     } else if (lastSoldPreset !== 'all') {
@@ -500,7 +503,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, noJunkMail, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -1197,6 +1200,37 @@ export default function OutreachPage() {
                   {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
                 </button>
               ))}
+              <button
+                onClick={() => setNoJunkMail(!noJunkMail)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: noJunkMail ? '#ef4444' : 'white',
+                  color: noJunkMail ? 'white' : '#4a5568',
+                  border: noJunkMail ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: noJunkMail ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: noJunkMail ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (!noJunkMail) {
+                    e.currentTarget.style.backgroundColor = '#fef2f2';
+                    e.currentTarget.style.borderColor = '#fca5a5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!noJunkMail) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+                title="Filter addresses with No Junk Mail"
+              >
+                🚫 No Junk Mail
+              </button>
             </div>
           </div>
           <div>
@@ -1690,6 +1724,18 @@ export default function OutreachPage() {
                         </div>
                       )}
                       <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
+                        {prop.no_junk_mail && (
+                          <div style={{
+                            width: '36px', height: '36px',
+                            borderRadius: '50%',
+                            background: 'rgba(239, 68, 68, 0.9)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '1.1rem',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            lineHeight: 1,
+                            cursor: 'default',
+                          }} title="No Junk Mail">🚫</div>
+                        )}
                         {activeTab === 'liked' ? (
                           <>
                             {prop.build_year && (
@@ -1798,6 +1844,30 @@ export default function OutreachPage() {
                         }}>
                           {prop.property_address}
                         </h3>
+                        <a
+                          href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            marginLeft: '12px',
+                            padding: '6px 14px',
+                            backgroundColor: '#e0f2fe',
+                            color: '#0284c7',
+                            border: '1px solid #bae6fd',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            fontSize: '0.85rem',
+                            whiteSpace: 'nowrap',
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#bae6fd'; e.currentTarget.style.borderColor = '#7dd3fc'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#e0f2fe'; e.currentTarget.style.borderColor = '#bae6fd'; }}
+                        >
+                          Street
+                        </a>
                         <button
                           onClick={(e) => {
                             e.preventDefault();
@@ -1805,7 +1875,7 @@ export default function OutreachPage() {
                             openEditModal(prop);
                           }}
                           style={{
-                            marginLeft: '12px',
+                            marginLeft: '8px',
                             padding: '6px 14px',
                             backgroundColor: '#f0fdf4',
                             color: '#16a34a',

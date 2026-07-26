@@ -35,6 +35,7 @@ export async function GET(request: Request) {
   const search = searchParams.get('search');
   const standaloneOnly = searchParams.get('standalone_only');
   const townhouseOnly = searchParams.get('townhouse_only');
+  const noJunkMail = searchParams.get('no_junk_mail');
   const marketStatus = searchParams.get('market_status');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
@@ -77,6 +78,7 @@ export async function GET(request: Request) {
       p.sale_status,
       p.sale_status_source,
       p.sale_status_updated_at,
+      p.no_junk_mail,
       p.estimated_value_low,
       p.estimated_value_high,
       p.suburb_median_price,
@@ -270,6 +272,10 @@ export async function GET(request: Request) {
     query += ` AND p.address LIKE '%/%'`;
   }
 
+  if (!search && noJunkMail === 'true') {
+    query += ` AND p.no_junk_mail = true`;
+  }
+
   if (!search && marketStatus === 'for_sale') {
     query += ` AND re.id IS NOT NULL`;
   } else if (!search && marketStatus === 'for_rent') {
@@ -360,6 +366,7 @@ export async function GET(request: Request) {
       on_market_rent: boolean;
       rent_listing_status: string | null;
       rent_price: string | null;
+      no_junk_mail: boolean;
     }>(query, params);
 
     const properties = result.rows.map(row => ({
@@ -403,6 +410,7 @@ export async function GET(request: Request) {
       images: row.images !== null && row.images !== undefined ? row.images : null,
       latitude: row.latitude !== null ? Number(row.latitude) : null,
       longitude: row.longitude !== null ? Number(row.longitude) : null,
+      no_junk_mail: row.no_junk_mail,
       created_at: row.created_at ?? null,
       on_market_sale: row.on_market_sale,
       sale_listing_status: row.sale_listing_status ?? null,

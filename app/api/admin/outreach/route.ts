@@ -32,6 +32,7 @@ export async function GET(request: Request) {
   const standaloneOnly = searchParams.get('standalone_only');
   const townhouseOnly = searchParams.get('townhouse_only');
   const marketStatus = searchParams.get('market_status');
+  const noJunkMail = searchParams.get('no_junk_mail');
   const sentStatus = searchParams.get('sent_status');
   const reportQuarter = searchParams.get('report_quarter');
   const sortMode = searchParams.get('sort_mode');
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
         p.estimated_value_high,
         p.suburb_median_price,
         p.suburb_days_on_market,
+        p.no_junk_mail,
         COALESCE(re.original_link, rer.original_link, re.property_url, rer.property_url) as realestate_url,
         p.property_history,
         CASE WHEN re.id IS NOT NULL THEN true ELSE false END as on_market_sale,
@@ -160,6 +162,9 @@ export async function GET(request: Request) {
       query += ` AND p.has_rental_history = false`;
     } else if (marketStatus === 'not_listed') {
       query += ` AND re.id IS NULL AND rer.id IS NULL`;
+    }
+    if (noJunkMail === 'true') {
+      query += ` AND p.no_junk_mail = true`;
     }
 
     // sent_status + report_quarter filters (for pending tab: show sent/unsent by report)
