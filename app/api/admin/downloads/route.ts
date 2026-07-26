@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * limit;
 
   try {
-    const conditions: any[] = [];
+    const conditions = [];
 
     if (suburb && suburb !== 'all') {
       if (suburb === 'Other') {

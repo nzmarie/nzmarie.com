@@ -165,6 +165,8 @@ export async function GET(request: Request) {
     }
     if (noJunkMail === 'true') {
       query += ` AND p.no_junk_mail = true`;
+    } else if (noJunkMail === 'false') {
+      query += ` AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)`;
     }
 
     // sent_status + report_quarter filters (for pending tab: show sent/unsent by report)

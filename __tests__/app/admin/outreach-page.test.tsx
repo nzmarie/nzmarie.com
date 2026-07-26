@@ -176,6 +176,9 @@ describe('Outreach page - Dual Pagination Mode', () => {
       region: 'North Shore',
       status: 'liked',
       created_at: '2026-07-01T10:00:00Z',
+      no_junk_mail: false,
+      joined_property_id: 'prop-1',
+      build_year: 1990,
     },
     {
       id: 'out-2',
@@ -185,6 +188,9 @@ describe('Outreach page - Dual Pagination Mode', () => {
       region: 'North Shore',
       status: 'liked',
       created_at: '2026-07-02T10:00:00Z',
+      no_junk_mail: true,
+      joined_property_id: 'prop-2',
+      build_year: 1985,
     },
   ];
 
@@ -345,6 +351,9 @@ describe('Outreach page - Liked icon on card image', () => {
       status: 'liked',
       created_at: '2026-07-01T10:00:00Z',
       image_url: '/static/media/no-photo-available.png',
+      no_junk_mail: false,
+      joined_property_id: 'prop-1',
+      build_year: 1990,
     },
   ];
 
@@ -439,6 +448,29 @@ describe('Outreach page - Liked icon on card image', () => {
     // Item should be restored (rollback) since the request failed.
     await waitFor(() => {
       expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    });
+  });
+
+  it('toggles no_junk_mail optimistically on outreach card', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    const noJunkBtn = screen.getByTitle('Click to mark No Junk');
+    expect(noJunkBtn).toBeDefined();
+
+    fireEvent.click(noJunkBtn);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/admin/properties/prop-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ no_junk_mail: true }),
+      });
     });
   });
 });

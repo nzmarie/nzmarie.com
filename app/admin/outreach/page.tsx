@@ -219,7 +219,7 @@ export default function OutreachPage() {
   const [lastSoldPreset, setLastSoldPreset] = useState('all');
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
-  const [noJunkMail, setNoJunkMail] = useState(false);
+  const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
 
   const [reportSuburbFilter, setReportSuburbFilter] = useState('');
   const [reportQuarterFilter, setReportQuarterFilter] = useState('');
@@ -238,12 +238,13 @@ export default function OutreachPage() {
     }
     if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     filterDebounceRef.current = setTimeout(() => {
+      cacheRef.current.clear();
       setDebouncedFilterKey(k => k + 1);
     }, 300);
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
@@ -437,11 +438,11 @@ export default function OutreachPage() {
   const buildCacheKey = useCallback((page: number) => {
     return [
       activeTab, suburbFilter, streetFilter, campaignFilter,
-      debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset,
+      debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset,
       reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
@@ -472,7 +473,7 @@ export default function OutreachPage() {
     if (propertyFilter === 'house') params.set('standalone_only', 'true');
     if (propertyFilter === 'townhouse') params.set('townhouse_only', 'true');
     if (marketStatus !== 'all') params.set('market_status', marketStatus);
-    if (noJunkMail) params.set('no_junk_mail', 'true');
+    if (junkFilter !== 'all') params.set('no_junk_mail', junkFilter === 'no_junk' ? 'true' : 'false');
     if (lastSoldPreset === 'none') {
       params.set('last_sold_none', 'true');
     } else if (lastSoldPreset !== 'all') {
@@ -503,7 +504,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, noJunkMail, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -1162,12 +1163,12 @@ export default function OutreachPage() {
         </div>
 
         {/* Property Type & Market Status */}
-        <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               Property Type
             </label>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {(['house', 'all', 'townhouse'] as const).map((type) => (
                 <button
                   key={type}
@@ -1201,43 +1202,74 @@ export default function OutreachPage() {
                 </button>
               ))}
               <button
-                onClick={() => setNoJunkMail(!noJunkMail)}
+                onClick={() => setJunkFilter(junkFilter === 'no_junk' ? 'all' : 'no_junk')}
                 style={{
                   padding: '8px 18px',
-                  backgroundColor: noJunkMail ? '#ef4444' : 'white',
-                  color: noJunkMail ? 'white' : '#4a5568',
-                  border: noJunkMail ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                  backgroundColor: junkFilter === 'no_junk' ? '#ef4444' : 'white',
+                  color: junkFilter === 'no_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'no_junk' ? '2px solid #ef4444' : '2px solid #e2e8f0',
                   borderRadius: '10px',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
-                  fontWeight: noJunkMail ? '600' : '500',
+                  fontWeight: junkFilter === 'no_junk' ? '600' : '500',
                   transition: 'all 0.2s ease',
-                  boxShadow: noJunkMail ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+                  boxShadow: junkFilter === 'no_junk' ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={(e) => {
-                  if (!noJunkMail) {
+                  if (junkFilter !== 'no_junk') {
                     e.currentTarget.style.backgroundColor = '#fef2f2';
                     e.currentTarget.style.borderColor = '#fca5a5';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!noJunkMail) {
+                  if (junkFilter !== 'no_junk') {
                     e.currentTarget.style.backgroundColor = 'white';
                     e.currentTarget.style.borderColor = '#e2e8f0';
                   }
                 }}
                 title="Filter addresses with No Junk Mail"
               >
-                🚫 No Junk Mail
+                No Junk
+              </button>
+              <button
+                onClick={() => setJunkFilter(junkFilter === 'allow_junk' ? 'all' : 'allow_junk')}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: junkFilter === 'allow_junk' ? '#22c55e' : 'white',
+                  color: junkFilter === 'allow_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'allow_junk' ? '2px solid #22c55e' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: junkFilter === 'allow_junk' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: junkFilter === 'allow_junk' ? '0 4px 12px rgba(34, 197, 94, 0.3)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (junkFilter !== 'allow_junk') {
+                    e.currentTarget.style.backgroundColor = '#f0fdf4';
+                    e.currentTarget.style.borderColor = '#86efac';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (junkFilter !== 'allow_junk') {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+                title="Filter addresses without No Junk Mail"
+              >
+                Allow Junk
               </button>
             </div>
           </div>
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px", textAlign: "right" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               Market Status
             </label>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
                 <button
                   key={status}
@@ -1757,14 +1789,18 @@ export default function OutreachPage() {
                             const pid = prop.joined_property_id;
                             if (!pid) return;
                             const newVal = !prop.no_junk_mail;
+                            cacheRef.current.clear();
+                            setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                            setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
                             fetch(`/api/admin/properties/${pid}`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ no_junk_mail: newVal }),
-                            }).then(() => {
-                              setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
-                              setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
-                            }).catch(() => {});
+                            }).catch(() => {
+                              cacheRef.current.clear();
+                              setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                              setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                            });
                           }}
                           style={{
                             width: '36px', height: '36px',
@@ -1779,7 +1815,7 @@ export default function OutreachPage() {
                             color: prop.no_junk_mail ? 'white' : '#64748b',
                             transition: 'all 0.2s ease',
                           }}
-                          title={prop.no_junk_mail ? 'No Junk Mail - Click to allow' : 'Click to mark No Junk Mail'}
+                          title={prop.no_junk_mail ? 'No Junk - Click to allow' : 'Click to mark No Junk'}
                         >🚫</button>
                         {activeTab === 'liked' && (
                           <button
@@ -1848,54 +1884,53 @@ export default function OutreachPage() {
                         }}>
                           {prop.property_address}
                         </h3>
-                        <a
-                          href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            marginLeft: '12px',
-                            padding: '6px 14px',
-                            backgroundColor: '#e0f2fe',
-                            color: '#0284c7',
-                            border: '1px solid #bae6fd',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            fontSize: '0.85rem',
-                            whiteSpace: 'nowrap',
-                            textDecoration: 'none',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#bae6fd'; e.currentTarget.style.borderColor = '#7dd3fc'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#e0f2fe'; e.currentTarget.style.borderColor = '#bae6fd'; }}
-                        >
-                          Street
-                        </a>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openEditModal(prop);
-                          }}
-                          style={{
-                            marginLeft: '8px',
-                            padding: '6px 14px',
-                            backgroundColor: '#f0fdf4',
-                            color: '#16a34a',
-                            border: '1px solid #bbf7d0',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            fontSize: '0.85rem',
-                            whiteSpace: 'nowrap',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
-                        >
-                          Edit
-                        </button>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "12px" }}>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              openEditModal(prop);
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              backgroundColor: '#f0fdf4',
+                              color: '#16a34a',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              fontSize: '0.85rem',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+                          >
+                            Edit
+                          </button>
+                          <a
+                            href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              fontSize: '0.75rem',
+                              color: '#2563eb',
+                              fontWeight: '600',
+                              textDecoration: 'none',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              transition: 'all 0.2s',
+                              whiteSpace: 'nowrap',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                          >
+                            Street
+                          </a>
+                        </div>
                       </div>
                       <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>
                         {prop.suburb}, {prop.city}

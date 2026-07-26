@@ -13,6 +13,8 @@ vi.mock('next-auth/react', () => ({
 }));
 
 const mockSetQueryData = vi.fn();
+const mockSetQueriesData = vi.fn();
+const mockInvalidateQueries = vi.fn();
 
 const defaultProperties = [
   {
@@ -51,6 +53,7 @@ const defaultProperties = [
     on_market_rent: false,
     rent_listing_status: null,
     rent_price: null,
+    no_junk_mail: false,
   },
   {
     id: 'prop-2',
@@ -65,6 +68,7 @@ const defaultProperties = [
     last_sold_date: '2022-11-20',
     image_url: 'https://example.com/image2.jpg',
     property_url: 'https://example.com/prop2',
+    no_junk_mail: true,
     on_market_sale: false,
     sale_listing_status: null,
     sale_price: null,
@@ -111,7 +115,7 @@ const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
 });
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ setQueryData: mockSetQueryData, invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ setQueryData: mockSetQueryData, setQueriesData: mockSetQueriesData, invalidateQueries: mockInvalidateQueries }),
   useInfiniteQuery: (...args: any[]) => (mockUseInfiniteQuery as any)(...args),
   useQuery: (...args: any[]) => (mockUseQuery as any)(...args),
   keepPreviousData: vi.fn(),
@@ -1281,5 +1285,83 @@ describe('Properties Page — Address Search Resets Filters', () => {
     });
 
     fireEvent.change(addressInput, { target: { value: '' } });
+  });
+
+  it('toggles no_junk_mail optimistically when 🚫 is clicked (false->true)', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('Click to mark No Junk').length).toBeGreaterThan(0);
+    });
+
+    const buttons = screen.getAllByTitle('Click to mark No Junk');
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('No Junk - Click to allow').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('toggles no_junk_mail optimistically when 🚫 is clicked (true->false)', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('No Junk - Click to allow').length).toBeGreaterThan(0);
+    });
+
+    const buttons = screen.getAllByTitle('No Junk - Click to allow');
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('Click to mark No Junk').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('sends PATCH request with correct URL and body when 🚫 is clicked', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('Click to mark No Junk').length).toBeGreaterThan(0);
+    });
+
+    (global.fetch as any).mockClear();
+
+    const buttons = screen.getAllByTitle('Click to mark No Junk');
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      const calls = (global.fetch as any).mock.calls;
+      const patchCall = calls.find((c: any[]) =>
+        typeof c[0] === 'string' && c[0].startsWith('/api/admin/properties/')
+      );
+      expect(patchCall).toBeDefined();
+      expect(patchCall[1].method).toBe('PATCH');
+      expect(JSON.parse(patchCall[1].body)).toEqual({ no_junk_mail: true });
+    });
+  });
+
+  it('updates cache in-place after 🚫 toggle (no refetch)', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle('Click to mark No Junk').length).toBeGreaterThan(0);
+    });
+
+    mockSetQueriesData.mockClear();
+
+    const buttons = screen.getAllByTitle('Click to mark No Junk');
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(mockSetQueriesData).toHaveBeenCalledWith(
+        { queryKey: ['admin-properties'] },
+        expect.any(Function)
+      );
+      expect(mockInvalidateQueries).not.toHaveBeenCalled();
+    });
   });
 });

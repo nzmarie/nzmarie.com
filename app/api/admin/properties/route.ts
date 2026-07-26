@@ -274,6 +274,8 @@ export async function GET(request: Request) {
 
   if (!search && noJunkMail === 'true') {
     query += ` AND p.no_junk_mail = true`;
+  } else if (!search && noJunkMail === 'false') {
+    query += ` AND p.no_junk_mail = false`;
   }
 
   if (!search && marketStatus === 'for_sale') {

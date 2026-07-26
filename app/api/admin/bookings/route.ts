@@ -63,9 +63,8 @@ export async function GET(request: Request) {
 
     if (suburb) {
       if (suburb === 'Other') {
-        conditions.push(
-          or(eq(appraisalLeads.suburb, ''), sql`${appraisalLeads.suburb} IS NULL`) as any
-        );
+        const suburbOr = or(eq(appraisalLeads.suburb, ''), sql`${appraisalLeads.suburb} IS NULL`);
+        if (suburbOr) conditions.push(suburbOr);
       } else {
         conditions.push(eq(appraisalLeads.suburb, suburb));
       }
@@ -78,7 +77,7 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      const searchConditions: any[] = [
+      const searchConditions = [
         ilike(appraisalLeads.client_name, `%${search}%`),
         ilike(appraisalLeads.email, `%${search}%`),
         ilike(appraisalLeads.phone, `%${search}%`),
@@ -89,7 +88,8 @@ export async function GET(request: Request) {
         searchConditions.push(ilike(appraisalLeads.region, `%${search}%`));
         searchConditions.push(ilike(appraisalLeads.city, `%${search}%`));
       }
-      conditions.push(or(...searchConditions) as any);
+      const searchOr = or(...searchConditions);
+      if (searchOr) conditions.push(searchOr);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

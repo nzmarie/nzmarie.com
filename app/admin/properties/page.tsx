@@ -99,6 +99,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
   onToggleLike: (property: Property) => void;
 }) => {
   const [imageError, setImageError] = useState(false);
+  const [optimisticNoJunk, setOptimisticNoJunk] = useState<boolean | null>(null);
   const queryClient = useQueryClient();
 
   const fixedImageUrl = getFixedImageUrl(property.image_url);
@@ -251,26 +252,56 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           </div>
         )}
         
-        {/* No Junk Mail Toggle */}
+        {/* No Junk Toggle */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
             const pid = property.id;
-            const newVal = !property.no_junk_mail;
+            const current = optimisticNoJunk !== null ? optimisticNoJunk : !!property.no_junk_mail;
+            const newVal = !current;
+            setOptimisticNoJunk(newVal);
             fetch(`/api/admin/properties/${pid}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ no_junk_mail: newVal }),
-            }).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['properties'] });
-            }).catch(() => {});
+            }).then(res => {
+              if (!res.ok) throw new Error('PATCH failed');
+              setOptimisticNoJunk(null);
+              queryClient.setQueriesData({ queryKey: ['admin-properties'] }, (oldData: Record<string, unknown> | undefined) => {
+                if (!oldData) return oldData;
+                if (Array.isArray(oldData.pages)) {
+                  return {
+                    ...oldData,
+                    pages: oldData.pages.map((page: Record<string, unknown>) => ({
+                      ...page,
+                      properties: Array.isArray(page.properties)
+                        ? page.properties.map((p: Record<string, unknown>) =>
+                            p.id === pid ? { ...p, no_junk_mail: newVal } : p
+                          )
+                        : page.properties,
+                    })),
+                  };
+                }
+                if (Array.isArray(oldData.properties)) {
+                  return {
+                    ...oldData,
+                    properties: oldData.properties.map((p: Record<string, unknown>) =>
+                      p.id === pid ? { ...p, no_junk_mail: newVal } : p
+                    ),
+                  };
+                }
+                return oldData;
+              });
+            }).catch(() => {
+              setOptimisticNoJunk(null);
+            });
           }}
           style={{
             position: "absolute",
             top: "12px",
             right: "54px",
-            background: property.no_junk_mail ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+            background: (optimisticNoJunk !== null ? optimisticNoJunk : property.no_junk_mail) ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
             border: 'none',
             borderRadius: '50%',
             width: '36px',
@@ -284,9 +315,9 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             lineHeight: 1,
             zIndex: 2,
             transition: 'all 0.2s ease',
-            color: property.no_junk_mail ? 'white' : '#64748b',
+            color: (optimisticNoJunk !== null ? optimisticNoJunk : property.no_junk_mail) ? 'white' : '#64748b',
           }}
-          title={property.no_junk_mail ? 'No Junk Mail - Click to allow' : 'Click to mark No Junk Mail'}
+          title={(optimisticNoJunk !== null ? optimisticNoJunk : property.no_junk_mail) ? 'No Junk - Click to allow' : 'Click to mark No Junk'}
         >
           🚫
         </button>
@@ -493,12 +524,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
               </button>
             </div>
             <a
-              href={(() => {
-                const lat = property.latitude;
-                const lng = property.longitude;
-                const q = lat && lng ? `${lat},${lng}` : encodeURIComponent(`${property.address}, ${property.suburb}, ${property.city}`);
-                return `https://www.google.com/maps?q=${q}&layer=c`;
-              })()}
+              href={`https://www.google.com/maps?q=${encodeURIComponent([property.address, property.suburb, property.city, property.region].filter(Boolean).join(', '))}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -749,7 +775,7 @@ export default function PropertiesPage() {
   const [addressInput, setAddressInput] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('house');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
-  const [noJunkMail, setNoJunkMail] = useState(false);
+  const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
@@ -848,8 +874,8 @@ export default function PropertiesPage() {
       if (marketStatus !== 'all') {
         params.append('market_status', marketStatus);
       }
-      if (noJunkMail) {
-        params.append('no_junk_mail', 'true');
+      if (junkFilter !== 'all') {
+        params.append('no_junk_mail', junkFilter === 'no_junk' ? 'true' : 'false');
       }
 
       const response = await fetch(`/api/admin/outreach?${params}`);
@@ -996,7 +1022,7 @@ export default function PropertiesPage() {
     if (propertyFilter === 'house') params.append("standalone_only", "true");
     if (propertyFilter === 'townhouse') params.append("townhouse_only", "true");
     if (marketStatus !== 'all') params.append("market_status", marketStatus);
-    if (noJunkMail) params.append("no_junk_mail", "true");
+    if (junkFilter !== 'all') params.append("no_junk_mail", junkFilter === 'no_junk' ? 'true' : 'false');
 
     const response = await fetch(`/api/admin/properties?${params}`);
     const result = await response.json();
@@ -1018,7 +1044,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, noJunkMail],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, junkFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -1038,7 +1064,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, noJunkMail],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, junkFilter],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated",
@@ -1587,12 +1613,12 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ marginBottom: "20px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               Property Type
             </label>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {(['house', 'all', 'townhouse'] as const).map((type) => (
                 <button
                   key={type}
@@ -1626,43 +1652,74 @@ export default function PropertiesPage() {
                 </button>
               ))}
               <button
-                onClick={() => setNoJunkMail(!noJunkMail)}
+                onClick={() => setJunkFilter(junkFilter === 'no_junk' ? 'all' : 'no_junk')}
                 style={{
                   padding: '8px 18px',
-                  backgroundColor: noJunkMail ? '#ef4444' : 'white',
-                  color: noJunkMail ? 'white' : '#4a5568',
-                  border: noJunkMail ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                  backgroundColor: junkFilter === 'no_junk' ? '#ef4444' : 'white',
+                  color: junkFilter === 'no_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'no_junk' ? '2px solid #ef4444' : '2px solid #e2e8f0',
                   borderRadius: '10px',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
-                  fontWeight: noJunkMail ? '600' : '500',
+                  fontWeight: junkFilter === 'no_junk' ? '600' : '500',
                   transition: 'all 0.2s ease',
-                  boxShadow: noJunkMail ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+                  boxShadow: junkFilter === 'no_junk' ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={(e) => {
-                  if (!noJunkMail) {
+                  if (junkFilter !== 'no_junk') {
                     e.currentTarget.style.backgroundColor = '#fef2f2';
                     e.currentTarget.style.borderColor = '#fca5a5';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!noJunkMail) {
+                  if (junkFilter !== 'no_junk') {
                     e.currentTarget.style.backgroundColor = 'white';
                     e.currentTarget.style.borderColor = '#e2e8f0';
                   }
                 }}
                 title="Filter addresses with No Junk Mail"
               >
-                🚫 No Junk Mail
+                No Junk
+              </button>
+              <button
+                onClick={() => setJunkFilter(junkFilter === 'allow_junk' ? 'all' : 'allow_junk')}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: junkFilter === 'allow_junk' ? '#22c55e' : 'white',
+                  color: junkFilter === 'allow_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'allow_junk' ? '2px solid #22c55e' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: junkFilter === 'allow_junk' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  boxShadow: junkFilter === 'allow_junk' ? '0 4px 12px rgba(34, 197, 94, 0.3)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (junkFilter !== 'allow_junk') {
+                    e.currentTarget.style.backgroundColor = '#f0fdf4';
+                    e.currentTarget.style.borderColor = '#86efac';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (junkFilter !== 'allow_junk') {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+                title="Filter addresses without No Junk Mail"
+              >
+                Allow Junk
               </button>
             </div>
           </div>
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px", textAlign: "right" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               Market Status
             </label>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
 {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
                  <button
                    key={status}
