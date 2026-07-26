@@ -527,6 +527,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
               href={`https://www.google.com/maps?q=${encodeURIComponent([property.address, property.suburb, property.city, property.region].filter(Boolean).join(', '))}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               style={{
                 fontSize: '0.75rem',
                 color: '#2563eb',
