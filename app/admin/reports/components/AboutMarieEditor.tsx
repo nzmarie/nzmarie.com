@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { Phone, Mail, Globe, Award } from 'lucide-react';
+import { Phone, Mail, Globe, Award, QrCode } from 'lucide-react';
 import { useReportStore } from '../stores/report-store';
 
 import type { ReportEditorContent } from '@/types/report';
@@ -24,6 +24,8 @@ interface AboutMarieContent {
   disclaimer1: string;
   disclaimer2: string;
   disclaimer3: string;
+  showQrCode: boolean;
+  qrCodeUrl: string;
 }
 
 interface AboutMarieEditorProps {
@@ -56,7 +58,9 @@ const defaultContent = {
   ],
   disclaimer1: 'Note: This data reflects broader neighbourhood trends. Since every street in Northcross has its own unique character, feel free to drop me a line at m.nian@barfoot.co.nz if you ever want a quiet, obligation-free chat about your specific address.',
   disclaimer2: 'This document is an independent market analysis prepared by Marie Nian, Licensed Residential Sales, Barfoot & Thompson (Licensed under the REAA 2008). It is based on official REINZ data and does not constitute binding financial valuation advice.',
-  disclaimer3: '© 2026 Marie Nian, Licensed Residential Sales, Barfoot & Thompson (Licensed under the REAA 2008). This publication is an independent market analysis based on official REINZ data.'
+  disclaimer3: '© 2026 Marie Nian, Licensed Residential Sales, Barfoot & Thompson (Licensed under the REAA 2008). This publication is an independent market analysis based on official REINZ data.',
+  showQrCode: false,
+  qrCodeUrl: '',
 };
 
 export default function AboutMarieEditor({ docId, initialContent, onContentChange }: AboutMarieEditorProps) {
@@ -78,6 +82,12 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
   const [disclaimer1, setDisclaimer1] = useState(defaultContent.disclaimer1);
   const [disclaimer2, setDisclaimer2] = useState(defaultContent.disclaimer2);
   const [disclaimer3, setDisclaimer3] = useState(defaultContent.disclaimer3);
+  const [showQrCode, setShowQrCode] = useState(defaultContent.showQrCode);
+  const [qrCodeUrl, setQrCodeUrl] = useState(defaultContent.qrCodeUrl);
+  const [qrUploading, setQrUploading] = useState(false);
+  const [qrLocalPreview, setQrLocalPreview] = useState<string | null>(null);
+  const qrFileInputRef = useRef<HTMLInputElement>(null);
+  const qrUploadTokenRef = useRef<number>(0);
 
   const lastDocIdRef = useRef<string | null>(null);
   const prevContentRef = useRef<string>('');
@@ -103,6 +113,9 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
       setDisclaimer1(data.disclaimer1 || defaultContent.disclaimer1);
       setDisclaimer2(data.disclaimer2 || defaultContent.disclaimer2);
       setDisclaimer3(data.disclaimer3 || defaultContent.disclaimer3);
+      setShowQrCode(typeof data.showQrCode === 'boolean' ? data.showQrCode : defaultContent.showQrCode);
+      setQrCodeUrl(data.qrCodeUrl || defaultContent.qrCodeUrl);
+      setQrLocalPreview(null);
     }
   }, [docId, initialContent]);
 
@@ -145,6 +158,8 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
       disclaimer1,
       disclaimer2,
       disclaimer3,
+      showQrCode,
+      qrCodeUrl,
     };
     const payloadString = JSON.stringify(payload);
     if (prevContentRef.current && prevContentRef.current !== payloadString) {
@@ -172,8 +187,54 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
     disclaimer1,
     disclaimer2,
     disclaimer3,
+    showQrCode,
+    qrCodeUrl,
     saveContent
   ]);
+
+  const handleQrUpload = useCallback(async (file: File) => {
+    const token = ++qrUploadTokenRef.current;
+    const localUrl = URL.createObjectURL(file);
+    setQrLocalPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return localUrl;
+    });
+    setQrUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/reports/about-marie-qr', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (token === qrUploadTokenRef.current && data.success && data.url) {
+        setQrCodeUrl(data.url);
+        setQrLocalPreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+      }
+    } catch {
+    } finally {
+      if (token === qrUploadTokenRef.current) {
+        setQrUploading(false);
+      }
+    }
+  }, []);
+
+  const handleQrRemove = useCallback(() => {
+    qrUploadTokenRef.current++;
+    setQrCodeUrl('');
+    setQrLocalPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setQrUploading(false);
+    if (qrFileInputRef.current) {
+      qrFileInputRef.current.value = '';
+    }
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto p-6 print:p-0">
@@ -273,7 +334,9 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
             </div>
 
             <div id="am-grid" className="grid grid-cols-12 gap-8 items-start">
-              <div id="am-left" className="col-span-4 flex flex-col gap-4 text-left">
+              <div id="am-left" className="col-span-4 flex flex-col gap-3 text-left">
+
+                {/* Headshot */}
                 <div id="am-photo-wrap" className="overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50 aspect-[4/5] w-full">
                   <Image
                     src="https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg"
@@ -284,32 +347,81 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                   />
                 </div>
 
-                <div id="am-contact" className="space-y-3 bg-slate-50/50 p-4 rounded-lg border border-slate-100/80">
-                  <div className="flex items-center gap-3 text-slate-600 text-xs">
-                    <span className="flex-shrink-0">📍</span>
+                {/* Contact card — contains contact rows + license subtext as one cohesive block */}
+                <div id="am-contact" className="flex flex-col gap-2 bg-slate-50/50 px-4 py-3 rounded-lg border border-slate-100/80">
+                  <div className="flex items-center gap-2.5 text-slate-600 text-xs">
+                    <span className="flex-shrink-0 text-[11px]" aria-hidden="true">📍</span>
                     <span>{location}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600 text-xs">
-                    <Phone className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
+                  <div className="flex items-center gap-2.5 text-slate-600 text-xs">
+                    <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true" />
                     <span>{phone}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600 text-xs">
-                    <Mail className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
-                    <a href={`mailto:${email}`} className="hover:text-slate-950 underline transition-colors">
+                  <div className="flex items-center gap-2.5 text-slate-600 text-xs">
+                    <Mail className="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                    <a href={`mailto:${email}`} className="hover:text-slate-900 underline underline-offset-2 transition-colors">
                       {email}
                     </a>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600 text-xs">
-                    <Globe className="w-3.5 h-3.5 text-slate-800 flex-shrink-0" />
-                    <a href={`https://${website}`} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 underline transition-colors">
+                  <div className="flex items-center gap-2.5 text-slate-600 text-xs">
+                    <Globe className="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                    <a href={`https://${website}`} target="_blank" rel="noopener noreferrer" className="hover:text-slate-900 underline underline-offset-2 transition-colors">
                       {website}
                     </a>
                   </div>
+
+                  {/* License subtext — flush muted label, no button affordance */}
+                  <p
+                    id="am-license"
+                    style={{
+                      marginTop: '6px',
+                      fontSize: '11px',
+                      color: '#8c8c8c',
+                      fontWeight: 500,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Licensed under REAA 2008
+                  </p>
                 </div>
 
-                <div id="am-license" className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase mt-1">
-                  LICENSED UNDER REAA 2008
-                </div>
+                {/* QR code micro-card */}
+                {showQrCode && (qrCodeUrl || qrLocalPreview) && (
+                  <div
+                    id="am-qrcode"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: '#fafafa',
+                      border: '1px solid #f0f0f0',
+                      borderRadius: '10px',
+                      padding: '12px',
+                    }}
+                  >
+                    <Image
+                      src={qrLocalPreview || qrCodeUrl}
+                      alt="QR Code — scan to visit nzmarie.com"
+                      width={112}
+                      height={112}
+                      style={{ borderRadius: '4px', display: 'block' }}
+                      unoptimized
+                    />
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: '#8c8c8c',
+                        fontWeight: 500,
+                        textAlign: 'center',
+                        marginTop: '2px',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      Scan to visit
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div id="am-right" className="col-span-8 flex flex-col gap-4 text-left">
@@ -513,6 +625,75 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 onChange={(e) => setLicense(e.target.value)}
                 className="w-full p-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-950 text-sm"
               />
+            </div>
+          </div>
+
+          <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-semibold text-slate-700">QR Code</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showQrCode}
+                  onChange={(e) => setShowQrCode(e.target.checked)}
+                  className="w-4 h-4 accent-slate-900 cursor-pointer"
+                  data-testid="qr-toggle"
+                />
+                <span className="text-xs font-medium text-slate-600">Show on page</span>
+              </label>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="flex-1 space-y-2">
+                <label className="block text-xs font-semibold text-slate-600 tracking-wider">
+                  Upload QR Code Image
+                </label>
+                <input
+                  ref={qrFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  data-testid="qr-file-input"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleQrUpload(file);
+                  }}
+                  className="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                />
+                {qrUploading && (
+                  <p className="text-xs text-slate-400">Uploading…</p>
+                )}
+                {qrCodeUrl && !qrUploading && (
+                  <p className="text-xs text-slate-400 truncate" data-testid="qr-url-display">
+                    {qrCodeUrl}
+                  </p>
+                )}
+              </div>
+
+              {(qrLocalPreview || qrCodeUrl) && (
+                <div className="flex flex-col items-center gap-2 flex-shrink-0" data-testid="qr-preview">
+                  <Image
+                    src={qrLocalPreview || qrCodeUrl}
+                    alt="QR Code Preview"
+                    width={80}
+                    height={80}
+                    className="rounded border border-slate-200"
+                    unoptimized
+                  />
+                  <span className="text-[10px] text-slate-400">Preview</span>
+                  <button
+                    type="button"
+                    onClick={handleQrRemove}
+                    data-testid="qr-remove-btn"
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-red-500 bg-red-50 border border-red-100 rounded-md hover:bg-red-100 hover:border-red-200 transition-colors cursor-pointer"
+                  >
+                    <span>✕</span>
+                    <span>Remove</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

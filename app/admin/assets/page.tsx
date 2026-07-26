@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import NextImage from 'next/image';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
@@ -575,7 +576,7 @@ export default function PDFManagerPage() {
             <div className="flex flex-col items-center justify-center bg-slate-50 rounded-xl border-2 border-dashed border-gray-300 p-6 min-h-[300px]">
               {qrPreview ? (
                 <div className="text-center space-y-3">
-                  <img src={qrPreview} alt="QR Code Preview" className="w-48 h-48 mx-auto rounded-lg shadow-sm" />
+                  <NextImage src={qrPreview} alt="QR Code Preview" width={192} height={192} className="w-48 h-48 mx-auto rounded-lg shadow-sm" unoptimized />
                   <p className="text-xs text-gray-500">Preview — save to R2 to publish</p>
                 </div>
               ) : (
@@ -615,11 +616,14 @@ export default function PDFManagerPage() {
                   <tr key={qr.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-semibold text-gray-900">{qr.suburb}</td>
                     <td className="px-6 py-4">
-                      <img
+                      <NextImage
                         src={qr.file_url}
                         alt={`QR for ${qr.suburb}`}
+                        width={48}
+                        height={48}
                         className="w-12 h-12 rounded border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
                         onClick={() => setQrPreviewUrl(qr.file_url)}
+                        unoptimized
                       />
                     </td>
                     <td className="px-6 py-4 text-xs text-gray-500 max-w-[200px] truncate">
@@ -675,7 +679,7 @@ export default function PDFManagerPage() {
                 <FaTimes />
               </button>
             </div>
-            <img src={qrPreviewUrl} alt="QR Code" className="w-full rounded-lg" />
+            <NextImage src={qrPreviewUrl} alt="QR Code" width={400} height={400} className="w-full rounded-lg" unoptimized />
           </div>
         </div>
       )}
