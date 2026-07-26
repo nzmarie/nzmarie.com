@@ -28,6 +28,7 @@ export async function PATCH(
     'estimated_value_low', 'estimated_value_high',
     'property_history',
     'suburb_median_price', 'suburb_median_rent', 'suburb_days_on_market',
+    'no_junk_mail',
   ];
 
   const updates: string[] = [];

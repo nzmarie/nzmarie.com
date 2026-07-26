@@ -1637,20 +1637,33 @@ export default function OutreachPage() {
                         </div>
                       </div>
                     )}
-                    <input
-                      type="checkbox"
-                      checked={selected.has(prop.id)}
-                      onChange={() => toggleSelect(prop.id)}
-                      style={{
-                        position: 'absolute',
-                        top: '12px',
-                        left: '12px',
-                        width: '20px',
-                        height: '20px',
-                        cursor: 'pointer',
-                        accentColor: '#3b82f6',
-                      }}
-                    />
+                    {/* Top-left badges */}
+                      <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(prop.id)}
+                          onChange={() => toggleSelect(prop.id)}
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            accentColor: '#3b82f6',
+                          }}
+                        />
+                        {prop.build_year && (
+                          <div style={{
+                            backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                            color: 'white',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            Built {prop.build_year}
+                          </div>
+                        )}
+                      </div>
                     <div style={{
                       position: 'absolute',
                       bottom: '12px',
@@ -1668,7 +1681,7 @@ export default function OutreachPage() {
                       {prop.on_market_sale && (
                         <div style={{
                           position: 'absolute',
-                          top: prop.build_year ? '52px' : '16px',
+                          top: '52px',
                           left: '16px',
                           backgroundColor: 'rgba(34, 197, 94, 0.9)',
                           color: 'white',
@@ -1685,9 +1698,7 @@ export default function OutreachPage() {
                       {prop.on_market_rent && (
                         <div style={{
                           position: 'absolute',
-                          top: prop.on_market_sale
-                            ? (prop.build_year ? '88px' : '52px')
-                            : (prop.build_year ? '52px' : '16px'),
+                          top: prop.on_market_sale ? '88px' : '52px',
                           left: '16px',
                           backgroundColor: 'rgba(139, 92, 246, 0.9)',
                           color: 'white',
@@ -1706,10 +1717,9 @@ export default function OutreachPage() {
                           position: 'absolute',
                           top: (() => {
                             let count = 0;
-                            if (prop.build_year) count++;
                             if (prop.on_market_sale) count++;
                             if (prop.on_market_rent) count++;
-                            return `${16 + count * 36}px`;
+                            return `${52 + count * 36}px`;
                           })(),
                           left: '16px',
                           backgroundColor: 'rgba(245, 158, 11, 0.9)',
@@ -1723,88 +1733,82 @@ export default function OutreachPage() {
                           Rented
                         </div>
                       )}
+                      {/* Top-right badges: Status badge, No Junk Mail toggle, Unlike button */}
                       <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
-                        {prop.no_junk_mail && (
-                          <div style={{
+                        {activeTab !== 'liked' && (
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              border: '1px solid',
+                              whiteSpace: 'nowrap',
+                            }}
+                            className={`${STATUS_COLORS[prop.status]}`}
+                          >
+                            {STATUS_LABELS[prop.status] || prop.status}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const pid = prop.joined_property_id;
+                            if (!pid) return;
+                            const newVal = !prop.no_junk_mail;
+                            fetch(`/api/admin/properties/${pid}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ no_junk_mail: newVal }),
+                            }).then(() => {
+                              setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                              setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                            }).catch(() => {});
+                          }}
+                          style={{
                             width: '36px', height: '36px',
                             borderRadius: '50%',
-                            background: 'rgba(239, 68, 68, 0.9)',
+                            background: prop.no_junk_mail ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+                            border: 'none',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '1.1rem',
                             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                             lineHeight: 1,
-                            cursor: 'default',
-                          }} title="No Junk Mail">🚫</div>
-                        )}
-                        {activeTab === 'liked' ? (
-                          <>
-                            {prop.build_year && (
-                              <div style={{
-                                backgroundColor: 'rgba(59, 130, 246, 0.9)',
-                                color: 'white',
-                                padding: '4px 10px',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                              }}>
-                                Built {prop.build_year}
-                              </div>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                removeFromLiked(prop);
-                              }}
-                              style={{
-                                background: 'rgba(239, 68, 68, 0.9)',
-                                border: 'none',
-                                borderRadius: '50%',
-                                width: '36px',
-                                height: '36px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                color: 'white',
-                                zIndex: 2,
-                                padding: 0,
-                                lineHeight: 1,
-                              }}
-                              title="取消喜欢 / Unlike"
-                            >
-                              ♥
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <span
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                                border: '1px solid',
-                              }}
-                              className={`${STATUS_COLORS[prop.status]}`}
-                            >
-                              {STATUS_LABELS[prop.status] || prop.status}
-                            </span>
-                            {prop.build_year && (
-                              <div style={{
-                                backgroundColor: 'rgba(59, 130, 246, 0.9)',
-                                color: 'white',
-                                padding: '4px 10px',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                              }}>
-                                Built {prop.build_year}
-                              </div>
-                            )}
-                          </>
+                            cursor: 'pointer',
+                            color: prop.no_junk_mail ? 'white' : '#64748b',
+                            transition: 'all 0.2s ease',
+                          }}
+                          title={prop.no_junk_mail ? 'No Junk Mail - Click to allow' : 'Click to mark No Junk Mail'}
+                        >🚫</button>
+                        {activeTab === 'liked' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeFromLiked(prop);
+                            }}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.9)',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '36px',
+                              height: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              fontSize: '1.1rem',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                              color: 'white',
+                              zIndex: 2,
+                              padding: 0,
+                              lineHeight: 1,
+                            }}
+                            title="取消喜欢 / Unlike"
+                          >
+                            ♥
+                          </button>
                         )}
                       </div>
                     {prop.last_sold_date && (() => {

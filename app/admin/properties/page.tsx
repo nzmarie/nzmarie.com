@@ -99,6 +99,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
   onToggleLike: (property: Property) => void;
 }) => {
   const [imageError, setImageError] = useState(false);
+  const queryClient = useQueryClient();
 
   const fixedImageUrl = getFixedImageUrl(property.image_url);
 
@@ -250,28 +251,45 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           </div>
         )}
         
-        {/* No Junk Mail Icon */}
-        {property.no_junk_mail && (
-          <div style={{
+        {/* No Junk Mail Toggle */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const pid = property.id;
+            const newVal = !property.no_junk_mail;
+            fetch(`/api/admin/properties/${pid}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ no_junk_mail: newVal }),
+            }).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['properties'] });
+            }).catch(() => {});
+          }}
+          style={{
             position: "absolute",
             top: "12px",
             right: "54px",
-            background: 'rgba(239, 68, 68, 0.9)',
+            background: property.no_junk_mail ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+            border: 'none',
             borderRadius: '50%',
             width: '36px',
             height: '36px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            cursor: 'pointer',
             fontSize: '1.1rem',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             lineHeight: 1,
             zIndex: 2,
-            cursor: 'default',
-          }} title="No Junk Mail">
-            🚫
-          </div>
-        )}
+            transition: 'all 0.2s ease',
+            color: property.no_junk_mail ? 'white' : '#64748b',
+          }}
+          title={property.no_junk_mail ? 'No Junk Mail - Click to allow' : 'Click to mark No Junk Mail'}
+        >
+          🚫
+        </button>
 
         {/* Like Button */}
         <button
@@ -425,54 +443,82 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
           }}>
             {property.address}
           </h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: property }));
-            }}
-            style={{
-              marginLeft: '8px',
-              padding: '6px 10px',
-              backgroundColor: '#f5f3ff',
-              color: '#7c3aed',
-              border: '1px solid #c4b5fd',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '0.75rem',
-              whiteSpace: 'nowrap',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ede9fe'; e.currentTarget.style.borderColor = '#a78bfa'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f5f3ff'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
-          >
-            Lead
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: property }));
-            }}
-            style={{
-              marginLeft: '8px',
-              padding: '6px 14px',
-              backgroundColor: '#f0fdf4',
-              color: '#16a34a',
-              border: '1px solid #bbf7d0',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '0.85rem',
-              whiteSpace: 'nowrap',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
-          >
-            Edit
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  window.dispatchEvent(new CustomEvent('open-convert-modal', { detail: property }));
+                }}
+                style={{
+                  padding: '6px 10px',
+                  backgroundColor: '#f5f3ff',
+                  color: '#7c3aed',
+                  border: '1px solid #c4b5fd',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.75rem',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ede9fe'; e.currentTarget.style.borderColor = '#a78bfa'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f5f3ff'; e.currentTarget.style.borderColor = '#c4b5fd'; }}
+              >
+                Lead
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: property }));
+                }}
+                style={{
+                  padding: '6px 14px',
+                  backgroundColor: '#f0fdf4',
+                  color: '#16a34a',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.85rem',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+              >
+                Edit
+              </button>
+            </div>
+            <a
+              href={(() => {
+                const lat = property.latitude;
+                const lng = property.longitude;
+                const q = lat && lng ? `${lat},${lng}` : encodeURIComponent(`${property.address}, ${property.suburb}, ${property.city}`);
+                return `https://www.google.com/maps?q=${q}&layer=c`;
+              })()}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: '0.75rem',
+                color: '#2563eb',
+                fontWeight: '600',
+                textDecoration: 'none',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+            >
+              Street
+            </a>
+          </div>
         </div>
 
         <div style={{
