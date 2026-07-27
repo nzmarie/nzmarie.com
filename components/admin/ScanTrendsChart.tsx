@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend, Customized,
 } from 'recharts';
 
 type Campaign = { key: string; name: string };
@@ -16,6 +17,13 @@ const COLORS = [
   '#0D9488', '#7C3AED', '#DB2777', '#CA8A04',
 ];
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function formatTime(time: string, isSubDay: boolean): string {
   if (isSubDay) {
     const d = new Date(time);
@@ -26,6 +34,60 @@ function formatTime(time: string, isSubDay: boolean): string {
     return `${parts[1]}/${parts[2].substring(0, 2)}`;
   }
   return time;
+}
+
+function CustomTooltip({
+  active, payload, label, isSubDay, campaigns, colors,
+}: {
+  active?: boolean; payload?: { dataKey?: string; value?: number; color?: string }[]; label?: string;
+  isSubDay: boolean; campaigns: Campaign[]; colors: string[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const dateLabel = isSubDay
+    ? new Date(label as string).toLocaleString('en-NZ', {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+    : new Date((label as string) + 'T00:00:00').toLocaleDateString('en-NZ', {
+        weekday: 'short', month: 'short', day: 'numeric',
+      });
+
+  const total = payload.reduce((sum, p) => sum + (Number(p.value) || 0), 0);
+
+  return (
+    <div
+      style={{
+        background: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: 10,
+        padding: '10px 14px',
+        fontSize: 12,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+        minWidth: 160,
+      }}
+    >
+      <p style={{ fontWeight: 600, color: '#374151', marginBottom: 8 }}>{dateLabel}</p>
+      {payload.map((p, i) => {
+        const campaign = campaigns.find(c => c.key === p.dataKey);
+        const color = colors[i % colors.length];
+        return (
+          <div key={String(p.dataKey)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ color: '#6b7280' }}>{campaign?.name ?? String(p.dataKey)}</span>
+            </div>
+            <span style={{ fontWeight: 600, color: '#111827' }}>{Number(p.value).toLocaleString()}</span>
+          </div>
+        );
+      })}
+      {payload.length > 1 && (
+        <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>Total</span>
+          <span style={{ fontWeight: 700, color: '#111827' }}>{total.toLocaleString()}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface ScanTrendsChartProps {
@@ -52,7 +114,6 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
         setVisibleCampaigns(new Set((result.campaigns || []).map((c: Campaign) => c.key)));
       }
     } catch {
-      // ignore
     } finally {
       setLoading(false);
     }
@@ -75,6 +136,33 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
   };
 
   const campaignsToShow = campaigns.filter(c => visibleCampaigns.has(c.key));
+  const campaignKeys = campaignsToShow.map(c => c.key);
+  const zeroScanTimes = new Set(
+    data
+      .filter(d => campaignKeys.every(k => (d[k] as number || 0) === 0))
+      .map(d => d.time as string)
+  );
+
+  const ZeroScanDots = (props: { formattedGraphicalItems?: unknown[]; xAxisMap?: Record<string, { scale: (v: string) => number }> }) => {
+    if (zeroScanTimes.size === 0 || !props.xAxisMap) return null;
+    const xAxis = props.xAxisMap?.[0];
+    if (!xAxis) return null;
+    const margin = { top: 5, right: 20, left: 10, bottom: 5 };
+    return (
+      <g>
+        {Array.from(zeroScanTimes).map(t => {
+          const cx = xAxis.scale(t);
+          if (!cx || cx < 0) return null;
+          return (
+            <g key={t}>
+              <line x1={cx} y1={margin.top} x2={cx} y2={300 - margin.bottom} stroke="#f3f4f6" strokeWidth={1} strokeDasharray="2 2" />
+              <circle cx={cx} cy={300 - margin.bottom - 2} r={3} fill="#e5e7eb" />
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -107,15 +195,12 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
               onClick={() => toggleCampaign(c.key)}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border"
               style={{
-                backgroundColor: active ? `${color}15` : '#f9fafb',
+                backgroundColor: active ? hexToRgba(color, 0.08) : '#f9fafb',
                 borderColor: active ? color : '#e5e7eb',
                 color: active ? color : '#9ca3af',
               }}
             >
-              <span
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: color }}
-              />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
               {c.name}
             </button>
           );
@@ -127,29 +212,44 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
           Loading chart data...
         </div>
       ) : data.length === 0 ? (
-        <div className="flex items-center justify-center h-[300px] text-gray-400 text-sm">
-          No scan data yet for this time range.
+        <div className="flex flex-col items-center justify-center h-[300px] gap-3">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <rect width="40" height="40" rx="8" fill="#f3f4f6" />
+            <path d="M8 28 L14 20 L20 23 L26 14 L32 18" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <circle cx="14" cy="20" r="2" fill="#d1d5db" />
+            <circle cx="20" cy="23" r="2" fill="#d1d5db" />
+            <circle cx="26" cy="14" r="2" fill="#d1d5db" />
+          </svg>
+          <p className="text-sm text-gray-400">No scan data yet for this time range.</p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart
+          <AreaChart
             data={data}
             margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
             onClick={(e) => {
-              const date = e.activeLabel as string;
-              const campaignKey = e.activeDataKey as string | undefined;
+              const date = e?.activeLabel as string | undefined;
+              const campaignKey = e?.activeDataKey as string | undefined;
               if (date) {
-                let displayDate: string;
-                if (isSubDay) {
-                  displayDate = new Date(date).toISOString().split('T')[0];
-                } else {
-                  displayDate = date;
-                }
+                const displayDate = isSubDay
+                  ? new Date(date).toISOString().split('T')[0]
+                  : date;
                 onDrillDown(displayDate, campaignKey || '');
               }
             }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <defs>
+              {campaignsToShow.map((c, i) => {
+                const color = COLORS[i % COLORS.length];
+                return (
+                  <linearGradient key={c.key} id={`grad-${c.key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={color} stopOpacity={0.18} />
+                    <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
             <XAxis
               dataKey="time"
               tickFormatter={(v) => formatTime(v, isSubDay)}
@@ -160,36 +260,51 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
             />
             <YAxis
               allowDecimals={false}
+              domain={[0, 'auto']}
+              tickCount={5}
               tick={{ fontSize: 11, fill: '#9ca3af' }}
-              axisLine={{ stroke: '#e5e7eb' }}
+              axisLine={false}
               tickLine={false}
-              width={40}
+              width={32}
             />
             <Tooltip
-              contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
-              labelFormatter={(v) => formatTime(v, isSubDay)}
+              content={
+                <CustomTooltip
+                  isSubDay={isSubDay}
+                  campaigns={campaignsToShow}
+                  colors={COLORS}
+                />
+              }
+              cursor={{ stroke: '#e5e7eb', strokeWidth: 1, strokeDasharray: '4 4' }}
             />
-            {campaignsToShow.map((c, i) => (
-              <Line
-                key={c.key}
-                type="monotone"
-                dataKey={c.key}
-                name={c.name}
-                stroke={COLORS[i % COLORS.length]}
-                strokeWidth={2}
-                dot={{ r: 3, fill: COLORS[i % COLORS.length], cursor: 'pointer' }}
-                activeDot={{ r: 5, fill: COLORS[i % COLORS.length], cursor: 'pointer' }}
-                connectNulls
-              />
-            ))}
+            {campaignsToShow.map((c, i) => {
+              const color = COLORS[i % COLORS.length];
+              return (
+                <Area
+                  key={c.key}
+                  type="monotone"
+                  dataKey={c.key}
+                  name={c.name}
+                  stroke={color}
+                  strokeWidth={2}
+                  fill={`url(#grad-${c.key})`}
+                  dot={{ r: 3, fill: color, strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: color, strokeWidth: 2, stroke: 'white' }}
+                  connectNulls
+                />
+              );
+            })}
             <Legend
-              wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+              wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
               onClick={(e) => {
                 const key = e.dataKey as string;
                 if (key) toggleCampaign(key);
               }}
+              iconType="circle"
+              iconSize={8}
             />
-          </LineChart>
+            <Customized component={ZeroScanDots} />
+          </AreaChart>
         </ResponsiveContainer>
       )}
     </div>
