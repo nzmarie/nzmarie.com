@@ -7,6 +7,7 @@ import { SkeletonAnalytics } from '@/components/admin/Skeleton';
 import MarketTrendsChart from '@/components/admin/MarketTrendsChart';
 import ExcelUploadForm from '@/components/admin/ExcelUploadForm';
 import MonthlyDataTable from '@/components/admin/MonthlyDataTable';
+import ScanTrendsChart from '@/components/admin/ScanTrendsChart';
 import { isSuperAdmin } from '@/lib/permissions';
 import type { MonthlyDataPoint } from '@/lib/market-data-aggregator';
 const CARD_BADGE_STYLES = {
@@ -89,6 +90,7 @@ export default function AnalyticsPage() {
 
   const [showScanLogsModal, setShowScanLogsModal] = useState(false);
   const [selectedScanCampaign, setSelectedScanCampaign] = useState<string>('all');
+  const [scanLogDateFilter, setScanLogDateFilter] = useState<string>('');
 
   const fetchScanData = useCallback(async () => {
     try {
@@ -345,7 +347,11 @@ export default function AnalyticsPage() {
               )}
             </div>
             <button
-              onClick={() => setShowScanLogsModal(true)}
+              onClick={() => {
+                setScanLogDateFilter('');
+                setSelectedScanCampaign('all');
+                setShowScanLogsModal(true);
+              }}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
             >
               View Log Details &rarr;
@@ -371,6 +377,14 @@ export default function AnalyticsPage() {
           </div>
         ))}
       </div>
+
+      <ScanTrendsChart
+        onDrillDown={(date, campaignKey) => {
+          setScanLogDateFilter(date);
+          setSelectedScanCampaign(campaignKey || 'all');
+          setShowScanLogsModal(true);
+        }}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -703,7 +717,7 @@ export default function AnalyticsPage() {
               </button>
             </div>
 
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-2">
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setSelectedScanCampaign('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -727,10 +741,25 @@ export default function AnalyticsPage() {
                   {c.campaign_name || c.campaign_key} ({c.total_pv})
                 </button>
               ))}
+              {scanLogDateFilter && (
+                <span className="inline-flex items-center gap-1.5 ml-auto px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700">
+                  Filtering: {new Date(scanLogDateFilter).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  <button
+                    onClick={() => setScanLogDateFilter('')}
+                    className="text-amber-500 hover:text-amber-700 ml-1 font-bold"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {scanData.logs.filter(l => selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign).length === 0 ? (
+              {scanData.logs.filter(l => {
+                const matchCampaign = selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign;
+                const matchDate = !scanLogDateFilter || new Date(l.created_at).toISOString().split('T')[0] === scanLogDateFilter;
+                return matchCampaign && matchDate;
+              }).length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   No scan logs recorded yet.
                 </div>
@@ -748,7 +777,11 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
                       {scanData.logs
-                        .filter(l => selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign)
+                        .filter(l => {
+                          const matchCampaign = selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign;
+                          const matchDate = !scanLogDateFilter || new Date(l.created_at).toISOString().split('T')[0] === scanLogDateFilter;
+                          return matchCampaign && matchDate;
+                        })
                         .map((log) => (
                           <tr key={log.id} className="hover:bg-gray-50/50">
                             <td className="py-3 px-4 font-mono text-xs text-gray-600">
