@@ -1401,7 +1401,36 @@ export default function PropertiesPage() {
         throw new Error(result.error || 'Failed to update property');
       }
       if (result.property) {
-        queryClient.invalidateQueries({ queryKey: ["admin-properties"] });
+        const updated = result.property as Property;
+        // 无刷新：直接更新 React Query 缓存里的属性数据，不重新请求
+        queryClient.setQueriesData(
+          { queryKey: ["admin-properties"] },
+          (oldData: Record<string, unknown> | undefined) => {
+            if (!oldData) return oldData;
+            const patchItem = (p: Record<string, unknown>) =>
+              p.id === updated.id ? { ...p, ...updated } : p;
+            // infinite scroll 模式
+            if (Array.isArray(oldData.pages)) {
+              return {
+                ...oldData,
+                pages: (oldData.pages as Record<string, unknown>[]).map((page) => ({
+                  ...page,
+                  properties: Array.isArray(page.properties)
+                    ? (page.properties as Record<string, unknown>[]).map(patchItem)
+                    : page.properties,
+                })),
+              };
+            }
+            // classic 分页模式
+            if (Array.isArray(oldData.properties)) {
+              return {
+                ...oldData,
+                properties: (oldData.properties as Record<string, unknown>[]).map(patchItem),
+              };
+            }
+            return oldData;
+          }
+        );
       }
       showNotification('success', 'Property updated successfully');
       setEditingProperty(null);

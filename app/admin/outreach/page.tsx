@@ -399,6 +399,37 @@ export default function OutreachPage() {
       });
       const result = await response.json();
       if (!result.success) throw new Error(result.error || 'Failed to update property');
+
+      // 更新本地列表数据（infinite + classic 两种模式都处理）
+      const updatedAddress = (payload.address as string) ?? editingProperty.property_address;
+      const updateItem = (item: OutreachProperty): OutreachProperty => {
+        if (item.id !== editingProperty.id) return item;
+        return {
+          ...item,
+          property_address: updatedAddress,
+          suburb: (payload.suburb as string) ?? item.suburb,
+          city: (payload.city as string) ?? item.city,
+          region: (payload.region as string) ?? item.region,
+          bedrooms: payload.bedrooms !== undefined && payload.bedrooms !== null ? Number(payload.bedrooms) : item.bedrooms,
+          bathrooms: payload.bathrooms !== undefined && payload.bathrooms !== null ? Number(payload.bathrooms) : item.bathrooms,
+          car_spaces: payload.car_spaces !== undefined && payload.car_spaces !== null ? Number(payload.car_spaces) : item.car_spaces,
+          build_year: payload.year_built !== undefined && payload.year_built !== null ? Number(payload.year_built) : item.build_year,
+          floor_area: (payload.floor_size as string) ?? item.floor_area,
+          land_area: (payload.land_area as string | number | null) ?? item.land_area,
+          last_sold_price: payload.last_sold_price !== undefined && payload.last_sold_price !== null ? Number(payload.last_sold_price) : item.last_sold_price,
+          last_sold_date: (payload.last_sold_date as string) ?? item.last_sold_date,
+          capital_value: payload.capital_value !== undefined && payload.capital_value !== null ? Number(payload.capital_value) : item.capital_value,
+          image_url: (payload.cover_image_url as string) ?? item.image_url,
+          description: (payload.description as string) ?? item.description,
+          property_history: (payload.property_history as string) ?? item.property_history,
+        };
+      };
+
+      // 清除缓存，防止旧数据覆盖
+      cacheRef.current.clear();
+      setItems((prev) => prev.map(updateItem));
+      setClassicItems((prev) => prev.map(updateItem));
+
       showNotification('success', 'Property updated successfully');
       setEditingProperty(null);
     } catch (err) {
