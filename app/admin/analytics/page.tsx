@@ -561,8 +561,10 @@ export default function AnalyticsPage() {
         availableSuburbs={availableSuburbs}
         onFocusChange={(suburb) => {
           setActiveFocusSuburb(suburb);
-          if (suburb !== 'North Shore City' && !selectedSuburbs.includes(suburb)) {
-            setSelectedSuburbs(prev => [...prev, suburb]);
+          if (suburb !== 'North Shore City') {
+            setSelectedSuburbs([suburb]);
+          } else {
+            setSelectedSuburbs([]);
           }
         }}
       />
