@@ -104,40 +104,38 @@ export async function GET(request: Request) {
   const params: unknown[] = [];
   let paramIndex = 1;
 
-  if (!search) {
-    if (suburbsParam) {
-      const suburbs = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
-      if (suburbs.length > 0) {
-        const suburbPlaceholders = suburbs.map((_, i) => `$${paramIndex + i}`).join(', ');
-        query += ` AND LOWER(p.suburb) IN (${suburbPlaceholders})`;
-        suburbs.forEach(suburb => params.push(suburb.toLowerCase()));
-        paramIndex += suburbs.length;
-      }
+  if (suburbsParam) {
+    const suburbs = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
+    if (suburbs.length > 0) {
+      const suburbPlaceholders = suburbs.map((_, i) => `$${paramIndex + i}`).join(', ');
+      query += ` AND LOWER(p.suburb) IN (${suburbPlaceholders})`;
+      suburbs.forEach(suburb => params.push(suburb.toLowerCase()));
+      paramIndex += suburbs.length;
     }
+  }
 
-    if (suburb) {
-      query += ` AND LOWER(p.suburb) = LOWER($${paramIndex})`;
-      params.push(suburb);
-      paramIndex++;
-    }
+  if (suburb) {
+    query += ` AND LOWER(p.suburb) = LOWER($${paramIndex})`;
+    params.push(suburb);
+    paramIndex++;
+  }
 
-    const CITY_TO_DB: Record<string, string> = {
-      'Auckland': 'Auckland - City',
-      'Auckland City': 'Auckland - City',
-    };
+  const CITY_TO_DB: Record<string, string> = {
+    'Auckland': 'Auckland - City',
+    'Auckland City': 'Auckland - City',
+  };
 
-    if (city) {
-      const dbCity = CITY_TO_DB[city] || city;
-      query += ` AND p.city = $${paramIndex}`;
-      params.push(dbCity);
-      paramIndex++;
-    }
+  if (city) {
+    const dbCity = CITY_TO_DB[city] || city;
+    query += ` AND p.city = $${paramIndex}`;
+    params.push(dbCity);
+    paramIndex++;
+  }
 
-    if (region) {
-      query += ` AND LOWER(p.region) LIKE LOWER($${paramIndex})`;
-      params.push(`%${region}%`);
-      paramIndex++;
-    }
+  if (region) {
+    query += ` AND LOWER(p.region) LIKE LOWER($${paramIndex})`;
+    params.push(`%${region}%`);
+    paramIndex++;
   }
 
   if (search) {
@@ -147,29 +145,27 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (!search) {
-    if (lastSoldNone === 'true') {
-      query += ` AND p.last_sold_date IS NULL`;
-    } else {
-      if (lastSoldMinYears) {
-        const years = parseInt(lastSoldMinYears);
-        if (!isNaN(years) && years > 0) {
-          const d = new Date();
-          d.setFullYear(d.getFullYear() - years);
-          query += ` AND p.last_sold_date <= $${paramIndex}::date`;
-          params.push(d.toISOString().split('T')[0]);
-          paramIndex++;
-        }
+  if (lastSoldNone === 'true') {
+    query += ` AND p.last_sold_date IS NULL`;
+  } else {
+    if (lastSoldMinYears) {
+      const years = parseInt(lastSoldMinYears);
+      if (!isNaN(years) && years > 0) {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND p.last_sold_date <= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
-      if (lastSoldMaxYears) {
-        const years = parseInt(lastSoldMaxYears);
-        if (!isNaN(years) && years > 0) {
-          const d = new Date();
-          d.setFullYear(d.getFullYear() - years);
-          query += ` AND p.last_sold_date >= $${paramIndex}::date`;
-          params.push(d.toISOString().split('T')[0]);
-          paramIndex++;
-        }
+    }
+    if (lastSoldMaxYears) {
+      const years = parseInt(lastSoldMaxYears);
+      if (!isNaN(years) && years > 0) {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - years);
+        query += ` AND p.last_sold_date >= $${paramIndex}::date`;
+        params.push(d.toISOString().split('T')[0]);
+        paramIndex++;
       }
     }
   }
@@ -210,18 +206,16 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  if (!search) {
-    if (buildYearMin) {
-      query += ` AND p.year_built >= $${paramIndex}`;
-      params.push(parseInt(buildYearMin));
-      paramIndex++;
-    }
+  if (buildYearMin) {
+    query += ` AND p.year_built >= $${paramIndex}`;
+    params.push(parseInt(buildYearMin));
+    paramIndex++;
+  }
 
-    if (buildYearMax) {
-      query += ` AND p.year_built <= $${paramIndex}`;
-      params.push(parseInt(buildYearMax));
-      paramIndex++;
-    }
+  if (buildYearMax) {
+    query += ` AND p.year_built <= $${paramIndex}`;
+    params.push(parseInt(buildYearMax));
+    paramIndex++;
   }
 
   if (rvMin) {
@@ -261,32 +255,29 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  // properties.property_type 只有 Residential/Lifestyle/null，无 House/Townhouse/Unit，
-  // 无法用于过滤。新西兰地址中 "/"（如 16/9 Georgia Terrace）表示单元/联排（flat/unit/townhouse），
-  // 直接基于 address 是否含 "/" 区分独栋与联排/单元。
-  if (!search && standaloneOnly === 'true') {
+  if (standaloneOnly === 'true') {
     query += ` AND p.address NOT LIKE '%/%'`;
   }
 
-  if (!search && townhouseOnly === 'true') {
+  if (townhouseOnly === 'true') {
     query += ` AND p.address LIKE '%/%'`;
   }
 
-  if (!search && noJunkMail === 'true') {
+  if (noJunkMail === 'true') {
     query += ` AND p.no_junk_mail = true`;
-  } else if (!search && noJunkMail === 'false') {
+  } else if (noJunkMail === 'false') {
     query += ` AND p.no_junk_mail = false`;
   }
 
-  if (!search && marketStatus === 'for_sale') {
+  if (marketStatus === 'for_sale') {
     query += ` AND re.id IS NOT NULL`;
-  } else if (!search && marketStatus === 'for_rent') {
+  } else if (marketStatus === 'for_rent') {
     query += ` AND rer.id IS NOT NULL`;
-  } else if (!search && marketStatus === 'rented') {
+  } else if (marketStatus === 'rented') {
     query += ` AND p.has_rental_history = true`;
-  } else if (!search && marketStatus === 'never_rented') {
+  } else if (marketStatus === 'never_rented') {
     query += ` AND p.has_rental_history = false`;
-  } else if (!search && marketStatus === 'not_listed') {
+  } else if (marketStatus === 'not_listed') {
     query += ` AND re.id IS NULL AND rer.id IS NULL`;
   }
 

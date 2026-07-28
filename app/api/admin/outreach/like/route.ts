@@ -87,7 +87,15 @@ export async function POST(request: Request) {
         }
         return NextResponse.json({ liked: false });
       }
-      return NextResponse.json({ liked: false, message: 'Property already exists in outreach with different status' });
+      await marieDB.query(
+        `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
+        [current.id]
+      );
+      if (process.env.USE_OUTREACH_MV === 'true') {
+        marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+          .catch(err => console.error('MV refresh failed (non-critical):', err));
+      }
+      return NextResponse.json({ liked: true });
     }
 
     await marieDB.query(

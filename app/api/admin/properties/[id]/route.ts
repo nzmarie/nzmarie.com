@@ -52,6 +52,13 @@ export async function PATCH(
 
   try {
     await marieQuery(sql, values);
+
+    // Refresh MV if no_junk_mail was updated so outreach queries see the latest value
+    if (body.no_junk_mail !== undefined && process.env.USE_OUTREACH_MV === 'true') {
+      marieQuery('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
+    }
+
     const updated = await marieQuery(
       `SELECT * FROM properties WHERE id = $1`,
       [id]

@@ -90,8 +90,9 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     params.push(street);
   }
   if (search) {
-    conditions.push(`property_address ILIKE $${params.length + 1}`);
-    params.push(`%${search}%`);
+    const cleanSearch = search.split(',')[0].trim();
+    conditions.push(`(property_address ILIKE $${params.length + 1} OR suburb ILIKE $${params.length + 1})`);
+    params.push(`%${cleanSearch}%`);
   }
 
   if (lastSoldNone === 'true') {
@@ -339,8 +340,10 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     params.push(street);
   }
   if (search) {
-    query += ` AND op.property_address ILIKE $${idx++}`;
-    params.push(`%${search}%`);
+    const cleanSearch = search.split(',')[0].trim();
+    query += ` AND (op.property_address ILIKE $${idx} OR op.suburb ILIKE $${idx})`;
+    params.push(`%${cleanSearch}%`);
+    idx++;
   }
 
   if (lastSoldNone === 'true') {

@@ -83,6 +83,67 @@ describe('Outreach Like MV POST /api/admin/outreach/like', () => {
     );
   });
 
+  it('upgrades existing pending property to liked on like', async () => {
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { email: 'nzlouis.com@gmail.com' },
+    } as any);
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [{ id: 'existing-id', status: 'pending' }] } as any);
+
+    const response = await POST(new Request('http://localhost:3000/api/admin/outreach/like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        property_id: 'test-id',
+        property_address: '1 Test St',
+        suburb: 'Oteha',
+        city: 'Auckland',
+        region: 'Auckland',
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.liked).toBe(true);
+    expect(marieDB.query).toHaveBeenCalledWith(
+      `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
+      ['existing-id']
+    );
+    expect(marieDB.query).toHaveBeenCalledWith(
+      'REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched'
+    );
+  });
+
+  it('upgrades existing sent property to liked on like', async () => {
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { email: 'nzlouis.com@gmail.com' },
+    } as any);
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [{ id: 'existing-id-2', status: 'sent' }] } as any);
+
+    const response = await POST(new Request('http://localhost:3000/api/admin/outreach/like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        property_id: 'test-id',
+        property_address: '2 Test Ave',
+        suburb: 'Oteha',
+        city: 'Auckland',
+        region: 'Auckland',
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.liked).toBe(true);
+    expect(marieDB.query).toHaveBeenCalledWith(
+      `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
+      ['existing-id-2']
+    );
+  });
+
   it('does not trigger MV REFRESH when MV is disabled', async () => {
     process.env.USE_OUTREACH_MV = 'false';
     vi.mocked(auth).mockResolvedValueOnce({
