@@ -81,6 +81,10 @@ export async function POST(request: Request) {
       const current = existing.rows[0];
       if (current.status === 'liked') {
         await marieDB.query(`DELETE FROM outreach_properties WHERE id = $1`, [current.id]);
+        if (process.env.USE_OUTREACH_MV === 'true') {
+          marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+            .catch(err => console.error('MV refresh failed (non-critical):', err));
+        }
         return NextResponse.json({ liked: false });
       }
       return NextResponse.json({ liked: false, message: 'Property already exists in outreach with different status' });
@@ -91,6 +95,11 @@ export async function POST(request: Request) {
        VALUES ($1, $2, $3, $4, $5, $6, 'favorites', 'liked')`,
       [property_id, property_address.trim(), suburb.trim(), city.trim(), region.trim(), street?.trim() || null]
     );
+
+    if (process.env.USE_OUTREACH_MV === 'true') {
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
+    }
 
     return NextResponse.json({ liked: true });
   } catch (error) {

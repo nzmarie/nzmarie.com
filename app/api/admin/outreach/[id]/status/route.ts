@@ -37,6 +37,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
 
+    if (process.env.USE_OUTREACH_MV === 'true') {
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
+    }
+
     return NextResponse.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error updating status:', error);

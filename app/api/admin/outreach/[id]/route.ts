@@ -3,10 +3,6 @@ import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
-/**
- * PATCH /api/admin/outreach/:id
- * Update a single outreach property
- */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -22,7 +18,6 @@ export async function PATCH(
     const body = await request.json();
     const { id } = await params;
 
-    // Build dynamic update query
     const updates: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
@@ -36,6 +31,13 @@ export async function PATCH(
       'property_type',
       'notes',
       'campaign',
+      'property_address',
+      'suburb',
+      'city',
+      'region',
+      'street',
+      'property_id',
+      'louis_property_id',
     ];
 
     allowedFields.forEach((field) => {
@@ -52,7 +54,6 @@ export async function PATCH(
       );
     }
 
-    // Always update updated_at
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
@@ -72,6 +73,11 @@ export async function PATCH(
       );
     }
 
+    if (process.env.USE_OUTREACH_MV === 'true') {
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
+    }
+
     return NextResponse.json({
       success: true,
       data: result.rows[0],
@@ -85,10 +91,6 @@ export async function PATCH(
   }
 }
 
-/**
- * DELETE /api/admin/outreach/:id
- * Delete a single outreach property
- */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -112,6 +114,11 @@ export async function DELETE(
         { error: 'Property not found' },
         { status: 404 }
       );
+    }
+
+    if (process.env.USE_OUTREACH_MV === 'true') {
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
     }
 
     return NextResponse.json({

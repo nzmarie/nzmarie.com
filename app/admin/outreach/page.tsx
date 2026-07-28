@@ -400,6 +400,20 @@ export default function OutreachPage() {
       const result = await response.json();
       if (!result.success) throw new Error(result.error || 'Failed to update property');
 
+      // 同步更新 outreach_properties（确保 MV 和 list view 显示最新地址）
+      const outreachPayload: Record<string, string | null> = {};
+      if (payload.address !== undefined) outreachPayload.property_address = payload.address as string | null;
+      if (payload.suburb !== undefined) outreachPayload.suburb = payload.suburb as string | null;
+      if (payload.city !== undefined) outreachPayload.city = payload.city as string | null;
+      if (payload.region !== undefined) outreachPayload.region = payload.region as string | null;
+      if (Object.keys(outreachPayload).length > 0) {
+        fetch(`/api/admin/outreach/${editingProperty.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(outreachPayload),
+        }).catch(() => {});
+      }
+
       // 更新本地列表数据（infinite + classic 两种模式都处理）
       const updatedAddress = (payload.address as string) ?? editingProperty.property_address;
       const updateItem = (item: OutreachProperty): OutreachProperty => {

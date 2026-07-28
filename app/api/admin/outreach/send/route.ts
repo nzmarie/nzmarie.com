@@ -88,6 +88,11 @@ export async function POST(request: Request) {
       insertedLogs.push(logRes.rows[0]);
     }
 
+    if (process.env.USE_OUTREACH_MV === 'true') {
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
+        .catch(err => console.error('MV refresh failed (non-critical):', err));
+    }
+
     return NextResponse.json({
       success: true,
       message: `Successfully logged sending for ${insertedLogs.length} properties`,
