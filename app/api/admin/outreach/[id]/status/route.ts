@@ -27,6 +27,11 @@ export async function PATCH(
     const result = await marieDB.query(
       `UPDATE outreach_properties
        SET status = $1,
+           total_send_count = CASE WHEN $1 = 'pending' THEN 0 ELSE total_send_count END,
+           last_sent_at = CASE WHEN $1 = 'pending' THEN NULL ELSE last_sent_at END,
+           last_campaign = CASE WHEN $1 = 'pending' THEN NULL ELSE last_campaign END,
+           sent_at = CASE WHEN $1 = 'pending' THEN NULL ELSE sent_at END,
+           sent_by = CASE WHEN $1 = 'pending' THEN NULL ELSE sent_by END,
            updated_at = NOW()
        WHERE id = $2
        RETURNING *`,
@@ -35,6 +40,14 @@ export async function PATCH(
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    // When rolling back to pending, also clear send logs and sent fields
+    if (status === 'pending') {
+      await marieDB.query(
+        `DELETE FROM outreach_send_logs WHERE outreach_property_id = $1`,
+        [params.id]
+      );
     }
 
     if (process.env.USE_OUTREACH_MV === 'true') {
