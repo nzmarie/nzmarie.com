@@ -36,7 +36,7 @@ function addToSlugMaps(
 }
 
 const ABOUT_MARIE_CONTENT = [
-  { type: 'image', props: { url: 'https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg', caption: '', showPreview: true, previewWidth: 220 }, content: [] },
+  { type: 'image', props: { url: '/img/Marie_large7-Photoroom.png', caption: '', showPreview: true, previewWidth: 220 }, content: [] },
   { type: 'heading', props: { level: 2 }, content: [{ type: 'text', text: 'About Marie Nian', styles: {} }] },
   { type: 'paragraph', content: [{ type: 'text', text: 'Marie Nian is a dedicated real estate professional serving the North Shore community. With extensive local market knowledge, Marie provides personalised service to buyers and sellers across the North Shore.', styles: {} }] },
   { type: 'heading', props: { level: 3 }, content: [{ type: 'text', text: 'Services Offered', styles: {} }] },

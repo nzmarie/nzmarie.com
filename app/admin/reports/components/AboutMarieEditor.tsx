@@ -333,13 +333,13 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
               </h1>
             </div>
 
-            <div id="am-grid" className="grid grid-cols-12 gap-8 items-start">
-              <div id="am-left" className="col-span-4 flex flex-col gap-3 text-left">
+            <div id="am-grid" className="grid grid-cols-12 gap-8 items-stretch">
+              <div id="am-left" className="col-span-4 flex flex-col justify-between text-left">
 
                 {/* Headshot */}
                 <div id="am-photo-wrap" className="overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50 aspect-[4/5] w-full">
                   <Image
-                    src="https://reports.nzmarie.com/reports/images/about-marie/headshot.jpg"
+                    src="/img/Marie_large7-Photoroom.png"
                     alt="Marie Nian"
                     width={859}
                     height={1014}
@@ -348,7 +348,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 </div>
 
                 {/* Contact card — contains contact rows + license subtext as one cohesive block */}
-                <div id="am-contact" className="flex flex-col gap-2 bg-slate-50/50 px-4 py-3 rounded-lg border border-slate-100/80">
+                <div id="am-contact" className="flex flex-col gap-2 bg-gradient-to-br from-slate-50 to-slate-100/30 border border-slate-200/50 rounded-xl p-4 shadow-sm">
                   <div className="flex items-center gap-2.5 text-slate-600 text-xs">
                     <span className="flex-shrink-0 text-[11px]" aria-hidden="true">📍</span>
                     <span>{location}</span>
@@ -371,16 +371,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                   </div>
 
                   {/* License subtext — flush muted label, no button affordance */}
-                  <p
-                    id="am-license"
-                    style={{
-                      marginTop: '6px',
-                      fontSize: '11px',
-                      color: '#8c8c8c',
-                      fontWeight: 500,
-                      lineHeight: 1.5,
-                    }}
-                  >
+                  <p className="text-[11px] text-slate-500 font-medium mt-1.5 leading-normal">
                     Licensed under REAA 2008
                   </p>
                 </div>
@@ -389,16 +380,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                 {showQrCode && (qrCodeUrl || qrLocalPreview) && (
                   <div
                     id="am-qrcode"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '4px',
-                      background: '#fafafa',
-                      border: '1px solid #f0f0f0',
-                      borderRadius: '10px',
-                      padding: '12px',
-                    }}
+                    className="bg-gradient-to-br from-slate-50 to-slate-100/30 border border-slate-200/50 rounded-xl p-3 shadow-sm flex flex-col items-center"
                   >
                     <Image
                       src={qrLocalPreview || qrCodeUrl}
@@ -408,16 +390,7 @@ export default function AboutMarieEditor({ docId, initialContent, onContentChang
                       style={{ borderRadius: '4px', display: 'block' }}
                       unoptimized
                     />
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        color: '#8c8c8c',
-                        fontWeight: 500,
-                        textAlign: 'center',
-                        marginTop: '2px',
-                        letterSpacing: '0.01em',
-                      }}
-                    >
+                    <span className="text-[11px] text-slate-500 font-medium text-center mt-0.5 tracking-wider">
                       Scan to visit
                     </span>
                   </div>
