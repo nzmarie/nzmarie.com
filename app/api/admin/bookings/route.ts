@@ -8,11 +8,6 @@ import { appraisalLeads } from '@/database/schema';
 
 let hasLocationColumns: boolean | null = null;
 
-function hasMeaningfulLocationValue(value: string | null | undefined): value is string {
-  if (!value) return false;
-  return value.trim().toLowerCase() !== 'unknown';
-}
-
 async function checkLocationColumns(): Promise<boolean> {
   if (hasLocationColumns !== null) return hasLocationColumns;
   try {
@@ -27,6 +22,11 @@ async function checkLocationColumns(): Promise<boolean> {
     hasLocationColumns = false;
   }
   return hasLocationColumns;
+}
+
+function hasMeaningfulLocationValue(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return value.trim().toLowerCase() !== 'unknown';
 }
 
 export async function GET(request: Request) {
@@ -53,12 +53,8 @@ export async function GET(request: Request) {
     const conditions: ReturnType<typeof eq>[] = [];
 
     if (useLocationColumns) {
-      if (region) {
-        conditions.push(eq(appraisalLeads.region, region));
-      }
-      if (city) {
-        conditions.push(eq(appraisalLeads.city, city));
-      }
+      if (region) conditions.push(eq(appraisalLeads.region, region));
+      if (city) conditions.push(eq(appraisalLeads.city, city));
     }
 
     if (suburb) {
@@ -69,12 +65,8 @@ export async function GET(request: Request) {
         conditions.push(eq(appraisalLeads.suburb, suburb));
       }
     }
-    if (status) {
-      conditions.push(eq(appraisalLeads.contact_status, status));
-    }
-    if (priority) {
-      conditions.push(eq(appraisalLeads.priority, priority));
-    }
+    if (status) conditions.push(eq(appraisalLeads.contact_status, status));
+    if (priority) conditions.push(eq(appraisalLeads.priority, priority));
 
     if (search) {
       const searchConditions = [
@@ -94,73 +86,55 @@ export async function GET(request: Request) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const rows = await db.select().from(appraisalLeads)
-      .where(whereClause)
-      .orderBy(desc(appraisalLeads.created_at))
-      .limit(limit)
-      .offset(offset);
+    const [rows, countResult] = await Promise.all([
+      db.select({
+        id: appraisalLeads.id,
+        client_name: appraisalLeads.client_name,
+        email: appraisalLeads.email,
+        phone: appraisalLeads.phone,
+        property_address: appraisalLeads.property_address,
+        suburb: appraisalLeads.suburb,
+        region: appraisalLeads.region,
+        city: appraisalLeads.city,
+        contact_status: appraisalLeads.contact_status,
+        priority: appraisalLeads.priority,
+        created_at: appraisalLeads.created_at,
+        next_follow_up_at: appraisalLeads.follow_up_at,
+        agent_notes: appraisalLeads.agent_notes,
+        timeline: appraisalLeads.timeline,
+        motivation: appraisalLeads.motivation,
+        languagePreference: appraisalLeads.language_preference,
+        heardFrom: appraisalLeads.heard_from,
+      }).from(appraisalLeads)
+        .where(whereClause)
+        .orderBy(desc(appraisalLeads.created_at))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(appraisalLeads).where(whereClause),
+    ]);
 
     const mappedRows = rows.map(row => {
-      const fallbackLocation = !hasMeaningfulLocationValue(row.region) || !hasMeaningfulLocationValue(row.city)
-        ? findLocationBySuburb(row.suburb || '')
-        : null;
-
+      const fallbackLocation =
+        !hasMeaningfulLocationValue(row.region) || !hasMeaningfulLocationValue(row.city)
+          ? findLocationBySuburb(row.suburb || '')
+          : null;
       return {
         ...row,
-        region: useLocationColumns ? (hasMeaningfulLocationValue(row.region) ? row.region : fallbackLocation?.region || null) : null,
-        city: useLocationColumns ? (hasMeaningfulLocationValue(row.city) ? row.city : fallbackLocation?.city || null) : null,
+        region: useLocationColumns
+          ? (hasMeaningfulLocationValue(row.region) ? row.region : fallbackLocation?.region || null)
+          : null,
+        city: useLocationColumns
+          ? (hasMeaningfulLocationValue(row.city) ? row.city : fallbackLocation?.city || null)
+          : null,
         suburb: row.suburb || 'Other',
       };
     });
 
-    const countResult = await db.select({ total: count() }).from(appraisalLeads)
-      .where(whereClause);
-
     const total = countResult[0]?.total ?? 0;
-
-    let locationStats: { region: string; city: string; suburb: string; count: number }[] = [];
-    if (useLocationColumns) {
-      const statsResult = await db.execute(sql`
-        SELECT
-          region,
-          city,
-          COALESCE(suburb, 'Other') as suburb,
-          COUNT(*) as count
-        FROM appraisal_leads
-        GROUP BY region, city, suburb
-        ORDER BY count DESC
-      `);
-
-      const aggregated = new Map<string, { region: string; city: string; suburb: string; count: number }>();
-
-      (statsResult.rows as Array<{ region: string | null; city: string | null; suburb: string; count: number }>).forEach((row) => {
-        const fallbackLocation = !hasMeaningfulLocationValue(row.region) || !hasMeaningfulLocationValue(row.city)
-          ? findLocationBySuburb(row.suburb || '')
-          : null;
-        const effectiveRegion = hasMeaningfulLocationValue(row.region) ? row.region : fallbackLocation?.region || 'Unknown';
-        const effectiveCity = hasMeaningfulLocationValue(row.city) ? row.city : fallbackLocation?.city || 'Unknown';
-        const effectiveSuburb = row.suburb || 'Other';
-        const key = `${effectiveRegion}::${effectiveCity}::${effectiveSuburb}`;
-        const existing = aggregated.get(key);
-
-        if (existing) {
-          existing.count += Number(row.count);
-        } else {
-          aggregated.set(key, {
-            region: effectiveRegion,
-            city: effectiveCity,
-            suburb: effectiveSuburb,
-            count: Number(row.count),
-          });
-        }
-      });
-
-      locationStats = Array.from(aggregated.values()).sort((a, b) => b.count - a.count);
-    }
 
     return NextResponse.json({
       data: mappedRows,
-      locationStats,
+      locationStats: [],
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {

@@ -100,10 +100,10 @@ function PieChartLegend({ pieData, total }: { pieData: { name: string; value: nu
 }
 
 function CampaignOverview({ summary }: { summary: Summary }) {
-  const total = summary.pending_count + summary.sent_count + summary.no_junk_mail_count;
+  const total = summary.pending_count;
   if (total === 0) return null;
 
-  const remaining = total - summary.sent_count - summary.no_junk_mail_count;
+  const remaining = summary.pending_count - summary.sent_count - summary.no_junk_mail_count;
 
   const pieData = [
     { name: 'Sent', value: summary.sent_count },
@@ -184,6 +184,217 @@ function DailySendChart({ data, noJunkTotal }: { data: DailySend[]; noJunkTotal:
   );
 }
 
+// ─── Scan Logs ────────────────────────────────────────────────────────────────
+
+interface ScanLog {
+  id: string;
+  campaign_key: string;
+  visitor_hash: string;
+  ip_address: string;
+  user_agent: string;
+  device_type: string;
+  referrer: string;
+  is_unique: boolean;
+  created_at: string;
+}
+
+interface ScanLogCampaign {
+  campaign_key: string;
+  campaign_name: string;
+  total_pv: number;
+  total_uv: number;
+}
+
+function CampaignScanLogsPanel() {
+  // allLogs holds the full dataset fetched once; filtering is purely client-side
+  const [allLogs, setAllLogs] = useState<ScanLog[]>([]);
+  const [campaigns, setCampaigns] = useState<ScanLogCampaign[]>([]);
+  const [totalScans, setTotalScans] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState('');
+  const [open, setOpen] = useState(true);
+
+  // Fetch all data once on mount — no per-filter requests
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/analytics/scans');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+
+      setAllLogs(data.logs || []);
+      setCampaigns(data.campaigns || []);
+      setTotalScans(data.total_scans || 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load scan logs');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  // Client-side filtering — no loading state, no jump
+  const filteredLogs = allLogs.filter((l) => {
+    const matchCampaign = selectedCampaign === 'all' || l.campaign_key === selectedCampaign;
+    const matchDate =
+      !dateFilter ||
+      new Date(l.created_at).toISOString().split('T')[0] === dateFilter;
+    return matchCampaign && matchDate;
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm transition-all duration-200">
+      <button
+        type="button"
+        onClick={() => {
+          if (!open) setDateFilter('');
+          setOpen((v) => !v);
+        }}
+        className="w-full flex items-center justify-between px-6 py-4 text-left focus:outline-none"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700">QR Code Scan Logs</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Detailed record of direct mail visitor scans</p>
+        </div>
+        <span className="text-slate-400 text-xs font-medium">
+          {open ? '▲ Hide' : '▼ Show'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-100">
+          <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedCampaign('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                selectedCampaign === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              All Campaigns ({totalScans})
+            </button>
+            {campaigns.map((c) => (
+              <button
+                key={c.campaign_key}
+                type="button"
+                onClick={() => setSelectedCampaign(c.campaign_key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  selectedCampaign === c.campaign_key
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {c.campaign_name || c.campaign_key} ({c.total_pv})
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-2 py-1.5 rounded-lg text-xs border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {dateFilter && (
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('')}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 min-h-[300px]">
+            {loading && allLogs.length === 0 ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-8 bg-slate-100 rounded animate-pulse" />
+                ))}
+              </div>
+            ) : error && allLogs.length === 0 ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+                {error}
+              </div>
+            ) : filteredLogs.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm">
+                No scan logs recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse" data-testid="scan-logs-table">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500">
+                      <th className="py-3 px-4">Time</th>
+                      <th className="py-3 px-4">Campaign</th>
+                      <th className="py-3 px-4">Visitor Fingerprint</th>
+                      <th className="py-3 px-4">Device &amp; IP</th>
+                      <th className="py-3 px-4">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {filteredLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-4 font-mono text-xs text-slate-600">
+                          {new Date(log.created_at).toLocaleString('en-NZ')}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                            {log.campaign_key
+                              .replace(/_/g, ' ')
+                              .replace(/\b\w/g, (c) => c.toUpperCase())}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs text-slate-500">
+                          {log.visitor_hash
+                            ? `${log.visitor_hash.substring(0, 12)}...`
+                            : 'N/A'}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-600">
+                          <div>{log.ip_address || 'Unknown IP'}</div>
+                          <div
+                            className="text-slate-400 truncate max-w-[200px]"
+                            title={log.user_agent}
+                          >
+                            {log.device_type ? `${log.device_type} · ` : ''}
+                            {log.user_agent || 'Unknown UA'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {log.is_unique ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              Unique
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                              Repeat
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Combined Scan Chart ──────────────────────────────────────────────────────
+
 interface CombinedScan {
   date: string;
   campaign_pv: number;
@@ -213,8 +424,11 @@ function mergeScanData(campaign: DailyScan[], bizCard: DailyScan[]): CombinedSca
   });
 }
 
-function CombinedScanChart({ campaignScans, bizCardScans }: { campaignScans: DailyScan[]; bizCardScans: DailyScan[] }) {
+function CombinedScanChart({ campaignScans, bizCardScans, campaignName = 'Campaign' }: { campaignScans: DailyScan[]; bizCardScans: DailyScan[]; campaignName?: string }) {
   const data = mergeScanData(campaignScans, bizCardScans);
+  const displayCampaignName = campaignName
+    ? campaignName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : 'Campaign';
 
   if (data.length === 0) {
     return (
@@ -236,7 +450,7 @@ function CombinedScanChart({ campaignScans, bizCardScans }: { campaignScans: Dai
         <h3 className="text-sm font-semibold text-slate-700">QR Code Scan Trend</h3>
         <div className="flex gap-3 text-xs">
           <span className="font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-            Oteha: {totalCampaignPv} / {totalCampaignUv}
+            {displayCampaignName}: {totalCampaignPv} / {totalCampaignUv}
           </span>
           <span className="font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
             Business Card: {totalBizPv} / {totalBizUv}
@@ -249,43 +463,61 @@ function CombinedScanChart({ campaignScans, bizCardScans }: { campaignScans: Dai
           <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={formatDateLabel} />
           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
           <Tooltip
-            content={({ active, payload, label }) => {
-              if (!active || !payload || payload.length === 0) return null;
-              const colorMap: Record<string, string> = {
-                'Business Card Total Scans': '#6366f1',
-                'Oteha Total Scans': '#16a34a',
-                'Business Card Unique Visitors': '#1d4ed8',
-                'Oteha Unique Visitors': '#14532d',
-              };
+            content={({ active, label }) => {
+              if (!active || !label) return null;
+              const row = data.find((d) => d.date === label);
+              if (!row) return null;
               return (
                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', fontSize: 13 }}>
                   <p style={{ fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{formatDateLabel(String(label))}</p>
-                  {payload.map((entry) => {
-                    const color = colorMap[entry.name as string] ?? '#1e293b';
-                    return (
-                      <p key={entry.name} style={{ color, fontWeight: 600, margin: '2px 0' }}>
-                        {entry.name} : {entry.value}
+                  {(row.campaign_pv > 0 || row.campaign_uv > 0) && (
+                    <div style={{ marginBottom: 6 }}>
+                      <p style={{ color: '#16a34a', fontWeight: 700 }}>
+                        {displayCampaignName} Total Scans (PV): {row.campaign_pv}
                       </p>
-                    );
-                  })}
+                      <p style={{ color: '#14532d', fontWeight: 600, paddingLeft: 8 }}>
+                        └ Unique Visitors (UV): {row.campaign_uv}
+                      </p>
+                      {row.campaign_repeat > 0 && (
+                        <p style={{ color: '#16a34a', fontWeight: 500, paddingLeft: 8, opacity: 0.85 }}>
+                          └ Repeat Scans: {row.campaign_repeat}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {(row.biz_pv > 0 || row.biz_uv > 0) && (
+                    <div>
+                      <p style={{ color: '#2563eb', fontWeight: 700 }}>
+                        Business Card Total Scans (PV): {row.biz_pv}
+                      </p>
+                      <p style={{ color: '#1d4ed8', fontWeight: 600, paddingLeft: 8 }}>
+                        └ Unique Visitors (UV): {row.biz_uv}
+                      </p>
+                      {row.biz_repeat > 0 && (
+                        <p style={{ color: '#2563eb', fontWeight: 500, paddingLeft: 8, opacity: 0.85 }}>
+                          └ Repeat Scans: {row.biz_repeat}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             }}
           />
           <Legend formatter={(value) => {
             const colorMap: Record<string, string> = {
-              'Business Card Total Scans': '#6366f1',
-              'Oteha Total Scans': '#16a34a',
+              'Business Card Repeat Scans': '#6366f1',
               'Business Card Unique Visitors': '#1d4ed8',
-              'Oteha Unique Visitors': '#14532d',
+              [`${displayCampaignName} Repeat Scans`]: '#16a34a',
+              [`${displayCampaignName} Unique Visitors`]: '#14532d',
             };
             const color = colorMap[value] ?? '#1e293b';
             return <span style={{ color, fontWeight: 600, fontSize: '0.8125rem' }}>{value}</span>;
           }} />
-          <Bar dataKey="campaign_uv" name="Oteha Unique Visitors" stackId="a" fill="#16A34A" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="campaign_repeat" name="Oteha Total Scans" stackId="a" fill="rgba(22, 163, 74, 0.25)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="campaign_uv" name={`${displayCampaignName} Unique Visitors`} stackId="a" fill="#16A34A" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="campaign_repeat" name={`${displayCampaignName} Repeat Scans`} stackId="a" fill="rgba(22, 163, 74, 0.25)" radius={[4, 4, 0, 0]} />
           <Bar dataKey="biz_uv" name="Business Card Unique Visitors" stackId="b" fill="#2563EB" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="biz_repeat" name="Business Card Total Scans" stackId="b" fill="rgba(99, 102, 241, 0.3)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="biz_repeat" name="Business Card Repeat Scans" stackId="b" fill="rgba(99, 102, 241, 0.3)" radius={[4, 4, 0, 0]} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -299,6 +531,8 @@ export default function DispatchStatsPanel() {
   const [loading, setLoading] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [error, setError] = useState('');
+
+  const statsCacheRef = React.useRef<Map<string, CampaignStats>>(new Map());
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -326,7 +560,12 @@ export default function DispatchStatsPanel() {
   }, []);
 
   const fetchStats = useCallback(async (campaign: string) => {
-    setLoading(true);
+    const cached = statsCacheRef.current.get(campaign);
+    if (cached) {
+      setStats(cached);
+    } else {
+      setLoading(true);
+    }
     setError('');
     try {
       const params = new URLSearchParams({ campaign });
@@ -337,8 +576,11 @@ export default function DispatchStatsPanel() {
       }
       const data = await res.json();
       setStats(data);
+      statsCacheRef.current.set(campaign, data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load stats');
+      if (!cached) {
+        setError(err instanceof Error ? err.message : 'Failed to load stats');
+      }
     } finally {
       setLoading(false);
     }
@@ -380,7 +622,7 @@ export default function DispatchStatsPanel() {
             ) : (
               <select
                 value={selectedCampaign}
-                onChange={(e) => { setSelectedCampaign(e.target.value); setStats(null); }}
+                onChange={(e) => setSelectedCampaign(e.target.value)}
                 className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 {campaigns.map((c) => (
@@ -416,8 +658,9 @@ export default function DispatchStatsPanel() {
               <CampaignOverview summary={stats.summary} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <DailySendChart data={stats.daily_sends} noJunkTotal={stats.summary.no_junk_mail_count} />
-                <CombinedScanChart campaignScans={stats.daily_scans} bizCardScans={stats.business_card_daily_scans} />
+                <CombinedScanChart campaignScans={stats.daily_scans} bizCardScans={stats.business_card_daily_scans} campaignName={stats.campaign} />
               </div>
+              <CampaignScanLogsPanel />
             </>
           )}
         </>

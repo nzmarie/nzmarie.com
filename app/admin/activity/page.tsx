@@ -774,6 +774,18 @@ export default function ActivityPage() {
   const { status } = useSession();
   const [activeTab, setActiveTab] = useState<'dispatch' | 'appraisals' | 'downloads'>('dispatch');
 
+  // Track which tabs have ever been activated so we only mount them once (lazy)
+  // and keep them mounted thereafter to avoid re-fetching on tab re-visits.
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dispatch']));
+
+  const activateTab = (tab: 'dispatch' | 'appraisals' | 'downloads') => {
+    setActiveTab(tab);
+    setMountedTabs(prev => {
+      if (prev.has(tab)) return prev;
+      return new Set([...prev, tab]);
+    });
+  };
+
   if (status === 'loading') {
     return activeTab === 'dispatch' ? <div className="space-y-6"><div className="h-10 bg-slate-100 rounded-xl animate-pulse w-64" /><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4"><div className="h-4 bg-slate-100 rounded w-16 mb-2 animate-pulse" /><div className="h-7 bg-slate-100 rounded w-12 animate-pulse" /></div>)}</div></div> : activeTab === 'appraisals' ? <SkeletonBookings /> : <SkeletonDownloads />;
   }
@@ -788,7 +800,7 @@ export default function ActivityPage() {
       <div className="border-b border-slate-200">
         <nav className="flex gap-8">
           <button
-            onClick={() => setActiveTab('dispatch')}
+            onClick={() => activateTab('dispatch')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'dispatch'
                 ? 'text-indigo-600 border-indigo-600'
@@ -798,7 +810,7 @@ export default function ActivityPage() {
             Dispatch Stats
           </button>
           <button
-            onClick={() => setActiveTab('appraisals')}
+            onClick={() => activateTab('appraisals')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'appraisals'
                 ? 'text-indigo-600 border-indigo-600'
@@ -808,7 +820,7 @@ export default function ActivityPage() {
             Appraisals
           </button>
           <button
-            onClick={() => setActiveTab('downloads')}
+            onClick={() => activateTab('downloads')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'downloads'
                 ? 'text-indigo-600 border-indigo-600'
@@ -820,7 +832,15 @@ export default function ActivityPage() {
         </nav>
       </div>
 
-      {activeTab === 'dispatch' ? <DispatchStatsPanel /> : activeTab === 'appraisals' ? <AppraisalsTab /> : <DownloadsTab />}
+      {/* Tabs are rendered once and kept in DOM (hidden when inactive) to avoid
+          re-fetching. Non-dispatch tabs only mount on first activation. */}
+      <div className={activeTab === 'dispatch' ? '' : 'hidden'}><DispatchStatsPanel /></div>
+      {mountedTabs.has('appraisals') && (
+        <div className={activeTab === 'appraisals' ? '' : 'hidden'}><AppraisalsTab /></div>
+      )}
+      {mountedTabs.has('downloads') && (
+        <div className={activeTab === 'downloads' ? '' : 'hidden'}><DownloadsTab /></div>
+      )}
     </div>
   );
 }

@@ -58,32 +58,27 @@ export async function GET(request: Request) {
 
     const [dailyResult, pendingDailyResult, statusResult, scanResult, bizScanResult] = await Promise.all([
       marieDB.query(
-        `SELECT DATE(sl.sent_at) AS send_date,
+        `SELECT TO_CHAR(sl.sent_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS send_date,
                 COUNT(*)::int AS total_sent
          FROM outreach_send_logs sl
          WHERE sl.campaign_key = $1 AND sl.sent_at IS NOT NULL
-         GROUP BY DATE(sl.sent_at)
+         GROUP BY TO_CHAR(sl.sent_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')
          ORDER BY send_date ASC`,
         [campaign]
       ),
       marieDB.query(
-        `SELECT DATE(
-           CASE WHEN p.no_junk_mail = TRUE AND p.no_junk_mail_updated_at IS NOT NULL
-                THEN p.no_junk_mail_updated_at
-                ELSE op.created_at
-           END
-         )::date AS day,
+        `SELECT TO_CHAR(
+           (CASE WHEN p.no_junk_mail = TRUE AND p.no_junk_mail_updated_at IS NOT NULL
+                 THEN p.no_junk_mail_updated_at
+                 ELSE op.created_at
+            END) AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD'
+         ) AS day,
          COUNT(*)::int AS daily_pending,
          COUNT(*) FILTER (WHERE p.no_junk_mail = TRUE)::int AS daily_no_junk
          FROM outreach_properties op
          LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
          WHERE op.suburb = $1 AND op.status = 'pending'
-         GROUP BY DATE(
-           CASE WHEN p.no_junk_mail = TRUE AND p.no_junk_mail_updated_at IS NOT NULL
-                THEN p.no_junk_mail_updated_at
-                ELSE op.created_at
-           END
-         )
+         GROUP BY day
          ORDER BY day ASC`,
         [suburb]
       ),
@@ -95,33 +90,33 @@ export async function GET(request: Request) {
         [campaign]
       ),
       marieDB.query(
-        `SELECT DATE(created_at) AS scan_date,
+        `SELECT TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS scan_date,
                 COUNT(*)::int AS pv,
                 COUNT(*) FILTER (WHERE is_unique = TRUE)::int AS uv
          FROM campaign_visit_logs
-         WHERE campaign_key = $1
-         GROUP BY DATE(created_at)
+         WHERE (LOWER(campaign_key) = LOWER($1) OR LOWER(campaign_key) = LOWER($2))
+         GROUP BY TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')
          ORDER BY scan_date ASC`,
-        [scanKey]
+        [scanKey, campaign]
       ),
       marieDB.query(
-        `SELECT DATE(created_at) AS scan_date,
+        `SELECT TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS scan_date,
                 COUNT(*)::int AS pv,
                 COUNT(*) FILTER (WHERE is_unique = TRUE)::int AS uv
          FROM campaign_visit_logs
-         WHERE campaign_key = 'business_card'
-         GROUP BY DATE(created_at)
+         WHERE LOWER(campaign_key) = 'business_card'
+         GROUP BY TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')
          ORDER BY scan_date ASC`
       ),
     ]);
 
     const daily_sends = dailyResult.rows.map((r) => ({
-      date: r.send_date.toISOString().slice(0, 10) as string,
+      date: typeof r.send_date === 'string' ? r.send_date : (r.send_date instanceof Date ? r.send_date.toISOString().slice(0, 10) : String(r.send_date)),
       total_sent: Number(r.total_sent),
     }));
 
     const daily_no_junk = pendingDailyResult.rows.map((r) => ({
-      date: (r.day instanceof Date ? r.day : new Date(r.day + 'T00:00:00')).toISOString().slice(0, 10) as string,
+      date: typeof r.day === 'string' ? r.day : (r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day)),
       no_junk_sent: Number(r.daily_no_junk),
     }));
 
@@ -135,13 +130,13 @@ export async function GET(request: Request) {
     }
 
     const daily_scans = scanResult.rows.map((r) => ({
-      date: r.scan_date.toISOString().slice(0, 10) as string,
+      date: typeof r.scan_date === 'string' ? r.scan_date : (r.scan_date instanceof Date ? r.scan_date.toISOString().slice(0, 10) : String(r.scan_date)),
       pv: Number(r.pv),
       uv: Number(r.uv),
     }));
 
     const biz_daily_scans = bizScanResult.rows.map((r) => ({
-      date: r.scan_date.toISOString().slice(0, 10) as string,
+      date: typeof r.scan_date === 'string' ? r.scan_date : (r.scan_date instanceof Date ? r.scan_date.toISOString().slice(0, 10) : String(r.scan_date)),
       pv: Number(r.pv),
       uv: Number(r.uv),
     }));
@@ -175,7 +170,7 @@ export async function GET(request: Request) {
       business_card_daily_scans: biz_daily_scans,
     };
 
-    setCache(cacheKey, responseData, 60_000);
+    setCache(cacheKey, responseData, 300_000);
     return NextResponse.json(responseData);
   } catch (error) {
     console.error('Error fetching campaign stats:', error);

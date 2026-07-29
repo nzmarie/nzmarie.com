@@ -12,7 +12,7 @@ export async function GET() {
   return NextResponse.json({ data: history });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest | Request) {
   const session = await auth();
   if (!session?.user?.adminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

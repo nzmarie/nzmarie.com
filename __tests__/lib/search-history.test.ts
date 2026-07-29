@@ -21,7 +21,7 @@ vi.mock('../../lib/redis', () => {
 
   async function getSearchHistory(adminId: number) {
     try {
-      const items = await mockRedis.lrange<string>(`search_history:${adminId}`, 0, 9);
+      const items = await mockRedis.lrange(`search_history:${adminId}`, 0, 9);
       return items ?? [];
     } catch {
       return [];
