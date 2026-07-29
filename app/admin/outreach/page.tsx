@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { SkeletonOutreach, SkeletonOutreachCard, SkeletonOutreachListRow } from '@/components/admin/Skeleton';
@@ -184,7 +183,6 @@ function PropertyHistoryView({ raw }: { raw: string }) {
 
 export default function OutreachPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'liked' | 'pending' | 'sent'>('liked');
   const [items, setItems] = useState<OutreachProperty[]>([]);
@@ -489,10 +487,6 @@ export default function OutreachPage() {
       `p${page}`,
     ].join('|');
   }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
-
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/admin/login');
-  }, [status, router]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);

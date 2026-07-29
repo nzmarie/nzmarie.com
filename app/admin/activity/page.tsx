@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonBookings, SkeletonDownloads } from '@/components/admin/Skeleton';
 import DispatchStatsPanel from '@/components/admin/DispatchStatsPanel';
@@ -773,12 +772,7 @@ function DownloadsTab() {
 
 export default function ActivityPage() {
   const { status } = useSession();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'dispatch' | 'appraisals' | 'downloads'>('dispatch');
-
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/admin/login');
-  }, [status, router]);
 
   if (status === 'loading') {
     return activeTab === 'dispatch' ? <div className="space-y-6"><div className="h-10 bg-slate-100 rounded-xl animate-pulse w-64" /><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4"><div className="h-4 bg-slate-100 rounded w-16 mb-2 animate-pulse" /><div className="h-7 bg-slate-100 rounded w-12 animate-pulse" /></div>)}</div></div> : activeTab === 'appraisals' ? <SkeletonBookings /> : <SkeletonDownloads />;

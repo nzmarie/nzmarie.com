@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { API_ENDPOINTS } from '@/lib/api/config';
 import { useGooglePlacesAutocomplete } from '@/hooks/useGooglePlacesAutocomplete';
 
@@ -16,7 +16,7 @@ interface AddressAutocompleteProps {
   city?: string;
   placeholder?: string;
   apiEndpoint?: string;
-  useGoogleMaps?: boolean; // Use Google Maps instead of internal API
+  useGoogleMaps?: boolean;
 }
 
 export default function AddressAutocomplete({
@@ -28,21 +28,57 @@ export default function AddressAutocomplete({
   apiEndpoint = API_ENDPOINTS.propertyAutocomplete,
   useGoogleMaps = false
 }: AddressAutocompleteProps) {
-  // Google Maps autocomplete hook
   const {
     suggestions: googleSuggestions,
     isLoading: googleLoading,
     selectSuggestion: selectGoogleSuggestion,
   } = useGooglePlacesAutocomplete(value);
 
-  // Internal API suggestions
   const [internalSuggestions, setInternalSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoadingInternal, setIsLoadingInternal] = useState(false);
   const [noResults, setNoResults] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const isSelectingRef = useRef(false);
+  const historyLoadedRef = useRef(false);
+  const recentSearchesRef = useRef<string[]>([]);
+
+  const saveToHistory = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+    const trimmed = query.trim();
+    setRecentSearches(prev => {
+      const filtered = prev.filter(q => q !== trimmed);
+      const updated = [trimmed, ...filtered].slice(0, 10);
+      recentSearchesRef.current = updated;
+      return updated;
+    });
+    try {
+      await fetch('/api/admin/search-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: trimmed }),
+      });
+    } catch {
+    }
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    if (historyLoadedRef.current) return;
+    try {
+      const res = await fetch('/api/admin/search-history');
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.data ?? [];
+        setRecentSearches(items);
+        recentSearchesRef.current = items;
+        historyLoadedRef.current = true;
+      }
+    } catch {
+    }
+  }, []);
 
   // Determine which suggestions and loading state to use
   const suggestions = useGoogleMaps
@@ -61,6 +97,7 @@ export default function AddressAutocomplete({
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setShowSuggestions(false);
         setNoResults(false);
+        setShowHistory(false);
       }
     };
 
@@ -124,9 +161,9 @@ export default function AddressAutocomplete({
     setIsSelected(true);
     setShowSuggestions(false);
     setNoResults(false);
+    setShowHistory(false);
 
     if (useGoogleMaps) {
-      // Get full place details from Google
       const parsedAddress = await selectGoogleSuggestion(suggestion.id);
       if (parsedAddress) {
         onChange(parsedAddress.fullAddress);
@@ -136,13 +173,39 @@ export default function AddressAutocomplete({
           suburb: parsedAddress.suburb,
           city: parsedAddress.city,
         });
+        saveToHistory(parsedAddress.fullAddress);
       }
     } else {
-      // Internal API - use as-is
       onChange(suggestion.address);
       onSelect?.(suggestion);
+      saveToHistory(suggestion.address);
     }
   };
+
+  const handleHistorySelect = (query: string) => {
+    setIsSelected(true);
+    setShowHistory(false);
+    setShowSuggestions(false);
+    onChange(query);
+    saveToHistory(query);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && value.trim()) {
+      saveToHistory(value.trim());
+    }
+  };
+
+  const handleFocus = async () => {
+    if (!value) {
+      await loadHistory();
+      if (recentSearchesRef.current.length > 0) {
+        setShowHistory(true);
+      }
+    } else if (suggestions.length > 0) {
+      setShowSuggestions(true);
+    }
+  }; 
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
@@ -161,7 +224,8 @@ export default function AddressAutocomplete({
         value={value}
         autoComplete="off"
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+        onFocus={handleFocus}
+        onKeyDown={handleKeyDown}
         style={{
           padding: '14px 48px 14px 44px',
           borderRadius: '10px',
@@ -198,6 +262,59 @@ export default function AddressAutocomplete({
           color: '#94a3b8',
           fontSize: '14px',
         }}>⏳</span>
+      )}
+
+      {showHistory && recentSearches.length > 0 && !value && (
+        <ul style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: '6px',
+          backgroundColor: 'var(--card-bg)',
+          border: '2px solid #cbd5e1',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          maxHeight: '300px',
+          overflowY: 'auto',
+          zIndex: 1000,
+          listStyle: 'none',
+          padding: 0,
+          margin: '6px 0 0',
+        }}>
+          <li style={{
+            padding: '8px 16px',
+            backgroundColor: '#f8fafc',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: '#64748b',
+            borderBottom: '1px solid #e2e8f0',
+            borderRadius: '10px 10px 0 0',
+          }}>
+            🕐 Recent searches:
+          </li>
+          {recentSearches.map((query, index) => (
+            <li
+              key={index}
+              onMouseDown={() => handleHistorySelect(query)}
+              style={{
+                padding: '12px 16px',
+                cursor: 'pointer',
+                borderBottom: index < recentSearches.length - 1 ? '1px solid var(--card-border)' : 'none',
+                transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLLIElement).style.backgroundColor = '#f1f5f9';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLLIElement).style.backgroundColor = 'var(--card-bg)';
+              }}
+            >
+              <span style={{ marginRight: '8px', color: '#94a3b8' }}>🕐</span>
+              <span style={{ fontWeight: 500, color: 'var(--text-heading)' }}>{query}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       {showSuggestions && suggestions.length > 0 && (

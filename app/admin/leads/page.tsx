@@ -133,6 +133,11 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
+  const historyLoadedRef = useRef(false);
+  const recentSearchesRef = useRef<string[]>([]);
   const [page, setPage] = useState(1);
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
@@ -317,6 +322,50 @@ export default function LeadsPage() {
     };
     window.addEventListener('open-convert-modal', handler);
     return () => window.removeEventListener('open-convert-modal', handler);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadSearchHistory = useCallback(async () => {
+    if (historyLoadedRef.current) return;
+    try {
+      const res = await fetch('/api/admin/search-history');
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.data ?? [];
+        setRecentSearches(items);
+        recentSearchesRef.current = items;
+        historyLoadedRef.current = true;
+      }
+    } catch {
+    }
+  }, []);
+
+  const saveSearch = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+    const trimmed = query.trim();
+    setRecentSearches(prev => {
+      const filtered = prev.filter(q => q !== trimmed);
+      const updated = [trimmed, ...filtered].slice(0, 10);
+      recentSearchesRef.current = updated;
+      return updated;
+    });
+    try {
+      await fetch('/api/admin/search-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: trimmed }),
+      });
+    } catch {
+    }
   }, []);
 
   if (!session?.user) {
@@ -563,9 +612,39 @@ export default function LeadsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <input type="text" placeholder="Search address, name, email, phone..."
-            value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-            className="flex-1 min-w-[200px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div ref={searchWrapperRef} style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <input type="text" placeholder="Search address, name, email, phone..."
+              value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+              onFocus={async () => {
+                if (!search) {
+                  await loadSearchHistory();
+                  if (recentSearchesRef.current.length > 0) setShowHistory(true);
+                }
+              }}
+              onKeyDown={e => { if (e.key === 'Enter' && search.trim()) saveSearch(search.trim()); }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {showHistory && recentSearches.length > 0 && !search && (
+              <ul style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 1000,
+                listStyle: 'none', padding: '4px 0', margin: '4px 0 0',
+              }}>
+                <li style={{ padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                  🕐 Recent searches:
+                </li>
+                {recentSearches.map((q, i) => (
+                  <li key={i}
+                    onMouseDown={() => { setSearch(q); setPage(1); setShowHistory(false); saveSearch(q); }}
+                    style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.875rem', color: '#334155' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLLIElement).style.backgroundColor = '#f1f5f9'}
+                    onMouseLeave={e => (e.currentTarget as HTMLLIElement).style.backgroundColor = 'white'}>
+                    <span style={{ marginRight: '6px', color: '#94a3b8' }}>🕐</span>{q}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); setPage(1); }}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">All Priority</option>

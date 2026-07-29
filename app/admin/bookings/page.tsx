@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonBookings } from '@/components/admin/Skeleton';
 import { REGIONS, getCitiesByRegion, getSuburbsByCity, type Region } from '@/lib/geo-data';
@@ -74,7 +73,6 @@ function fmtPriority(v: BookingPriority) { return PRIORITY_LABELS[v] ?? v; }
 
 export default function BookingsPage() {
   const { status } = useSession();
-  const router = useRouter();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [locationStats, setLocationStats] = useState<LocationStat[]>([]);
@@ -119,10 +117,6 @@ export default function BookingsPage() {
   const [editFollowUp, setEditFollowUp] = useState('');
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/admin/login');
-  }, [status, router]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
