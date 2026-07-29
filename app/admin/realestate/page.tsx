@@ -721,7 +721,7 @@ export default function RealestatePage() {
 
   if (status === "loading") {
     return (
-      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
+      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "8px" }}>
         <SkeletonProperties />
       </div>
     );
@@ -731,7 +731,7 @@ export default function RealestatePage() {
 
   return (
     <div style={{
-      maxWidth: "1400px", margin: "0 auto", padding: "24px",
+      maxWidth: "1400px", margin: "0 auto", padding: "8px",
       "--input-border": "#e2e8f0",
       "--input-bg": "#ffffff",
       "--foreground": "#171717",

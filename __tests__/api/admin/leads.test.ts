@@ -210,7 +210,6 @@ describe('GET /api/admin/leads', () => {
 
   it('should return 401 when not authenticated', async () => {
     const { auth } = await import('@/lib/auth');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(auth).mockResolvedValueOnce(null as any);
 
     mockQuery
@@ -326,7 +325,6 @@ describe('POST /api/admin/leads', () => {
 
   it('should return 401 when not authenticated', async () => {
     const { auth } = await import('@/lib/auth');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(auth).mockResolvedValueOnce(null as any);
 
     const request = new Request('http://localhost:3000/api/admin/leads', {

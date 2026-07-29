@@ -194,6 +194,7 @@ export default function OutreachPage() {
   const [hasMore, setHasMore] = useState(true);
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isMobile, setIsMobile] = useState(false);
   const [classicItems, setClassicItems] = useState<OutreachProperty[]>([]);
   const [classicPagination, setClassicPagination] = useState<PaginationMeta | null>(null);
   const [classicLoading, setClassicLoading] = useState(false);
@@ -701,6 +702,13 @@ export default function OutreachPage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, loadMore, isClassic, viewMode]);
 
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const showNotification = (type: 'success' | 'error', msg: string) => {
     setNotification({ type, msg });
     setTimeout(() => setNotification(null), 4000);
@@ -967,7 +975,7 @@ export default function OutreachPage() {
     <div style={{
       maxWidth: "1400px",
       margin: "0 auto",
-      padding: "24px",
+        padding: "8px",
       "--input-border": "#e2e8f0",
       "--input-bg": "#ffffff",
       "--foreground": "#171717",
@@ -995,21 +1003,16 @@ export default function OutreachPage() {
       {/* Filters */}
       <div style={{
         marginBottom: "32px",
-        padding: "24px",
+      padding: "32px",
         backgroundColor: "white",
         borderRadius: "16px",
         boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
         border: "1px solid #e2e8f0",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748" }}>
             Search Filters
           </h2>
-          <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            {isClassic
-              ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
-              : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
-          </p>
         </div>
 
         {/* Status Filter Buttons */}
@@ -1115,6 +1118,7 @@ export default function OutreachPage() {
         </div>
 
         {/* Quick Suburb Filter Buttons */}
+        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
             Quick Filter by Suburb
@@ -1183,6 +1187,7 @@ export default function OutreachPage() {
             )}
           </div>
         </div>
+        )}
 
         <div className="flex flex-wrap gap-3">
           <select
@@ -1208,6 +1213,7 @@ export default function OutreachPage() {
         </div>
 
         {/* Property Type & Market Status */}
+        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
         <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
           <div>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
@@ -1350,8 +1356,10 @@ export default function OutreachPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Last Sold */}
+        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
             Last Sold
@@ -1391,8 +1399,28 @@ export default function OutreachPage() {
             ))}
           </div>
         </div>
+        )}
 
-        <div className="flex flex-wrap gap-3">          
+        <div className="flex flex-wrap gap-3">
+          {isMobile && (reportSuburbFilter || reportQuarterFilter) && addressInput && (
+            <button
+              onClick={() => setAddressInput('')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fecaca'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fee2e2'; }}
+            >
+              ✕ Clear Address
+            </button>
+          )}
           <button
             onClick={() => { 
               setAddressInput(''); 
@@ -1452,6 +1480,24 @@ export default function OutreachPage() {
             }}
           >
             Classic Pages
+          </button>
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+        <div className="flex bg-slate-100 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('card')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'card' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            title="Card View"
+          >
+            ⊞ Cards
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            title="List View"
+          >
+            ☰ List
           </button>
         </div>
       </div>
@@ -1620,30 +1666,6 @@ export default function OutreachPage() {
       )}
 
       {/* Content */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {activeTab === 'liked' ? '❤️ Liked' : activeTab === 'pending' ? '⏳ Pending' : '✓ Sent'} Addresses
-          </h2>
-          <div className="flex items-center gap-3">
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setViewMode('card')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'card' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title="Card View"
-              >
-                ⊞ Cards
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title="List View"
-              >
-                ☰ List
-              </button>
-            </div>
-          </div>
-        </div>
 
         {(loading || (isClassic && classicLoading)) ? (
           <SkeletonOutreach />
@@ -1655,12 +1677,12 @@ export default function OutreachPage() {
             </p>
           </div>
         ) : viewMode === 'card' ? (
-          <div className="p-4">
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-              gap: "20px",
-            }}>
+          <>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+            gap: "20px",
+          }}>
               {displayItems.map((prop) => (
                 <div
                   key={prop.id}
@@ -1917,7 +1939,7 @@ export default function OutreachPage() {
                       return null;
                     })()}
                   </div></a>
-                    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
                         <h3 style={{
                           margin: 0,
@@ -2392,9 +2414,9 @@ export default function OutreachPage() {
                 >≫</button>
               </div>
             )}
-          </div>
+          </>
         ) : (
-          <div className="p-4 space-y-3">
+          <div className="space-y-3">
             {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
               return (
                 <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
@@ -2457,210 +2479,221 @@ export default function OutreachPage() {
                           </button>
                           {!isCollapsed && (
                             <div className="divide-y divide-slate-50">
-                              {properties.map((prop) => (
-                              <div
-                                key={prop.id}
-                                className="px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-4 group"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selected.has(prop.id)}
-                                  onChange={() => toggleSelect(prop.id)}
-                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-3">
-                                    <div className="font-medium text-slate-800 truncate">
-                                      {prop.property_address}
-                                    </div>
-                                    <div className="flex gap-2 shrink-0">
-                                      {(prop.pv_url || prop.property_url) && (
-                                        <a
-                                          href={prop.pv_url || prop.property_url || ''}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200 font-semibold"
-                                          title="View on PropertyValue"
-                                        >
-                                          PropertyValue
-                                        </a>
-                                      )}
-                                      {prop.realestate_url && (
-                                        <a
-                                          href={prop.realestate_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors border border-green-200 font-semibold"
-                                          title="View on RealEstate"
-                                        >
-                                          RealEstate
-                                        </a>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                    {prop.property_type && (
-                                      <span className="px-2 py-0.5 bg-slate-100 rounded">
-                                        {prop.property_type}
-                                      </span>
-                                    )}
-                                    <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
-                                    <span className="text-slate-400">
-                                      {new Date(prop.created_at).toLocaleTimeString('en-NZ', { 
-                                        hour: '2-digit', 
-                                        minute: '2-digit' 
-                                      })}
-                                    </span>
-                                  </div>
-                                </div>
-                                {activeTab === 'liked' && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
-                                      try {
-                                        const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                          method: 'PATCH',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ status: 'pending' }),
-                                        });
-                                        if (!res.ok) throw new Error('Failed');
-                                        await res.json();
-                                        showNotification('success', 'Moved to Pending');
-                                        handleMarkAsSentSuccess();
-                                      } catch {
-                                        showNotification('error', 'Failed to move to Pending');
-                                      }
-                                    }}
-                                    className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
-                                    title="Move to Pending"
-                                  >
-                                    ⇨ Pending
-                                  </button>
-                                )}
-                                {activeTab === 'pending' && canMarkAsSent && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
-                                      try {
-                                        const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, {
-                                          method: 'PATCH',
-                                        });
-                                        if (!res.ok) throw new Error('Failed to mark as sent');
-                                        await res.json();
-                                        showNotification('success', 'Marked as sent');
-                                        handleMarkAsSentSuccess();
-                                      } catch {
-                                        showNotification('error', 'Failed to mark as sent');
-                                      }
-                                    }}
-                                    className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
-                                    title="Mark this address as sent"
-                                  >
-                                    ✓ Sent
-                                  </button>
-                                )}
-                                {activeTab === 'pending' && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
-                                        try {
-                                          const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ status: 'liked' }),
-                                          });
-                                          if (!res.ok) throw new Error('Failed');
-                                          await res.json();
-                                          showNotification('success', 'Returned to Liked');
-                                          handleMarkAsSentSuccess();
-                                        } catch {
-                                          showNotification('error', 'Failed to return to Liked');
-                                        }
-                                      }
-                                    }}
-                                    className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
-                                    title="Return to Liked"
-                                  >
-                                    ↩ Liked
-                                  </button>
-                                )}
-                                {activeTab === 'sent' && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
-                                      try {
-                                        const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                          method: 'PATCH',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ status: 'pending' }),
-                                        });
-                                        if (!res.ok) throw new Error('Failed');
-                                        await res.json();
-                                        showNotification('success', 'Returned to Pending');
-                                        handleMarkAsSentSuccess();
-                                      } catch {
-                                        showNotification('error', 'Failed to return to Pending');
-                                      }
-                                    }}
-                                    className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
-                                    title="Return to Pending"
-                                  >
-                                    ⇨ Pending
-                                  </button>
-                                )}
-                                  <button
-                                    type="button"
-                                    onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
-                                    className="transition-colors px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded text-xs font-medium border border-slate-200"
-                                    title="View dispatch history"
-                                  >
-                                    <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
-                                    {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openConvertModal(prop)}
-                                    className="transition-colors px-3 py-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded text-xs font-medium border border-violet-200"
-                                    title="Convert to Lead"
-                                  >
-                                    ⇨ Lead
-                                  </button>
-                                  {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (window.confirm(`Delete "${prop.property_address}"?`)) {
-                                        const itemId = prop.id;
-                                        setItems((prev) => prev.filter((item) => item.id !== itemId));
-                                        setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
-                                        try {
-                                          await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
-                                          showNotification('success', 'Address deleted');
-                                        } catch {
-                                          showNotification('error', 'Failed to delete');
-                                        }
-                                      }
-                                    }}
-                                    className="transition-colors px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
-                                    title="Delete this address"
-                                  >
-                                    🗑️
-                                  </button>
-                                )}
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                                    STATUS_COLORS[prop.status]
-                                  }`}
-                                >
-                                  {STATUS_LABELS[prop.status]}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                              {properties.map((prop) => {
+                               const actionBtns = (
+                                 <>
+                                 {activeTab === 'liked' && (
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
+                                       try {
+                                         const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                           method: 'PATCH',
+                                           headers: { 'Content-Type': 'application/json' },
+                                           body: JSON.stringify({ status: 'pending' }),
+                                         });
+                                         if (!res.ok) throw new Error('Failed');
+                                         await res.json();
+                                         showNotification('success', 'Moved to Pending');
+                                         handleMarkAsSentSuccess();
+                                       } catch {
+                                         showNotification('error', 'Failed to move to Pending');
+                                       }
+                                     }}
+                                     className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
+                                     title="Move to Pending"
+                                   >
+                                     ⇨ Pending
+                                   </button>
+                                 )}
+                                 {activeTab === 'pending' && canMarkAsSent && (
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
+                                       try {
+                                         const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, {
+                                           method: 'PATCH',
+                                         });
+                                         if (!res.ok) throw new Error('Failed to mark as sent');
+                                         await res.json();
+                                         showNotification('success', 'Marked as sent');
+                                         handleMarkAsSentSuccess();
+                                       } catch {
+                                         showNotification('error', 'Failed to mark as sent');
+                                       }
+                                     }}
+                                     className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
+                                     title="Mark this address as sent"
+                                   >
+                                     ✓ Sent
+                                   </button>
+                                 )}
+                                 {activeTab === 'pending' && (
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
+                                         try {
+                                           const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                             method: 'PATCH',
+                                             headers: { 'Content-Type': 'application/json' },
+                                             body: JSON.stringify({ status: 'liked' }),
+                                           });
+                                           if (!res.ok) throw new Error('Failed');
+                                           await res.json();
+                                           showNotification('success', 'Returned to Liked');
+                                           handleMarkAsSentSuccess();
+                                         } catch {
+                                           showNotification('error', 'Failed to return to Liked');
+                                         }
+                                       }
+                                     }}
+                                     className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
+                                     title="Return to Liked"
+                                   >
+                                     ↩ Liked
+                                   </button>
+                                 )}
+                                 {activeTab === 'sent' && (
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
+                                       try {
+                                         const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                           method: 'PATCH',
+                                           headers: { 'Content-Type': 'application/json' },
+                                           body: JSON.stringify({ status: 'pending' }),
+                                         });
+                                         if (!res.ok) throw new Error('Failed');
+                                         await res.json();
+                                         showNotification('success', 'Returned to Pending');
+                                         handleMarkAsSentSuccess();
+                                       } catch {
+                                         showNotification('error', 'Failed to return to Pending');
+                                       }
+                                     }}
+                                     className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
+                                     title="Return to Pending"
+                                   >
+                                     ⇨ Pending
+                                   </button>
+                                 )}
+                                   <button
+                                     type="button"
+                                     onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                                     className="transition-colors px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded text-xs font-medium border border-slate-200"
+                                     title="View dispatch history"
+                                   >
+                                     <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
+                                     {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                                   </button>
+                                   <button
+                                     type="button"
+                                     onClick={() => openConvertModal(prop)}
+                                     className="transition-colors px-3 py-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded text-xs font-medium border border-violet-200"
+                                     title="Convert to Lead"
+                                   >
+                                     ⇨ Lead
+                                   </button>
+                                   {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       if (window.confirm(`Delete "${prop.property_address}"?`)) {
+                                         const itemId = prop.id;
+                                         setItems((prev) => prev.filter((item) => item.id !== itemId));
+                                         setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
+                                         try {
+                                           await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+                                           showNotification('success', 'Address deleted');
+                                         } catch {
+                                           showNotification('error', 'Failed to delete');
+                                         }
+                                       }
+                                     }}
+                                     className="transition-colors px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
+                                     title="Delete this address"
+                                   >
+                                     🗑️
+                                   </button>
+                                 )}
+                                 <span
+                                   className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                                     STATUS_COLORS[prop.status]
+                                   }`}
+                                 >
+                                   {STATUS_LABELS[prop.status]}
+                                 </span>
+                                 </>
+                               );
+                               return (
+                               <div
+                                 key={prop.id}
+                                 className="pl-10 pr-4 py-3 hover:bg-blue-50 transition-colors group border-l-2 border-slate-100 ml-4"
+                               >
+                                 <div className="flex items-start gap-3">
+                                   <input
+                                     type="checkbox"
+                                     checked={selected.has(prop.id)}
+                                     onChange={() => toggleSelect(prop.id)}
+                                     className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                                   />
+                                   <div className="min-w-0 flex-1">
+                                     <div className="flex flex-wrap items-center gap-3">
+                                       <div className="font-medium text-slate-800 truncate">
+                                         {prop.property_address}
+                                       </div>
+                                       <div className="flex gap-2 shrink-0">
+                                         {(prop.pv_url || prop.property_url) && (
+                                           <a
+                                             href={prop.pv_url || prop.property_url || ''}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
+                                             className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200 font-semibold"
+                                             title="View on PropertyValue"
+                                           >
+                                             PropertyValue
+                                           </a>
+                                         )}
+                                         {prop.realestate_url && (
+                                           <a
+                                             href={prop.realestate_url}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
+                                             className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors border border-green-200 font-semibold"
+                                             title="View on RealEstate"
+                                           >
+                                             RealEstate
+                                           </a>
+                                         )}
+                                       </div>
+                                     </div>
+                                     <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                                       {prop.property_type && (
+                                         <span className="px-2 py-0.5 bg-slate-100 rounded">
+                                           {prop.property_type}
+                                         </span>
+                                       )}
+                                       <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
+                                       <span className="text-slate-400">
+                                         {new Date(prop.created_at).toLocaleTimeString('en-NZ', { 
+                                           hour: '2-digit', 
+                                           minute: '2-digit' 
+                                         })}
+                                       </span>
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <div className="flex flex-wrap items-center gap-2 mt-1.5 lg:mt-0.5">
+                                   {actionBtns}
+                                 </div>
+                               </div>
+                              );
+                             })}
+                           </div>
                         )}
                       </div>
                     );
@@ -2958,7 +2991,6 @@ export default function OutreachPage() {
           propertyId={historyTargetId}
           propertyAddress={historyTargetAddress}
         />
-      </div>
     </div>
   );
 }

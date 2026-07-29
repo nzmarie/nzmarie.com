@@ -335,7 +335,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -472,5 +472,100 @@ describe('Outreach page - Liked icon on card image', () => {
         body: JSON.stringify({ no_junk_mail: true }),
       });
     });
+  });
+
+  it('card view content area has 16px padding', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    const cards = document.querySelectorAll('[style*="padding: 16px"]');
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('Outreach page - List view mobile layout', () => {
+  const mockItems = [
+    {
+      id: 'out-1',
+      property_address: '15 Marine Parade',
+      suburb: 'Takapuna',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'pending',
+      created_at: '2026-07-01T10:00:00Z',
+      no_junk_mail: false,
+      joined_property_id: 'prop-1',
+    },
+    {
+      id: 'out-2',
+      property_address: '22 Beach Road',
+      suburb: 'Takapuna',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'pending',
+      created_at: '2026-07-02T10:00:00Z',
+      no_junk_mail: false,
+      joined_property_id: 'prop-2',
+    },
+  ];
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 50, total: 2, totalPages: 1 } }),
+      });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it('renders address next to checkbox in list view', async () => {
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    const listBtn = await screen.findByRole('button', { name: /☰ List/i });
+    fireEvent.click(listBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    });
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    expect(checkboxes.length).toBeGreaterThanOrEqual(1);
+
+    const addr = screen.getByText('15 Marine Parade');
+    expect(addr.className).toContain('truncate');
+  });
+
+  it('shows action buttons in a separate wrapped container below address', async () => {
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    const listBtn = await screen.findByRole('button', { name: /☰ List/i });
+    fireEvent.click(listBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    });
+
+    const sentBtns = screen.getAllByText('✓ Sent');
+    expect(sentBtns.length).toBeGreaterThanOrEqual(1);
+
+    const likedBtns = screen.getAllByText('↩ Liked');
+    expect(likedBtns.length).toBeGreaterThanOrEqual(1);
   });
 });

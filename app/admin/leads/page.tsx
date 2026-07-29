@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
@@ -134,6 +134,21 @@ export default function LeadsPage() {
   const [suburbFilter, setSuburbFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
+
+  const isClassic = paginationMode === 'classic';
+  const PAGE_SIZE = 18;
+  const displayLeads = isClassic ? leads : allLeads;
+  const totalLeads = pagination?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalLeads / PAGE_SIZE));
+
+  const hasMoreRef = useRef(true);
+  const loadingMoreRef = useRef(false);
+  const lastLeadElementRef = useRef<HTMLDivElement>(null);
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
@@ -185,11 +200,80 @@ export default function LeadsPage() {
     }
   }, [statusFilter, priorityFilter, sourceFilter, suburbFilter, search, page, notify]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const nextPage = Math.ceil(allLeads.length / 50) + 1;
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      if (priorityFilter) params.set('priority', priorityFilter);
+      if (sourceFilter) params.set('source', sourceFilter);
+      if (suburbFilter) params.set('suburb', suburbFilter);
+      if (search) params.set('search', search);
+      params.set('page', String(nextPage));
+      params.set('limit', '50');
+      const res = await fetch(`/api/admin/leads?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const json = await res.json();
+      const newData = json.data || [];
+      if (newData.length === 0) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      } else {
+        setAllLeads(prev => [...prev, ...newData]);
+        hasMoreRef.current = newData.length >= 50;
+        setHasMore(newData.length >= 50);
+      }
+    } catch {
+      notify('error', 'Failed to load more leads');
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [statusFilter, priorityFilter, sourceFilter, suburbFilter, search, allLeads.length, notify]);
+
+  useEffect(() => {
+    if (!isClassic) {
+      setAllLeads([]);
+      setHasMore(true);
+      hasMoreRef.current = true;
+    }
+  }, [statusFilter, priorityFilter, sourceFilter, suburbFilter, search, isClassic]);
+
   useEffect(() => {
     if (session?.user && isAdmin(session.user.email)) {
       fetchLeads();
     }
   }, [session, fetchLeads]);
+
+  useEffect(() => {
+    if (!isClassic && allLeads.length === 0 && leads.length > 0) {
+      setAllLeads(leads);
+      hasMoreRef.current = (pagination?.total || 0) > leads.length;
+      setHasMore((pagination?.total || 0) > leads.length);
+    }
+  }, [leads, pagination, isClassic, allLeads.length]);
+
+  useEffect(() => {
+    if (isClassic && currentPage !== page) {
+      setPage(currentPage);
+    }
+  }, [currentPage, isClassic, page]);
+
+  useEffect(() => {
+    if (isClassic) return;
+    const el = lastLeadElementRef.current;
+    if (!el || !hasMore || loadingMore || loading) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+        loadMore();
+      }
+    }, { rootMargin: '400px 0px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loading, loadMore, isClassic]);
 
   // Listen for global edit/convert events to maintain consistency with properties page
   useEffect(() => {
@@ -391,117 +475,247 @@ export default function LeadsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Leads</h1>
-        <div className="flex items-center space-x-3">
-          <div className="flex bg-slate-100 rounded-lg p-0.5">
-            <button onClick={() => setViewMode('card')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'card' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              ⊞ Cards
-            </button>
-            <button onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              ☰ List
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <button onClick={() => { setStatusFilter(''); setPage(1); }}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${!statusFilter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-          All
-        </button>
-        {Object.entries(STATUS_LABELS).map(([key, label]) => (
-          <button key={key} onClick={() => { setStatusFilter(key); setPage(1); }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${statusFilter === key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Quick Suburb Filter Buttons */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>
-          Quick Filter by Suburb
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
-          {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
-            <button
-              key={suburb}
-              onClick={() => { setSuburbFilter(prev => prev === suburb ? '' : suburb); setPage(1); }}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "20px",
-                border: suburbFilter === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
-                backgroundColor: suburbFilter === suburb ? '#3b82f6' : 'white',
-                color: suburbFilter === suburb ? 'white' : '#4a5568',
-                fontSize: "0.8rem",
-                fontWeight: suburbFilter === suburb ? '600' : '500',
-                cursor: "pointer",
-                transition: "all 0.2s",
-                boxShadow: suburbFilter === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
-              }}
-              onMouseEnter={(e) => {
-                if (suburbFilter !== suburb) {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f1f5f9';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (suburbFilter !== suburb) {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'white';
-                }
-              }}
-            >
-              {suburb}
-            </button>
-          ))}
-        </div>
-        {suburbFilter && (
-          <button
-            onClick={() => { setSuburbFilter(''); setPage(1); }}
-            style={{
-              padding: "4px 8px",
-              fontSize: "0.75rem",
-              color: "#64748b",
-              fontWeight: "500",
-              cursor: "pointer",
-              textDecoration: "underline",
-            }}
-          >
-            Clear suburb filter
-          </button>
-        )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <input type="text" placeholder="Search address, name, email, phone..."
-          value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="flex-1 min-w-[200px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); setPage(1); }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">All Priority</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-        <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">All Sources</option>
-          <option value="outreach">Outreach</option>
-          <option value="phone">Phone</option>
-          <option value="email">Email</option>
-          <option value="manual">Manual</option>
-        </select>
-        {(statusFilter || priorityFilter || sourceFilter || suburbFilter || search) && (
-          <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSuburbFilter(''); setSearch(''); setPage(1); }}
-            className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900">
-            Clear
+      <div style={{
+        marginBottom: "32px",
+        padding: "24px",
+        backgroundColor: "white",
+        borderRadius: "16px",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        border: "1px solid #e2e8f0",
+      }}>
+        <div style={{ marginBottom: "20px" }}>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: "600", color: "#2D3748" }}>
+            Search Filters
+          </h2>
+        </div>
+
+        {/* Status Tabs */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button onClick={() => { setStatusFilter(''); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${!statusFilter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            All
           </button>
-        )}
+          {Object.entries(STATUS_LABELS).map(([key, label]) => (
+            <button key={key} onClick={() => { setStatusFilter(key); setPage(1); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${statusFilter === key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Suburb Filter Buttons */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>
+            Quick Filter by Suburb
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki'].map((suburb) => (
+              <button
+                key={suburb}
+                onClick={() => { setSuburbFilter(prev => prev === suburb ? '' : suburb); setPage(1); }}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "20px",
+                  border: suburbFilter === suburb ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  backgroundColor: suburbFilter === suburb ? '#3b82f6' : 'white',
+                  color: suburbFilter === suburb ? 'white' : '#4a5568',
+                  fontSize: "0.8rem",
+                  fontWeight: suburbFilter === suburb ? '600' : '500',
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  boxShadow: suburbFilter === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (suburbFilter !== suburb) {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f1f5f9';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (suburbFilter !== suburb) {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'white';
+                  }
+                }}
+              >
+                {suburb}
+              </button>
+            ))}
+          </div>
+          {suburbFilter && (
+            <button
+              onClick={() => { setSuburbFilter(''); setPage(1); }}
+              style={{
+                padding: "4px 8px",
+                fontSize: "0.75rem",
+                color: "#64748b",
+                fontWeight: "500",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              Clear suburb filter
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <input type="text" placeholder="Search address, name, email, phone..."
+            value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            className="flex-1 min-w-[200px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); setPage(1); }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">All Priority</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">All Sources</option>
+            <option value="outreach">Outreach</option>
+            <option value="phone">Phone</option>
+            <option value="email">Email</option>
+            <option value="manual">Manual</option>
+          </select>
+          {(statusFilter || priorityFilter || sourceFilter || suburbFilter || search) && (
+            <button onClick={() => { setStatusFilter(''); setPriorityFilter(''); setSourceFilter(''); setSuburbFilter(''); setSearch(''); setPage(1); }}
+              className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900">
+              Clear
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Infinite scroll sentinel */}
+      {!isClassic && hasMore && displayLeads.length > 0 && (
+        <div ref={lastLeadElementRef} style={{ height: '1px' }} />
+      )}
+
+      {/* Loading more indicator for infinite scroll */}
+      {!isClassic && loadingMore && (
+        <div style={{ textAlign: "center", padding: "24px 0", color: "#718096", fontSize: "0.9rem" }}>
+          Loading more leads...
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: "20px",
+        marginBottom: "12px",
+        padding: "12px 16px",
+        backgroundColor: "white",
+        borderRadius: "12px",
+        border: "1px solid #e2e8f0",
+      }}>
+        <span style={{ fontSize: "0.85rem", fontWeight: "500", color: "#64748b" }}>
+          {isClassic
+            ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, totalLeads)} of ${totalLeads} leads`
+            : `Displaying 1 to ${displayLeads.length} of ${totalLeads} leads`}
+        </span>
+        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+          <button
+            onClick={() => setPaginationMode('infinite')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: !isClassic ? '#3b82f6' : 'white',
+              color: !isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Infinite Scroll
+          </button>
+          <button
+            onClick={() => setPaginationMode('classic')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: isClassic ? '#3b82f6' : 'white',
+              color: isClassic ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Classic Pages
+          </button>
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+        <div className="flex bg-slate-100 rounded-lg p-0.5">
+          <button onClick={() => setViewMode('card')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'card' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            ⊞ Cards
+          </button>
+          <button onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            ☰ List
+          </button>
+        </div>
+      </div>
+
+      {isClassic && totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input
+              type="number"
+              value={currentPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                  setCurrentPage(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!isNaN(v) && v >= 1 && v <= totalPages) {
+                    setCurrentPage(v);
+                  }
+                }
+              }}
+              style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1}
+              max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
+            style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+          >≫</button>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -520,7 +734,7 @@ export default function LeadsPage() {
       {/* Card View */}
       {!loading && viewMode === 'card' && (
         <>
-          {leads.length === 0 ? (
+          {displayLeads.length === 0 ? (
             <div className="text-center py-16 text-slate-400">
               <p className="text-lg font-medium mb-1">No leads found</p>
               <p className="text-sm">Convert an outreach or property to create a lead.</p>
@@ -531,7 +745,7 @@ export default function LeadsPage() {
               gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
               gap: "24px",
             }}>
-              {leads.map(lead => {
+              {displayLeads.map(lead => {
                 const fixedImageUrl = lead.image_url ? getFixedImageUrl(lead.image_url) : null;
                 const formatCurrency = (amount: number | null | undefined) => {
                   if (amount === null || amount === undefined) return "N/A";
@@ -1083,55 +1297,84 @@ export default function LeadsPage() {
       {/* List View */}
       {!loading && viewMode === 'list' && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Address</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Owner</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Priority</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Source</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-600">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {leads.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No leads found</td></tr>
-              ) : (
-                leads.map(lead => (
-                  <tr key={lead.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => openDetail(lead)}>
-                    <td className="px-4 py-3 font-medium text-slate-900">{lead.property_address}</td>
-                    <td className="px-4 py-3 text-slate-600">{lead.owner_name || '-'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+          {displayLeads.length === 0 ? (
+            <div className="px-4 py-10 text-center text-slate-400">
+              <p className="text-base font-medium mb-1">No leads found</p>
+              <p className="text-sm">Convert an outreach or property to create a lead.</p>
+            </div>
+          ) : (
+            <>
+              {/* ── Desktop / Laptop / Tablet-landscape table (md+) ── */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600 min-w-[180px]">Address</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600 hidden lg:table-cell">Owner</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600 hidden xl:table-cell">Priority</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600 hidden lg:table-cell">Source</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600 hidden xl:table-cell">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {displayLeads.map(lead => (
+                      <tr key={lead.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => openDetail(lead)}>
+                        <td className="px-4 py-3 font-medium text-slate-900 max-w-[260px] truncate">{lead.property_address}</td>
+                        <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">{lead.owner_name || '-'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                            {STATUS_LABELS[lead.status] || lead.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 hidden xl:table-cell">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[lead.priority] || 'bg-slate-100 text-slate-600'}`}>
+                            {lead.priority}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs hidden lg:table-cell">{lead.source}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs hidden xl:table-cell">{new Date(lead.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ── Mobile card-list (< md) ── */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {displayLeads.map(lead => (
+                  <div
+                    key={lead.id}
+                    className="px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer transition-colors"
+                    onClick={() => openDetail(lead)}
+                  >
+                    {/* Row 1: address + status badge */}
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <p className="font-medium text-slate-900 text-sm leading-snug flex-1 min-w-0 break-words">
+                        {lead.property_address}
+                      </p>
+                      <span className={`shrink-0 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
                         {STATUS_LABELS[lead.status] || lead.status}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </div>
+                    {/* Row 2: meta pills */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {lead.owner_name && (
+                        <span className="text-xs text-slate-500 truncate max-w-[160px]">{lead.owner_name}</span>
+                      )}
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[lead.priority] || 'bg-slate-100 text-slate-600'}`}>
                         {lead.priority}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{lead.source}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{new Date(lead.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 text-sm text-slate-600">
-          <span>Showing {((page - 1) * pagination.limit) + 1}-{Math.min(page * pagination.limit, pagination.total)} of {pagination.total}</span>
-          <div className="flex items-center space-x-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 disabled:opacity-40 hover:bg-slate-50 text-xs font-medium">Previous</button>
-            <button disabled={page >= pagination.totalPages} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 disabled:opacity-40 hover:bg-slate-50 text-xs font-medium">Next</button>
-          </div>
+                      {lead.source && (
+                        <span className="text-xs text-slate-400">{lead.source}</span>
+                      )}
+                      <span className="text-xs text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

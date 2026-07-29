@@ -1450,7 +1450,7 @@ export default function PropertiesPage() {
     <div style={{
       maxWidth: "1400px",
       margin: "0 auto",
-      padding: "24px",
+      padding: "8px",
       "--input-border": "#e2e8f0",
       "--input-bg": "#ffffff",
       "--foreground": "#171717",

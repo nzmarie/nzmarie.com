@@ -46,7 +46,7 @@ const mockGoogleMaps = {
   },
 };
 
-// @ts-ignore - Mock global google object
+// @ts-expect-error - Mock global google object
 global.google = mockGoogleMaps as any;
 
 // Mock document.createElement for script injection
