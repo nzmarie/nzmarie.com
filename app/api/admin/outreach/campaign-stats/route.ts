@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     const suburb = campaignParts.length > 2 ? campaignParts.slice(2).join(' ') : campaign;
     const scanKey = suburb.toLowerCase();
 
-    const [dailyResult, pendingDailyResult, statusResult, scanResult] = await Promise.all([
+    const [dailyResult, pendingDailyResult, statusResult, scanResult, bizScanResult] = await Promise.all([
       marieDB.query(
         `SELECT DATE(sl.sent_at) AS send_date,
                 COUNT(*)::int AS total_sent
@@ -104,6 +104,15 @@ export async function GET(request: Request) {
          ORDER BY scan_date ASC`,
         [scanKey]
       ),
+      marieDB.query(
+        `SELECT DATE(created_at) AS scan_date,
+                COUNT(*)::int AS pv,
+                COUNT(*) FILTER (WHERE is_unique = TRUE)::int AS uv
+         FROM campaign_visit_logs
+         WHERE campaign_key = 'business_card'
+         GROUP BY DATE(created_at)
+         ORDER BY scan_date ASC`
+      ),
     ]);
 
     const daily_sends = dailyResult.rows.map((r) => ({
@@ -131,8 +140,16 @@ export async function GET(request: Request) {
       uv: Number(r.uv),
     }));
 
+    const biz_daily_scans = bizScanResult.rows.map((r) => ({
+      date: r.scan_date.toISOString().slice(0, 10) as string,
+      pv: Number(r.pv),
+      uv: Number(r.uv),
+    }));
+
     const total_scans_pv = daily_scans.reduce((sum, d) => sum + d.pv, 0);
     const total_scans_uv = daily_scans.reduce((sum, d) => sum + d.uv, 0);
+    const total_biz_pv = biz_daily_scans.reduce((sum, d) => sum + d.pv, 0);
+    const total_biz_uv = biz_daily_scans.reduce((sum, d) => sum + d.uv, 0);
 
     const allDates = new Set([...daily_sends.map(d => d.date), ...daily_no_junk.map(d => d.date)]);
     const merged_daily = [...allDates].sort().map(date => ({
@@ -154,6 +171,8 @@ export async function GET(request: Request) {
       },
       daily_sends: merged_daily,
       daily_scans,
+      business_card_summary: { pv: total_biz_pv, uv: total_biz_uv },
+      business_card_daily_scans: biz_daily_scans,
     };
 
     setCache(cacheKey, responseData, 60_000);

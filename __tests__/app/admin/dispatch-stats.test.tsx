@@ -15,8 +15,7 @@ vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
   BarChart: ({ children }: any) => <div>{children}</div>,
   Bar: () => <div>Bar</div>,
-  LineChart: ({ children }: any) => <div>{children}</div>,
-  Line: () => <div>Line</div>,
+  ComposedChart: ({ children }: any) => <div>{children}</div>,
   XAxis: () => <div>XAxis</div>,
   YAxis: () => <div>YAxis</div>,
   CartesianGrid: () => <div>CartesianGrid</div>,
@@ -46,6 +45,11 @@ const mockStats = {
   daily_scans: [
     { date: '2026-07-17', pv: 30, uv: 15 },
     { date: '2026-07-18', pv: 25, uv: 12 },
+  ],
+  business_card_summary: { pv: 18, uv: 7 },
+  business_card_daily_scans: [
+    { date: '2026-07-16', pv: 8, uv: 3 },
+    { date: '2026-07-17', pv: 10, uv: 4 },
   ],
 };
 
@@ -180,6 +184,51 @@ describe('DispatchStatsPanel', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No Junk Mail: 5')).toBeTruthy();
+    });
+  });
+
+  it('shows business card summary card and scan trend section', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ available_campaigns: mockCampaigns }),
+    });
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockStats,
+    });
+
+    render(<DispatchStatsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('18 / 7')).toBeTruthy();
+    });
+
+    expect(screen.getByText('Business Card 🪪')).toBeTruthy();
+    expect(screen.getByText('QR Code Scan Trend')).toBeTruthy();
+    expect(screen.getByText('Oteha: 55 / 27')).toBeTruthy();
+    expect(screen.getByText('Business Card: 18 / 7')).toBeTruthy();
+  });
+
+  it('shows awaiting message when no QR scans at all', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ available_campaigns: mockCampaigns }),
+    });
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...mockStats,
+        summary: { ...mockStats.summary, total_scans_pv: 0, total_scans_uv: 0 },
+        daily_scans: [],
+        business_card_summary: { pv: 0, uv: 0 },
+        business_card_daily_scans: [],
+      }),
+    });
+
+    render(<DispatchStatsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Awaiting first QR scan.')).toBeTruthy();
     });
   });
 });

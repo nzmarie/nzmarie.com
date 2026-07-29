@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell,
+  ComposedChart, PieChart, Pie, Cell,
 } from 'recharts';
 
 interface Summary {
@@ -33,6 +33,8 @@ interface CampaignStats {
   summary: Summary;
   daily_sends: DailySend[];
   daily_scans: DailyScan[];
+  business_card_summary: { pv: number; uv: number };
+  business_card_daily_scans: DailyScan[];
 }
 
 const SUMMARY_CARDS = [
@@ -40,6 +42,7 @@ const SUMMARY_CARDS = [
   { key: 'sent_count', label: 'Sent', icon: '✅', color: 'text-blue-600' },
   { key: 'no_junk_mail_count', label: 'No Junk Mail', icon: '🚫', color: 'text-orange-600' },
   { key: 'total_scans_pv', label: 'QR Scans (PV/UV)', icon: '👁', color: 'text-indigo-600' },
+  { key: 'biz_pv', label: 'Business Card 🪪', icon: '🪪', color: 'text-indigo-600' },
   { key: 'interacted_count', label: 'Interacted', icon: '💬', color: 'text-purple-600' },
   { key: 'converted_count', label: 'Converted', icon: '🎯', color: 'text-green-600' },
 ] as const;
@@ -49,21 +52,30 @@ function formatDateLabel(dateStr: string): string {
   return d.toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' });
 }
 
-function SummaryCards({ summary }: { summary: Summary }) {
+function SummaryCards({ summary, bizPv, bizUv }: { summary: Summary; bizPv: number; bizUv: number }) {
   const totalScans = `${summary.total_scans_pv} / ${summary.total_scans_uv}`;
+  const bizScans = `${bizPv} / ${bizUv}`;
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-      {SUMMARY_CARDS.map(({ key, label, icon, color }) => (
-        <div key={key} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">{icon}</span>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
+      {SUMMARY_CARDS.map(({ key, label, icon, color }) => {
+        let value: string | number;
+        if (key === 'total_scans_pv') {
+          value = totalScans;
+        } else if (key === 'biz_pv') {
+          value = bizScans;
+        } else {
+          value = summary[key as keyof Summary];
+        }
+        return (
+          <div key={key} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">{icon}</span>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+            </div>
+            <p className={`text-2xl font-bold ${color}`}>{value}</p>
           </div>
-          <p className={`text-2xl font-bold ${color}`}>
-            {key === 'total_scans_pv' ? totalScans : summary[key]}
-          </p>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -145,7 +157,21 @@ function DailySendChart({ data, noJunkTotal }: { data: DailySend[]; noJunkTotal:
               <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={formatDateLabel} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
               <Tooltip labelFormatter={(v) => formatDateLabel(String(v))} />
-              <Legend />
+          <Legend formatter={(value) => {
+            let color = '#1e293b';
+            let weight = 600;
+            if (value.includes('Total Scans')) {
+              color = '#064E3B';
+              weight = 700;
+            } else if (value.includes('Business Card Unique')) {
+              color = '#1e3a5f';
+              weight = 600;
+            } else if (value.includes('Oteha Unique')) {
+              color = '#14532D';
+              weight = 600;
+            }
+            return <span style={{ color, fontWeight: weight, fontSize: '0.875rem' }}>{value}</span>;
+          }} />
               <Bar dataKey="total_sent" name="Total Sent" fill="#2563EB" radius={[4, 4, 0, 0]} />
               {noJunkTotal > 0 && (
                 <Bar dataKey="no_junk_sent" name="No Junk Mail" fill="#DC2626" radius={[4, 4, 0, 0]} />
@@ -156,37 +182,109 @@ function DailySendChart({ data, noJunkTotal }: { data: DailySend[]; noJunkTotal:
   );
 }
 
-function ScanTrendChart({ data }: { data: DailyScan[] }) {
+interface CombinedScan {
+  date: string;
+  campaign_pv: number;
+  campaign_uv: number;
+  campaign_repeat: number;
+  biz_pv: number;
+  biz_uv: number;
+  biz_repeat: number;
+}
+
+function mergeScanData(campaign: DailyScan[], bizCard: DailyScan[]): CombinedScan[] {
+  const allDates = new Set([...campaign.map(d => d.date), ...bizCard.map(d => d.date)]);
+  return [...allDates].sort().map(date => {
+    const campaignPv = campaign.find(d => d.date === date)?.pv ?? 0;
+    const campaignUv = campaign.find(d => d.date === date)?.uv ?? 0;
+    const bizPv = bizCard.find(d => d.date === date)?.pv ?? 0;
+    const bizUv = bizCard.find(d => d.date === date)?.uv ?? 0;
+    return {
+      date,
+      campaign_pv: campaignPv,
+      campaign_uv: campaignUv,
+      campaign_repeat: Math.max(0, campaignPv - campaignUv),
+      biz_pv: bizPv,
+      biz_uv: bizUv,
+      biz_repeat: Math.max(0, bizPv - bizUv),
+    };
+  });
+}
+
+function CombinedScanChart({ campaignScans, bizCardScans }: { campaignScans: DailyScan[]; bizCardScans: DailyScan[] }) {
+  const data = mergeScanData(campaignScans, bizCardScans);
+
   if (data.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-slate-700 mb-2">QR Code Scan Trend</h3>
-        <p className="text-sm text-slate-400">Awaiting first QR scan for this campaign.</p>
+        <p className="text-sm text-slate-400">Awaiting first QR scan.</p>
       </div>
     );
   }
 
-  const totalPv = data.reduce((s, d) => s + d.pv, 0);
-  const totalUv = data.reduce((s, d) => s + d.uv, 0);
+  const totalCampaignPv = data.reduce((s, d) => s + d.campaign_pv, 0);
+  const totalCampaignUv = data.reduce((s, d) => s + d.campaign_uv, 0);
+  const totalBizPv = data.reduce((s, d) => s + d.biz_pv, 0);
+  const totalBizUv = data.reduce((s, d) => s + d.biz_uv, 0);
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-700">QR Code Scan Trend</h3>
-        <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-          PV: {totalPv} / UV: {totalUv}
-        </span>
+        <div className="flex gap-3 text-xs">
+          <span className="font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
+            Oteha: {totalCampaignPv} / {totalCampaignUv}
+          </span>
+          <span className="font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
+            Business Card: {totalBizPv} / {totalBizUv}
+          </span>
+        </div>
       </div>
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={data}>
+        <ComposedChart data={data} barSize={16}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={formatDateLabel} />
           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-          <Tooltip labelFormatter={(v) => formatDateLabel(String(v))} />
-          <Legend />
-          <Line type="monotone" dataKey="pv" name="Total Scans (PV)" stroke="#2563EB" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="uv" name="Unique Visitors (UV)" stroke="#16A34A" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-        </LineChart>
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload || payload.length === 0) return null;
+              const colorMap: Record<string, string> = {
+                'Business Card Total Scans': '#6366f1',
+                'Oteha Total Scans': '#16a34a',
+                'Business Card Unique Visitors': '#1d4ed8',
+                'Oteha Unique Visitors': '#14532d',
+              };
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', fontSize: 13 }}>
+                  <p style={{ fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{formatDateLabel(String(label))}</p>
+                  {payload.map((entry) => {
+                    const color = colorMap[entry.name as string] ?? '#1e293b';
+                    return (
+                      <p key={entry.name} style={{ color, fontWeight: 600, margin: '2px 0' }}>
+                        {entry.name} : {entry.value}
+                      </p>
+                    );
+                  })}
+                </div>
+              );
+            }}
+          />
+          <Legend formatter={(value) => {
+            const colorMap: Record<string, string> = {
+              'Business Card Total Scans': '#6366f1',
+              'Oteha Total Scans': '#16a34a',
+              'Business Card Unique Visitors': '#1d4ed8',
+              'Oteha Unique Visitors': '#14532d',
+            };
+            const color = colorMap[value] ?? '#1e293b';
+            return <span style={{ color, fontWeight: 600, fontSize: '0.8125rem' }}>{value}</span>;
+          }} />
+          <Bar dataKey="campaign_uv" name="Oteha Unique Visitors" stackId="a" fill="#16A34A" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="campaign_repeat" name="Oteha Total Scans" stackId="a" fill="rgba(22, 163, 74, 0.25)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="biz_uv" name="Business Card Unique Visitors" stackId="b" fill="#2563EB" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="biz_repeat" name="Business Card Total Scans" stackId="b" fill="rgba(99, 102, 241, 0.3)" radius={[4, 4, 0, 0]} />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
@@ -312,11 +410,11 @@ export default function DispatchStatsPanel() {
 
           {stats && (
             <>
-              <SummaryCards summary={stats.summary} />
+              <SummaryCards summary={stats.summary} bizPv={stats.business_card_summary.pv} bizUv={stats.business_card_summary.uv} />
               <CampaignOverview summary={stats.summary} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <DailySendChart data={stats.daily_sends} noJunkTotal={stats.summary.no_junk_mail_count} />
-                <ScanTrendChart data={stats.daily_scans} />
+                <CombinedScanChart campaignScans={stats.daily_scans} bizCardScans={stats.business_card_daily_scans} />
               </div>
             </>
           )}
