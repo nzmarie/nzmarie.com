@@ -166,7 +166,7 @@ describe('DispatchStatsPanel', () => {
     render(<DispatchStatsPanel />);
 
     await waitFor(() => {
-      expect(screen.getByText('Campaign Overview')).toBeTruthy();
+      expect(screen.getByText('Campaign Overview — 62 Addresses')).toBeTruthy();
     });
   });
 
