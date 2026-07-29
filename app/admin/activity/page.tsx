@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonBookings, SkeletonDownloads } from '@/components/admin/Skeleton';
+import DispatchStatsPanel from '@/components/admin/DispatchStatsPanel';
 import { REGIONS, getCitiesByRegion, getSuburbsByCity, type Region } from '@/lib/geo-data';
 
 type BookingStatus = 'new' | 'contacted' | 'scheduled' | 'appraised' | 'converted' | 'lost';
@@ -773,25 +774,35 @@ function DownloadsTab() {
 export default function ActivityPage() {
   const { status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'appraisals' | 'downloads'>('appraisals');
+  const [activeTab, setActiveTab] = useState<'dispatch' | 'appraisals' | 'downloads'>('dispatch');
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/admin/login');
   }, [status, router]);
 
   if (status === 'loading') {
-    return activeTab === 'appraisals' ? <SkeletonBookings /> : <SkeletonDownloads />;
+    return activeTab === 'dispatch' ? <div className="space-y-6"><div className="h-10 bg-slate-100 rounded-xl animate-pulse w-64" /><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4"><div className="h-4 bg-slate-100 rounded w-16 mb-2 animate-pulse" /><div className="h-7 bg-slate-100 rounded w-12 animate-pulse" /></div>)}</div></div> : activeTab === 'appraisals' ? <SkeletonBookings /> : <SkeletonDownloads />;
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Activity</h1>
-        <p className="text-gray-600 mt-1">Manage appraisals and monitor report downloads</p>
+        <p className="text-gray-600 mt-1">Campaign dispatch stats, appraisals, and report downloads</p>
       </div>
 
       <div className="border-b border-slate-200">
         <nav className="flex gap-8">
+          <button
+            onClick={() => setActiveTab('dispatch')}
+            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'dispatch'
+                ? 'text-indigo-600 border-indigo-600'
+                : 'text-slate-500 border-transparent hover:text-slate-700'
+            }`}
+          >
+            Dispatch Stats
+          </button>
           <button
             onClick={() => setActiveTab('appraisals')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
@@ -815,7 +826,7 @@ export default function ActivityPage() {
         </nav>
       </div>
 
-      {activeTab === 'appraisals' ? <AppraisalsTab /> : <DownloadsTab />}
+      {activeTab === 'dispatch' ? <DispatchStatsPanel /> : activeTab === 'appraisals' ? <AppraisalsTab /> : <DownloadsTab />}
     </div>
   );
 }

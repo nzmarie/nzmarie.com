@@ -175,7 +175,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
   let orderClause: string;
   if (sortMode === 'time') {
-    orderClause = 'ORDER BY latest_sent_at DESC NULLS LAST';
+    orderClause = `ORDER BY latest_sent_at ${orderDirection} NULLS LAST`;
   } else {
     orderClause = `
       ORDER BY
@@ -425,7 +425,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
 
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
   if (sortMode === 'time') {
-    query += ` ORDER BY ls.sent_at DESC NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
+    query += ` ORDER BY ls.sent_at ${orderDirection} NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limit, offset);
   } else {
     query += `

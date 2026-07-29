@@ -43,6 +43,10 @@ export async function PATCH(
     }
   }
 
+  if (body.no_junk_mail !== undefined) {
+    updates.push('no_junk_mail_updated_at = NOW()');
+  }
+
   if (updates.length === 0) {
     return NextResponse.json({ success: false, error: 'No valid fields to update' }, { status: 400 });
   }

@@ -32,6 +32,10 @@ vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonOutreach: () => <div>Loading Outreach</div>,
 }));
 
+vi.mock('@/components/admin/DispatchStatsPanel', () => ({
+  default: () => <div>DispatchStatsPanel Mock</div>,
+}));
+
 describe('Admin pages', () => {
   beforeEach(() => {
     mockPush.mockReset();
@@ -118,6 +122,8 @@ describe('Admin pages', () => {
   it('shows activity page with appraisals tab and booking details', async () => {
     render(<ActivityPage />);
 
+    fireEvent.click(screen.getByText('Appraisals'));
+
     await waitFor(() => {
       expect(screen.getByText('John Smith')).toBeTruthy();
     });
@@ -129,6 +135,8 @@ describe('Admin pages', () => {
   it('shows the appraisal summary and location filters', async () => {
     render(<ActivityPage />);
 
+    fireEvent.click(screen.getByText('Appraisals'));
+
     expect(await screen.findByText('Activity')).toBeTruthy();
     expect(screen.getByPlaceholderText(/search/i)).toBeTruthy();
     expect(screen.getByLabelText('Region')).toBeTruthy();
@@ -138,6 +146,8 @@ describe('Admin pages', () => {
 
   it('updates city and suburb options based on the selected region and city', async () => {
     render(<ActivityPage />);
+
+    fireEvent.click(screen.getByText('Appraisals'));
 
     await waitFor(() => {
       expect(screen.getByText('Activity')).toBeTruthy();
