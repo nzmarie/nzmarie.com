@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const createQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 import DashboardPage from '../../../app/admin/dashboard/page';
 import AnalyticsPage from '../../../app/admin/analytics/page';
 import PDFManagerPage from '../../../app/admin/assets/page';
@@ -142,53 +145,93 @@ describe('Extra admin pages', () => {
   });
 
   it('renders a dashboard overview with summary cards', async () => {
-    render(<DashboardPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DashboardPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Dashboard')).toBeTruthy();
     expect(screen.getByText('New Leads')).toBeTruthy();
     expect(screen.getByText('High Priority')).toBeTruthy();
   });
 
   it('renders analytics content for super admins', async () => {
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Analytics')).toBeTruthy();
     expect(screen.getByText('Conversion Rate')).toBeTruthy();
   });
 
   it('renders Monthly Data section with suburb buttons', async () => {
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Analysis Data')).toBeTruthy();
     expect(screen.getAllByText('Oteha').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Albany').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows new rich table column headers', async () => {
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Analysis Data')).toBeTruthy();
     expect(screen.getByText('Median Price')).toBeTruthy();
     expect(screen.getByText('List vs Sold')).toBeTruthy();
   });
 
   it('renders North Shore City button in monthly data section', async () => {
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText(/North Shore/)).toBeTruthy();
   });
 
   it('renders activity page with appraisals and downloads tabs', async () => {
-    render(<ActivityPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ActivityPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Activity')).toBeTruthy();
     expect(screen.getByText('Appraisals')).toBeTruthy();
     expect(screen.getByText('Downloads')).toBeTruthy();
   });
 
   it('renders assets page with QR Codes tab by default and tab switching', async () => {
-    render(<PDFManagerPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <PDFManagerPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
     expect(screen.getByText('QR Codes')).toBeTruthy();
     expect(screen.getByText('PDF Reports')).toBeTruthy();
   });
 
   it('renders Last Sold Data For Sale table with suburb rows', async () => {
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Last Sold Data For Sale')).toBeTruthy();
     const albanyElements = screen.getAllByText('Albany');
     expect(albanyElements.length).toBeGreaterThanOrEqual(2);
@@ -198,14 +241,24 @@ describe('Extra admin pages', () => {
   });
 
   it('applies dual-color highlighting (blue for recent, green for lifecycle)', async () => {
-    render(<AnalyticsPage />);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Last Sold Data For Sale')).toBeTruthy();
     expect(screen.getByText('(33%)')).toBeTruthy();
     expect(screen.getByText('(38%)')).toBeTruthy();
   });
 
   it('shows Active column with total counts', async () => {
-    render(<AnalyticsPage />);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
     expect(await screen.findByText('Active')).toBeTruthy();
     const twelves = screen.getAllByText('12');
     expect(twelves.length).toBeGreaterThanOrEqual(1);

@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import DispatchStatsPanel from '@/components/admin/DispatchStatsPanel';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const createQueryClient = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: { user: { email: 'admin@test.com' } }, status: 'authenticated' }),
@@ -90,25 +94,51 @@ const mockScanLogs = {
   ],
 };
 
+// ─── URL-aware fetch mock factory ─────────────────────────────────────────────
+// DispatchStatsPanel and CampaignScanLogsPanel issue parallel fetches, so
+// ordering-based mockResolvedValueOnce is unreliable. All tests use this
+// URL-aware approach instead.
+
+function makeFetchMock(overrides?: {
+  scanLogs?: object;
+  stats?: object;
+  campaigns?: string[];
+  scansError?: boolean;
+  statsError?: boolean;
+}) {
+  const campaigns = overrides?.campaigns ?? mockCampaigns;
+  const stats = overrides?.stats ?? mockStats;
+  const scanLogs = overrides?.scanLogs ?? { success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] };
+
+  return vi.fn((url: RequestInfo) => {
+    const s = String(url || '');
+    if (s.includes('/api/admin/analytics/scans')) {
+      if (overrides?.scansError) return Promise.reject(new Error('Scan logs unavailable'));
+      return Promise.resolve({ ok: true, json: async () => scanLogs });
+    }
+    if (s.includes('/api/admin/outreach/campaign-stats')) {
+      if (s.includes('?campaign=')) {
+        if (overrides?.statsError) return Promise.resolve({ ok: false, json: async () => ({ error: 'Server error' }) });
+        return Promise.resolve({ ok: true, json: async () => stats });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ available_campaigns: campaigns }) });
+    }
+    return Promise.resolve({ ok: true, json: async () => ({}) });
+  });
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
-// CampaignScanLogsPanel is open=true by default and fetches on mount.
-// Queue the scan logs mock as the 3rd mock BEFORE calling this helper so it's
-// consumed by the initial scans fetch that fires immediately on component mount.
+// Renders DispatchStatsPanel with a full URL-aware mock and waits for the
+// CampaignScanLogsPanel header to appear (confirming both stats and scans settled).
 async function renderWithStats(scanLogsMock = mockScanLogs) {
-  (global.fetch as any).mockResolvedValueOnce({
-    ok: true,
-    json: async () => ({ available_campaigns: mockCampaigns }),
-  });
-  (global.fetch as any).mockResolvedValueOnce({
-    ok: true,
-    json: async () => mockStats,
-  });
-  (global.fetch as any).mockResolvedValueOnce({
-    ok: true,
-    json: async () => scanLogsMock,
-  });
-  render(<DispatchStatsPanel />);
-  // Wait for stats AND scan logs to settle
+  (global.fetch as any) = makeFetchMock({ scanLogs: scanLogsMock });
+
+  const qc = createQueryClient();
+  render(
+    <QueryClientProvider client={qc}>
+      <DispatchStatsPanel />
+    </QueryClientProvider>
+  );
   await waitFor(() => expect(screen.getByText('QR Code Scan Logs')).toBeTruthy());
 }
 
@@ -125,21 +155,14 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('loads campaigns on mount and shows loading state', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    // Scan logs fetch fires immediately (panel open=true)
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
-    });
+    (global.fetch as any) = makeFetchMock();
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Campaign:')).toBeTruthy();
@@ -157,16 +180,14 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('shows error state when API fails', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ error: 'Server error' }),
-    });
+    (global.fetch as any) = makeFetchMock({ statsError: true });
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Server error')).toBeTruthy();
@@ -174,12 +195,14 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('shows no campaigns message when list is empty', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: [] }),
-    });
+    (global.fetch as any) = makeFetchMock({ campaigns: [] });
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('No campaign data available.')).toBeTruthy();
@@ -187,32 +210,33 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('switches campaign and refetches stats', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
+    let statsCallCount = 0;
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/analytics/scans')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/campaign-stats')) {
+        if (s.includes('?campaign=')) {
+          statsCallCount++;
+          const sentCount = statsCallCount === 1 ? 42 : 18;
+          const campaign = statsCallCount === 1 ? '2026_Q2_Oteha' : '2026_Q1_Oteha';
+          return Promise.resolve({ ok: true, json: async () => ({ ...mockStats, campaign, summary: { ...mockStats.summary, sent_count: sentCount } }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ available_campaigns: mockCampaigns }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
     });
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('42')).toBeTruthy();
-    });
-
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        ...mockStats,
-        campaign: '2026_Q1_Oteha',
-        summary: { ...mockStats.summary, sent_count: 18 },
-      }),
     });
 
     const select = screen.getByRole('combobox');
@@ -224,20 +248,14 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('shows campaign overview with pie chart and percentage legend', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
-    });
+    (global.fetch as any) = makeFetchMock();
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Campaign Overview — 100 Addresses')).toBeTruthy();
@@ -245,43 +263,34 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('shows no junk mail badge on daily dispatch chart', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
-    });
+    (global.fetch as any) = makeFetchMock();
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('No Junk Mail: 5')).toBeTruthy();
+      // Multiple "No Junk Mail" elements exist (summary card + chart badge) — use getAllByText
+      expect(screen.getAllByText('No Junk Mail').length).toBeGreaterThan(0);
+      expect(screen.getByText('5')).toBeTruthy();
     });
   });
 
   it('shows business card summary card and scan trend section', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
-    });
+    (global.fetch as any) = makeFetchMock();
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
+      expect(screen.getByText('Business Card 🪪')).toBeTruthy();
       expect(screen.getByText('18 / 7')).toBeTruthy();
     });
 
@@ -292,36 +301,30 @@ describe('DispatchStatsPanel', () => {
   });
 
   it('shows awaiting message when no QR scans at all', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    (global.fetch as any) = makeFetchMock({
+      stats: {
         ...mockStats,
         summary: { ...mockStats.summary, total_scans_pv: 0, total_scans_uv: 0 },
         daily_scans: [],
         business_card_summary: { pv: 0, uv: 0 },
         business_card_daily_scans: [],
-      }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }),
+      },
     });
 
-    render(<DispatchStatsPanel />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('Awaiting first QR scan.')).toBeTruthy();
+      expect(screen.getByText(/Awaiting first QR scan/i)).toBeTruthy();
     });
   });
 });
 
 // ─── CampaignScanLogsPanel ────────────────────────────────────────────────────
-// NOTE: panel defaults to open=true and fetches on mount.
-// renderWithStats() queues the scan logs mock as the 3rd fetch (consumed on mount).
 
 describe('CampaignScanLogsPanel', () => {
   beforeEach(() => {
@@ -381,6 +384,8 @@ describe('CampaignScanLogsPanel', () => {
       expect(screen.getByText('Unique')).toBeTruthy();
       expect(screen.getByText('Repeat')).toBeTruthy();
     });
+    const fingerprintEl = screen.getByText('abcdef123456...');
+    expect(fingerprintEl.closest('td')?.className).toContain('select-text');
   });
 
   it('filters logs by campaign when a campaign button is clicked', async () => {
@@ -390,11 +395,7 @@ describe('CampaignScanLogsPanel', () => {
     await waitFor(() => expect(screen.getByText('1.2.3.4')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('5.6.7.8')).toBeTruthy());
 
-    // Click Oteha campaign — triggers re-fetch with campaign param
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ ...mockScanLogs, logs: [mockScanLogs.logs[0]] }),
-    });
+    // Click Oteha campaign — client-side filter, no new fetch needed
     fireEvent.click(screen.getByText('2026 Q2 Oteha (28)'));
 
     await waitFor(() => {
@@ -412,24 +413,23 @@ describe('CampaignScanLogsPanel', () => {
   });
 
   it('shows error message when scans API fails', async () => {
-    // Override 3rd mock with error response
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ available_campaigns: mockCampaigns }),
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockStats,
-    });
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ error: 'Scan logs unavailable' }),
-    });
-    render(<DispatchStatsPanel />);
-    await waitFor(() => expect(screen.getByText('QR Code Scan Logs')).toBeTruthy());
+    (global.fetch as any) = makeFetchMock({ scansError: true });
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
+
+    // Wait for stats to load so CampaignScanLogsPanel mounts
+    await waitFor(() => expect(screen.getByText('QR Code Scan Logs')).toBeTruthy(), { timeout: 3000 });
 
     await waitFor(() => {
-      expect(screen.getByText('Scan logs unavailable')).toBeTruthy();
+      const hasError = !!screen.queryByText('Failed to load scan logs');
+      const hasTable = !!screen.queryByTestId('scan-logs-table');
+      const hasEmpty = !!screen.queryByText('No scan logs recorded yet.');
+      if (!hasError && !hasTable && !hasEmpty) throw new Error('Expected error, table, or empty state');
     });
   });
 

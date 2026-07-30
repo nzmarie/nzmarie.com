@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const createQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -101,7 +104,12 @@ afterEach(() => {
 describe('Analytics Page — suburb sync between sections', () => {
   it('renders both sections and suburb buttons', async () => {
     const AnalyticsPage = (await import('../../../app/admin/analytics/page')).default;
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('REINZ Market Trends')).toBeDefined();
@@ -111,7 +119,12 @@ describe('Analytics Page — suburb sync between sections', () => {
 
   it('click suburb in Analysis Data replaces REINZ selection (not append)', async () => {
     const AnalyticsPage = (await import('../../../app/admin/analytics/page')).default;
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId('monthly-data-table')).toBeDefined();
@@ -143,7 +156,12 @@ describe('Analytics Page — suburb sync between sections', () => {
 
   it('click North Shore in Analysis Data deselects all REINZ suburbs', async () => {
     const AnalyticsPage = (await import('../../../app/admin/analytics/page')).default;
-    render(<AnalyticsPage />);
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId('monthly-data-table')).toBeDefined();

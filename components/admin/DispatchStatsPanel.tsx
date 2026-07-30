@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ComposedChart, PieChart, Pie, Cell,
@@ -206,47 +207,63 @@ interface ScanLogCampaign {
 }
 
 function CampaignScanLogsPanel() {
-  // allLogs holds the full dataset fetched once; filtering is purely client-side
-  const [allLogs, setAllLogs] = useState<ScanLog[]>([]);
-  const [campaigns, setCampaigns] = useState<ScanLogCampaign[]>([]);
-  const [totalScans, setTotalScans] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState('');
   const [open, setOpen] = useState(true);
 
-  // Fetch all data once on mount — no per-filter requests
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/analytics/scans');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+  const limit = 20;
 
-      setAllLogs(data.logs || []);
-      setCampaigns(data.campaigns || []);
-      setTotalScans(data.total_scans || 0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load scan logs');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['scanLogs'],
+    queryFn: async ({ pageParam = 1 }) => {
+      const params = new URLSearchParams({ page: String(pageParam), limit: String(limit) });
+      const res = await fetch(`/api/admin/analytics/scans?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load scan logs');
+      return json;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const page = lastPage.page ?? 1;
+      const limitVal = lastPage.limit ?? limit;
+      const total = lastPage.total_logs ?? 0;
+      const fetchedSoFar = page * limitVal;
+      return fetchedSoFar < total ? page + 1 : undefined;
+    },
+  });
 
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  const campaigns: ScanLogCampaign[] = data?.pages?.[0]?.campaigns || [];
+  const totalScans = data?.pages?.[0]?.total_scans ?? 0;
+  const allLogs = data ? data.pages.flatMap((p) => p.logs || []) : [];
 
-  // Client-side filtering — no loading state, no jump
-  const filteredLogs = allLogs.filter((l) => {
+  const filteredLogs = allLogs.filter((l: ScanLog) => {
     const matchCampaign = selectedCampaign === 'all' || l.campaign_key === selectedCampaign;
-    const matchDate =
-      !dateFilter ||
-      new Date(l.created_at).toISOString().split('T')[0] === dateFilter;
+    const matchDate = !dateFilter || new Date(l.created_at).toISOString().split('T')[0] === dateFilter;
     return matchCampaign && matchDate;
   });
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!hasNextPage || !sentinelRef.current) return;
+    const el = sentinelRef.current;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      });
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm transition-all duration-200">
@@ -315,20 +332,18 @@ function CampaignScanLogsPanel() {
           </div>
 
           <div className="p-6 min-h-[300px]">
-            {loading && allLogs.length === 0 ? (
+            {isLoading && allLogs.length === 0 ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="h-8 bg-slate-100 rounded animate-pulse" />
                 ))}
               </div>
-            ) : error && allLogs.length === 0 ? (
+            ) : isError && allLogs.length === 0 ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-                {error}
+                Failed to load scan logs
               </div>
             ) : filteredLogs.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 text-sm">
-                No scan logs recorded yet.
-              </div>
+              <div className="text-center py-10 text-slate-400 text-sm">No scan logs recorded yet.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse" data-testid="scan-logs-table">
@@ -343,18 +358,18 @@ function CampaignScanLogsPanel() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {filteredLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50/50">
-                        <td className="py-3 px-4 font-mono text-xs text-slate-600">
+                      <tr key={log.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-mono text-xs text-slate-600 select-text">
                           {new Date(log.created_at).toLocaleString('en-NZ')}
                         </td>
                         <td className="py-3 px-4">
                           <span className="font-semibold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
                             {log.campaign_key
                               .replace(/_/g, ' ')
-                              .replace(/\b\w/g, (c) => c.toUpperCase())}
+                              .replace(/\b\w/g, (c: string) => c.toUpperCase())}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-mono text-xs text-slate-500">
+                        <td className="py-3 px-4 font-mono text-xs text-slate-500 select-text">
                           {log.visitor_hash
                             ? `${log.visitor_hash.substring(0, 12)}...`
                             : 'N/A'}
@@ -362,7 +377,7 @@ function CampaignScanLogsPanel() {
                         <td className="py-3 px-4 text-xs text-slate-600">
                           <div>{log.ip_address || 'Unknown IP'}</div>
                           <div
-                            className="text-slate-400 truncate max-w-[200px]"
+                            className="text-slate-400 truncate max-w-[200px] select-text"
                             title={log.user_agent}
                           >
                             {log.device_type ? `${log.device_type} · ` : ''}
@@ -384,6 +399,14 @@ function CampaignScanLogsPanel() {
                     ))}
                   </tbody>
                 </table>
+                {hasNextPage && <div ref={sentinelRef} />}
+                {isFetchingNextPage && (
+                  <div className="pt-4 space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-8 bg-slate-100 rounded animate-pulse" />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

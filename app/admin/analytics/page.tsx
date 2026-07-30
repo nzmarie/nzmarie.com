@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonAnalytics } from '@/components/admin/Skeleton';
@@ -103,6 +104,47 @@ export default function AnalyticsPage() {
       // ignore
     }
   }, []);
+
+  const limit = 20;
+  const scanLogsQuery = useInfiniteQuery({
+    queryKey: ['scanLogs', selectedScanCampaign, scanLogDateFilter],
+    queryFn: async ({ pageParam = 1 }) => {
+      const params = new URLSearchParams({ page: String(pageParam), limit: String(limit) });
+      if (selectedScanCampaign && selectedScanCampaign !== 'all') params.set('campaign', selectedScanCampaign);
+      if (scanLogDateFilter) params.set('date', scanLogDateFilter);
+      const res = await fetch(`/api/admin/analytics/scans?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load scan logs');
+      return json;
+    },
+    initialPageParam: 1,
+    enabled: showScanLogsModal,
+    getNextPageParam: (lastPage) => {
+      const page = lastPage.page ?? 1;
+      const limitVal = lastPage.limit ?? limit;
+      const total = lastPage.total_logs ?? 0;
+      const fetchedSoFar = page * limitVal;
+      return fetchedSoFar < total ? page + 1 : undefined;
+    },
+  });
+
+  const scanLogs = scanLogsQuery.data ? scanLogsQuery.data.pages.flatMap((p: any) => p.logs || []) : [];
+  const scanTotalLogs = scanLogsQuery.data?.pages?.[0]?.total_logs ?? scanData.total_scans ?? 0;
+
+  const scanSentinelRef = React.useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!scanLogsQuery.hasNextPage || !scanSentinelRef.current) return;
+    const el = scanSentinelRef.current;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && scanLogsQuery.hasNextPage && !scanLogsQuery.isFetchingNextPage) {
+          scanLogsQuery.fetchNextPage();
+        }
+      });
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [scanLogsQuery.hasNextPage, scanLogsQuery.isFetchingNextPage]);
 
   const chartReqIdRef = React.useRef(0);
 
@@ -717,16 +759,16 @@ export default function AnalyticsPage() {
               </button>
             </div>
 
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-2">
+              <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setSelectedScanCampaign('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   selectedScanCampaign === 'all'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
                 }`}
               >
-                All Campaigns ({scanData.logs.length})
+                All Campaigns ({scanTotalLogs})
               </button>
               {scanData.campaigns.map((c) => (
                 <button
@@ -755,14 +797,8 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {scanData.logs.filter(l => {
-                const matchCampaign = selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign;
-                const matchDate = !scanLogDateFilter || new Date(l.created_at).toISOString().split('T')[0] === scanLogDateFilter;
-                return matchCampaign && matchDate;
-              }).length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  No scan logs recorded yet.
-                </div>
+              {scanLogs.length === 0 && !scanLogsQuery.isFetching ? (
+                <div className="text-center py-12 text-gray-500">No scan logs recorded yet.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
@@ -776,46 +812,40 @@ export default function AnalyticsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {scanData.logs
-                        .filter(l => {
-                          const matchCampaign = selectedScanCampaign === 'all' || l.campaign_key === selectedScanCampaign;
-                          const matchDate = !scanLogDateFilter || new Date(l.created_at).toISOString().split('T')[0] === scanLogDateFilter;
-                          return matchCampaign && matchDate;
-                        })
-                        .map((log) => (
-                          <tr key={log.id} className="hover:bg-gray-50/50">
-                            <td className="py-3 px-4 font-mono text-xs text-gray-600">
-                              {new Date(log.created_at).toLocaleString('en-NZ')}
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="font-semibold text-gray-900 text-xs bg-gray-100 px-2 py-0.5 rounded">
-                                {log.campaign_key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 font-mono text-xs text-gray-500">
-                              {log.visitor_hash ? `${log.visitor_hash.substring(0, 12)}...` : 'N/A'}
-                            </td>
-                            <td className="py-3 px-4 text-xs text-gray-600">
-                              <div>{log.ip_address || 'Unknown IP'}</div>
-                              <div className="text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
-                                {log.device_type ? `${log.device_type} · ` : ''}{log.user_agent || 'Unknown UA'}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              {log.is_unique ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                  Unique
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                  Repeat
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                      {scanLogs.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-gray-50/50">
+                          <td className="py-3 px-4 font-mono text-xs text-gray-600 select-text">{new Date(log.created_at).toLocaleString('en-NZ')}</td>
+                          <td className="py-3 px-4">
+                            <span className="font-semibold text-gray-900 text-xs bg-gray-100 px-2 py-0.5 rounded">
+                              {log.campaign_key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-mono text-xs text-gray-500 select-text">{log.visitor_hash ? `${log.visitor_hash.substring(0, 12)}...` : 'N/A'}</td>
+                          <td className="py-3 px-4 text-xs text-gray-600">
+                            <div>{log.ip_address || 'Unknown IP'}</div>
+                            <div className="text-gray-400 truncate max-w-[200px] select-text" title={log.user_agent}>{log.device_type ? `${log.device_type} · ` : ''}{log.user_agent || 'Unknown UA'}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {log.is_unique ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Unique</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Repeat</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {scanLogsQuery.hasNextPage && (
+                <div ref={scanSentinelRef} />
+              )}
+              {scanLogsQuery.isFetchingNextPage && (
+                <div className="pt-4 space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+                  ))}
                 </div>
               )}
             </div>
