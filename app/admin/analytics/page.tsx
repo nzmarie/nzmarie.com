@@ -33,6 +33,22 @@ const FALLBACK_SUBURBS = ['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay
 
 type DataMode = 'monthly' | 'quarterly';
 
+type ScanLogEntry = {
+  id: string;
+  campaign_key: string;
+  visitor_hash: string;
+  ip_address: string;
+  user_agent: string;
+  device_type: string;
+  referrer: string;
+  is_unique: boolean;
+  created_at: string;
+};
+
+type ScanLogsPage = {
+  logs?: ScanLogEntry[];
+};
+
 const SUBURB_COLORS = [
   '#2563EB', '#DC2626', '#16A34A', '#D97706', '#8B5CF6',
   '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16',
@@ -128,7 +144,7 @@ export default function AnalyticsPage() {
     },
   });
 
-  const scanLogs = scanLogsQuery.data ? scanLogsQuery.data.pages.flatMap((p: any) => p.logs || []) : [];
+  const scanLogs = scanLogsQuery.data ? scanLogsQuery.data.pages.flatMap((p: ScanLogsPage) => p.logs || []) : [];
   const scanTotalLogs = scanLogsQuery.data?.pages?.[0]?.total_logs ?? scanData.total_scans ?? 0;
 
   const scanSentinelRef = React.useRef<HTMLDivElement | null>(null);
@@ -144,7 +160,8 @@ export default function AnalyticsPage() {
     }, { rootMargin: '200px' });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [scanLogsQuery.hasNextPage, scanLogsQuery.isFetchingNextPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanLogsQuery.hasNextPage, scanLogsQuery.isFetchingNextPage, scanLogsQuery.fetchNextPage]);
 
   const chartReqIdRef = React.useRef(0);
 
@@ -812,7 +829,7 @@ export default function AnalyticsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {scanLogs.map((log: any) => (
+                      {scanLogs.map((log: ScanLogEntry) => (
                         <tr key={log.id} className="hover:bg-gray-50/50">
                           <td className="py-3 px-4 font-mono text-xs text-gray-600 select-text">{new Date(log.created_at).toLocaleString('en-NZ')}</td>
                           <td className="py-3 px-4">

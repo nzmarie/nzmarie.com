@@ -42,7 +42,9 @@ export async function GET(request: Request) {
       cutoff.setDate(cutoff.getDate() - days);
     }
 
-    const timeExpr = isSubDay ? "DATE_TRUNC('hour', created_at)" : 'DATE(created_at)';
+    const timeExpr = isSubDay
+      ? "TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD\"T\"HH24:00:00')"
+      : "TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')";
     const timeAlias = 'time_slot';
 
     const result = await marieDB.query(`
@@ -64,11 +66,7 @@ export async function GET(request: Request) {
 
     for (const row of rows) {
       const raw = row.time_slot;
-      const label = raw instanceof Date
-        ? isSubDay
-          ? raw.toISOString()
-          : raw.toISOString().split('T')[0]
-        : String(raw).split('.')[0];
+      const label = String(raw);
       const ck = row.campaign_key;
       if (!timeMap[label]) timeMap[label] = {};
       timeMap[label][ck] = { pv: parseInt(row.total_pv || '0', 10), uv: parseInt(row.total_uv || '0', 10) };
