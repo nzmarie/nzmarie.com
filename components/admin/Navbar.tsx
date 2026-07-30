@@ -37,7 +37,7 @@ export function AdminNavbar() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
-  
+
   const superAdmin = session?.user?.email ? isSuperAdmin(session.user.email) : false;
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User';
   const userInitial = userName.charAt(0).toUpperCase();
@@ -55,7 +55,7 @@ export function AdminNavbar() {
 
   function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
     const isActive = pathname === href;
-    
+
     return (
       <Link
         href={href}
@@ -63,7 +63,7 @@ export function AdminNavbar() {
           isActive
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-700 hover:text-gray-900'
-        } px-3 py-2 text-sm font-medium transition-colors`}
+        } px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap`}
       >
         {children}
       </Link>
@@ -71,12 +71,13 @@ export function AdminNavbar() {
   }
 
   return (
+    <>
     <nav className={`bg-white shadow-sm fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-in-out ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between items-center py-3">
           {/* Left: Logo */}
           <div className="flex items-center">
-            <Link 
+            <Link
               href="/admin"
               className="text-lg font-semibold text-gray-900 hover:text-gray-700"
             >
@@ -85,10 +86,10 @@ export function AdminNavbar() {
           </div>
 
           {/* Center: Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8 ml-12">
+          <div className="hidden lg:flex items-center space-x-1 ml-10">
             {navLinks.map(link => {
               if (!link.alwaysShow && !superAdmin) return null;
-              
+
               return (
                 <NavLink key={link.href} href={link.href}>
                   {link.label}
@@ -99,9 +100,9 @@ export function AdminNavbar() {
 
           {/* Right: User Menu */}
           <div className="flex items-center space-x-4">
-            {/* Mobile Menu Button */}
+            {/* Mobile/Tablet Menu Button */}
             <button
-              className="md:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,8 +168,9 @@ export function AdminNavbar() {
           </div>
         </div>
       </div>
+    </nav>
 
-      {/* Mobile Menu Sidebar */}
+      {/* Mobile Menu Sidebar — rendered outside <nav> to avoid stacking context clipping */}
       <Transition
         show={mobileMenuOpen}
         as={Fragment}
@@ -179,13 +181,13 @@ export function AdminNavbar() {
         leaveFrom="opacity-100"
         leaveTo="opacity-0"
       >
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-[60] lg:hidden">
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-gray-600 bg-opacity-75"
             onClick={() => setMobileMenuOpen(false)}
           />
-          
+
           {/* Sidebar */}
           <div className="fixed inset-y-0 right-0 max-w-xs w-full bg-white shadow-xl">
             <div className="flex flex-col h-full">
@@ -205,10 +207,10 @@ export function AdminNavbar() {
               {/* Navigation Links */}
               <div className="flex-1 overflow-y-auto py-4">
                 {navLinks.map(link => {
-              if (!link.alwaysShow && !superAdmin) return null;
-                  
+                  if (!link.alwaysShow && !superAdmin) return null;
+
                   const isActive = pathname === link.href;
-                  
+
                   return (
                     <Link
                       key={link.href}
@@ -229,6 +231,6 @@ export function AdminNavbar() {
           </div>
         </div>
       </Transition>
-    </nav>
+    </>
   );
 }
