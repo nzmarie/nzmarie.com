@@ -11,6 +11,7 @@ import MonthlyDataTable from '@/components/admin/MonthlyDataTable';
 import ScanTrendsChart from '@/components/admin/ScanTrendsChart';
 import { isSuperAdmin } from '@/lib/permissions';
 import type { MonthlyDataPoint } from '@/lib/market-data-aggregator';
+import { sortSuburbs } from '@/lib/suburb-order';
 const CARD_BADGE_STYLES = {
   blue: 'bg-blue-100 text-blue-700',
   green: 'bg-green-100 text-green-700',
@@ -29,7 +30,7 @@ type RegionRow = {
   count: number;
 };
 
-const FALLBACK_SUBURBS = ['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay'];
+const FALLBACK_SUBURBS = sortSuburbs(['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay']);
 
 type DataMode = 'monthly' | 'quarterly';
 
@@ -170,12 +171,12 @@ export default function AnalyticsPage() {
       const res = await fetch('/api/admin/analytics/available-suburbs');
       const data = await res.json();
       if (data.availableSuburbs && Array.isArray(data.availableSuburbs) && data.availableSuburbs.length > 0) {
-        setAvailableSuburbs(data.availableSuburbs);
+        const sorted = sortSuburbs(data.availableSuburbs);
+        setAvailableSuburbs(sorted);
         setSelectedSuburbs(prev => {
-          // preserve empty (North Shore City district view)
           if (prev.length === 0) return prev;
-          const filtered = prev.filter(s => data.availableSuburbs.includes(s));
-          return filtered.length > 0 ? filtered : [data.availableSuburbs[0]];
+          const filtered = prev.filter(s => sorted.includes(s));
+          return filtered.length > 0 ? filtered : [sorted[0]];
         });
       }
     } catch {

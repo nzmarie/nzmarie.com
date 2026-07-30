@@ -1,0 +1,38 @@
+export const SUBURB_PRIORITY_ORDER = [
+  'Northcross',
+  'Oteha',
+  'Torbay',
+  'Fairview Heights',
+  'Waiake',
+  'Browns Bay',
+  'Pinehill',
+  'Rothesay Bay',
+  'Murrays Bay',
+  'Albany',
+  'Long Bay',
+  'Forrest Hill',
+  'Schnapper Rock',
+  'Unsworth Heights',
+  'Sunnynook',
+  'Greenhithe',
+  'Chatswood',
+  'Mairangi Bay',
+  'Campbells Bay',
+  'Castor Bay',
+  'Milford',
+  'Glenfield',
+  'Hillcrest',
+  'Birkenhead',
+  'Hauraki',
+] as const;
+
+export function sortSuburbs(suburbs: string[]): string[] {
+  return [...suburbs].sort((a, b) => {
+    const ai = SUBURB_PRIORITY_ORDER.indexOf(a as (typeof SUBURB_PRIORITY_ORDER)[number]);
+    const bi = SUBURB_PRIORITY_ORDER.indexOf(b as (typeof SUBURB_PRIORITY_ORDER)[number]);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
