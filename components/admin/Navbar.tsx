@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { useState, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { isSuperAdmin } from '@/lib/permissions';
 
@@ -11,6 +11,32 @@ export function AdminNavbar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const lastScrollY = useRef(0);
+  const ticking = useRef(false);
+  const [hidden, setHidden] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    if (!ticking.current) {
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const delta = y - lastScrollY.current;
+        lastScrollY.current = y;
+        if (delta > 10 && y > 60) {
+          setHidden(true);
+        } else if (delta < -10) {
+          setHidden(false);
+        }
+        ticking.current = false;
+      });
+      ticking.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
   
   const superAdmin = session?.user?.email ? isSuperAdmin(session.user.email) : false;
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'User';
@@ -45,7 +71,7 @@ export function AdminNavbar() {
   }
 
   return (
-    <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
+    <nav className={`bg-white shadow-sm fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-in-out ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Left: Logo */}
@@ -59,7 +85,7 @@ export function AdminNavbar() {
           </div>
 
           {/* Center: Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-8 ml-12">
             {navLinks.map(link => {
               if (!link.alwaysShow && !superAdmin) return null;
               
