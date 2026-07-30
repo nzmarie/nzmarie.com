@@ -30,13 +30,27 @@ function rawContainsDaysToSell(block: any): boolean {
 export function extractDaysToSellDescription(blocks: unknown[] | null): string | null {
   if (!Array.isArray(blocks)) return null;
 
+  let foundHeader = false;
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i] as any;
-    if (block.type === 'paragraph') {
-      const blockText = getContentText(block.content);
+    const blockText = getContentText(block.content);
+    if (!blockText) continue;
+
+    if (foundHeader && block.type === 'paragraph') {
+      return blockText;
+    }
+
+    if (block.type === 'heading' && textContainsDaysToSell(blockText)) {
+      foundHeader = true;
+      continue;
+    }
+
+    if (block.type === 'paragraph' && textContainsDaysToSell(blockText)) {
       if (/^the\s+average\s+days?\s*to\s*sell/i.test(blockText)) {
         return blockText;
       }
+      foundHeader = true;
+      continue;
     }
   }
 

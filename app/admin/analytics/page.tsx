@@ -171,11 +171,12 @@ export default function AnalyticsPage() {
       const data = await res.json();
       if (data.availableSuburbs && Array.isArray(data.availableSuburbs) && data.availableSuburbs.length > 0) {
         setAvailableSuburbs(data.availableSuburbs);
-        setSelectedSuburbs(prev =>
-          prev.filter(s => data.availableSuburbs.includes(s)).length > 0
-            ? prev.filter(s => data.availableSuburbs.includes(s))
-            : [data.availableSuburbs[0]]
-        );
+        setSelectedSuburbs(prev => {
+          // preserve empty (North Shore City district view)
+          if (prev.length === 0) return prev;
+          const filtered = prev.filter(s => data.availableSuburbs.includes(s));
+          return filtered.length > 0 ? filtered : [data.availableSuburbs[0]];
+        });
       }
     } catch {
       // fallback stays

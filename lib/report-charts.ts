@@ -30,10 +30,14 @@ async function fetchQuarterly(suburbName: string, dataStartQuarter?: string, dat
   let startStr: string, endStr: string;
   if (dataStartQuarter && dataEndQuarter) {
     const start = quarterToRange(dataStartQuarter);
-    const end = quarterToRange(dataEndQuarter);
-    if (!start || !end) return { subData: [], distData: [] };
+    if (!start) return { subData: [], distData: [] };
     startStr = start.start;
-    endStr = end.end;
+    if (dataStartQuarter === dataEndQuarter) {
+      endStr = start.end;
+    } else {
+      const end = quarterToRange(dataEndQuarter);
+      endStr = end?.end ?? start.end;
+    }
   } else {
     const now = new Date();
     endStr = `${now.getFullYear() + 1}-01-01`;
@@ -57,7 +61,8 @@ async function fetchQuarterly(suburbName: string, dataStartQuarter?: string, dat
     const d = new Date(row.period_month);
     const q = Math.ceil((d.getMonth() + 1) / 3);
     const key = `${d.getFullYear()}-Q${q}`;
-    const target = row.region_name === 'North Shore City' ? distQ : subQ;
+    const isDistrict = row.region_name === 'North Shore City' && suburbName !== 'North Shore' && suburbName !== 'North Shore City';
+    const target = isDistrict ? distQ : subQ;
     if (!target[key]) target[key] = [];
     if (row.median_price != null) target[key].push(row.median_price);
   }
@@ -163,6 +168,19 @@ function generateSVG(
     `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${distColor}" stroke="white" stroke-width="1"/>`
   ).join('');
 
+  const showDistrict = cleanDist.length > 0;
+  const titleText = suburbName === 'North Shore City'
+    ? `${suburbName} — Median Price`
+    : `${suburbName} vs North Shore City — Median Price`;
+
+  const legendHtml = `<rect x="${W / 2 - 120}" y="${H - 48}" width="${showDistrict ? 240 : 120}" height="26" rx="4" fill="white" stroke="#f1f5f9" stroke-width="1"/>
+<line x1="${W / 2 - 108}" y1="${H - 39}" x2="${W / 2 - 85}" y2="${H - 39}" stroke="${subColor}" stroke-width="3" stroke-linecap="round"/>
+<circle cx="${W / 2 - 96.5}" cy="${H - 39}" r="3.5" fill="${subColor}" stroke="white" stroke-width="1"/>
+<text x="${W / 2 - 75}" y="${H - 35}" fill="#374151" font-size="10">${suburbName}</text>${showDistrict ? `
+<line x1="${W / 2 + 5}" y1="${H - 39}" x2="${W / 2 + 28}" y2="${H - 39}" stroke="${distColor}" stroke-width="2" stroke-dasharray="5,5" stroke-linecap="round"/>
+<circle cx="${W / 2 + 16.5}" cy="${H - 39}" r="3" fill="${distColor}" stroke="white" stroke-width="1"/>
+<text x="${W / 2 + 38}" y="${H - 35}" fill="#374151" font-size="10">North Shore City</text>` : ''}`;
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family: Arial, sans-serif;">
 <rect width="${W}" height="${H}" fill="white"/>
 <rect x="${PL}" y="${PT}" width="${CW}" height="${CH}" fill="none" stroke="#f1f5f9" stroke-width="1"/>
@@ -170,18 +188,12 @@ ${yGrid.map(g => `<line x1="${PL}" y1="${g.y}" x2="${W - PR}" y2="${g.y}" stroke
 <text x="${PL - 6}" y="${g.y + 4}" text-anchor="end" fill="#6b7280" font-size="11">${g.label}</text>`).join('')}
 <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#d1d5db" stroke-width="1"/>
 ${points.map((p, i) => `<text x="${xS(i)}" y="${H - PB + 20}" text-anchor="middle" fill="#6b7280" font-size="11">${p.quarter.replace('-Q', ' Q')}</text>`).join('')}
-<text x="${W / 2}" y="22" text-anchor="middle" fill="#111827" font-size="14" font-weight="bold">${suburbName} vs North Shore City — Median Price</text>
+<text x="${W / 2}" y="22" text-anchor="middle" fill="#111827" font-size="14" font-weight="bold">${titleText}</text>
 ${subLine}
 ${subDots}
 ${distLine}
 ${distDots}
-<rect x="${W / 2 - 120}" y="${H - 48}" width="240" height="26" rx="4" fill="white" stroke="#f1f5f9" stroke-width="1"/>
-<line x1="${W / 2 - 108}" y1="${H - 39}" x2="${W / 2 - 85}" y2="${H - 39}" stroke="${subColor}" stroke-width="3" stroke-linecap="round"/>
-<circle cx="${W / 2 - 96.5}" cy="${H - 39}" r="3.5" fill="${subColor}" stroke="white" stroke-width="1"/>
-<text x="${W / 2 - 75}" y="${H - 35}" fill="#374151" font-size="10">${suburbName}</text>
-<line x1="${W / 2 + 5}" y1="${H - 39}" x2="${W / 2 + 28}" y2="${H - 39}" stroke="${distColor}" stroke-width="2" stroke-dasharray="5,5" stroke-linecap="round"/>
-<circle cx="${W / 2 + 16.5}" cy="${H - 39}" r="3" fill="${distColor}" stroke="white" stroke-width="1"/>
-<text x="${W / 2 + 38}" y="${H - 35}" fill="#374151" font-size="10">North Shore City</text>
+${legendHtml}
 <text x="14" y="${H / 2}" text-anchor="middle" fill="#6b7280" font-size="11" transform="rotate(-90, 14, ${H / 2})">Median Price (NZD)</text>
 </svg>`;
 }

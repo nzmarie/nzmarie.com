@@ -16,11 +16,7 @@ export async function GET(request: Request) {
   const from = searchParams.get('from') || '2025-01-01';
   const to = searchParams.get('to') || '2026-12-31';
 
-  if (!suburbsParam) {
-    return NextResponse.json({ error: 'suburbs parameter is required' }, { status: 400 });
-  }
-
-  const suburbNames = suburbsParam.split(',').map(s => s.trim()).filter(Boolean);
+  const suburbNames = suburbsParam ? suburbsParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   const tableCheck = await query(
     `SELECT EXISTS (

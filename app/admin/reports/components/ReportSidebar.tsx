@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ConfirmModal from './ConfirmModal';
 import { useReportStore, OverviewSuburb } from '../stores/report-store';
 
-const SUBURB_ORDER = ['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
+const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
   'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay',
   'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe',
   'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
@@ -15,9 +15,10 @@ export default function ReportSidebar() {
   const router = useRouter();
   const setSelectedDocId = useReportStore(s => s.setSelectedDocId);
   const [expanded, setExpanded] = useState(true);
-  const [isSuburbsOpen, setIsSuburbsOpen] = useState(true);
+  const [isSuburbsOpen, setIsSuburbsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedSuburb, setSelectedSuburb] = useState<string | null>(null);
+  const [expandedSuburbs, setExpandedSuburbs] = useState<Set<string>>(new Set());
   const [aboutMarieDoc, setAboutMarieDoc] = useState<{ id: string } | null>(null);
   const [aboutMarieLoading, setAboutMarieLoading] = useState(true);
 
@@ -242,7 +243,6 @@ export default function ReportSidebar() {
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {expanded && visibleSuburbs.map((suburb) => {
-          const isSelected = selectedSuburb === suburb.name;
           const allDocs: Array<{ id: string; title: string; icon: string; meta?: string }> = [];
           if (suburb.introDoc) allDocs.push({ id: suburb.introDoc.id, title: suburb.introDoc.title, icon: '📝' });
           if (suburb.letterDoc) allDocs.push({ id: suburb.letterDoc.id, title: suburb.letterDoc.title, icon: '📬' });
@@ -253,23 +253,33 @@ export default function ReportSidebar() {
           return (
               <div key={suburb.id} id={`sidebar-${suburb.name.replace(/\s+/g, '-')}`}>
                   <div
-                    onClick={() => {
-                      if (suburb.introDoc) {
-                        router.push(`/admin/reports/${suburb.introDoc.id}`);
-                      }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedSuburbs(prev => {
+                        const next = new Set(prev);
+                        if (next.has(suburb.name)) {
+                          next.delete(suburb.name);
+                        } else {
+                          next.add(suburb.name);
+                        }
+                        return next;
+                      });
                     }}
                   style={{
                     padding: '5px 12px 1px 16px', fontSize: '0.78rem', fontWeight: 600,
                     color: '#666', display: 'flex', alignItems: 'center', gap: 4,
-                    background: isSelected ? '#dbeafe' : 'transparent',
-                    cursor: suburb.introDoc ? 'pointer' : 'default',
+                    cursor: 'pointer', userSelect: 'none',
                   }}
-                  onMouseEnter={(e) => { if (suburb.introDoc) e.currentTarget.style.color = '#1a73e8'; }}
-                  onMouseLeave={(e) => { if (suburb.introDoc) e.currentTarget.style.color = '#666'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#1a73e8'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#666'; }}
                 >
+                  <span style={{
+                    fontSize: '0.6rem', transition: 'transform 0.15s',
+                    transform: expandedSuburbs.has(suburb.name) ? 'rotate(90deg)' : 'none',
+                  }}>▶</span>
                   {suburb.name}
                 </div>
-              {allDocs.map((doc) => (
+              {expandedSuburbs.has(suburb.name) && allDocs.map((doc) => (
                 <div
                   key={doc.id}
                   className="sidebar-doc-row"

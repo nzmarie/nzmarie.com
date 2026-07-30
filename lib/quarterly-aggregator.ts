@@ -84,14 +84,60 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
     const cityMedians = months.map(m => m.cityMedian).filter((v): v is number => v !== null);
     const cityDays = months.map(m => m.cityDays).filter((v): v is number => v !== null);
 
-    const cityFirst = months[0];
+    const cityDetailAgs: (number | null | undefined)[] = [];
+    const cityDetailSales: number[] = [];
+    const cityDetailDays: (number | null | undefined)[] = [];
+    const cityDetailMom: (number | null | undefined)[] = [];
+    const cityDetail1yr: (number | null | undefined)[] = [];
+    const cityDetailListPrice: (number | null | undefined)[] = [];
+    const cityDetailS2V: (number | null | undefined)[] = [];
+    const cityDetailL2V: (number | null | undefined)[] = [];
+    const cityDetailVolume: number[] = [];
+    const cityDetail1yrPrior: (number | null | undefined)[] = [];
+    const cityDetail3yrsPrior: (number | null | undefined)[] = [];
+    const cityDetail3yrPct: (number | null | undefined)[] = [];
+    const cityDetailHpi: (number | null | undefined)[] = [];
+    for (const m of months) {
+      const cd = m.cityDetail;
+      if (cd) {
+        if (cd.median != null) cityDetailAgs.push(cd.median);
+        cityDetailSales.push(Number(cd.sales));
+        if (cd.days != null) cityDetailDays.push(cd.days);
+        cityDetailMom.push(cd.priceDiffMomPct);
+        cityDetail1yr.push(cd.priceDiff1yrPct);
+        cityDetailListPrice.push(cd.medianListPrice);
+        cityDetailS2V.push(cd.saleToValuationPct);
+        cityDetailL2V.push(cd.listToValuationPct);
+        if (cd.totalVolume != null) cityDetailVolume.push(cd.totalVolume);
+        cityDetail1yrPrior.push(cd.medianPrice1yrPrior);
+        cityDetail3yrsPrior.push(cd.medianPrice3yrsPrior);
+        cityDetail3yrPct.push(cd.priceDiff3yrsPct);
+        cityDetailHpi.push(cd.housePriceIndex);
+      }
+    }
+    const aggDetail: MonthlyDataPoint['cityDetail'] = cityDetailSales.length > 0 ? {
+      median: avg(cityDetailAgs.filter((v): v is number => v != null)),
+      sales: cityDetailSales.reduce((a, b) => a + Number(b), 0),
+      days: avg(cityDetailDays.filter((v): v is number => v != null)),
+      priceDiffMomPct: avgField(cityDetailMom),
+      priceDiff1yrPct: avgField(cityDetail1yr),
+      medianListPrice: avgField(cityDetailListPrice),
+      saleToValuationPct: avgField(cityDetailS2V),
+      listToValuationPct: avgField(cityDetailL2V),
+      totalVolume: cityDetailVolume.length > 0 ? cityDetailVolume.reduce((a, b) => a + Number(b), 0) : null,
+      medianPrice1yrPrior: avgField(cityDetail1yrPrior),
+      medianPrice3yrsPrior: avgField(cityDetail3yrsPrior),
+      priceDiff3yrsPct: avgField(cityDetail3yrPct),
+      housePriceIndex: avgField(cityDetailHpi),
+    } : null;
+
     result.push({
       period: key,
       periodRaw: key,
       cityMedian: avg(cityMedians),
       citySales: months.reduce((s, m) => s + Number(m.citySales), 0),
       cityDays: avg(cityDays),
-      cityDetail: cityFirst?.cityDetail ?? null,
+      cityDetail: aggDetail,
       suburbs,
     });
   }

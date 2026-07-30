@@ -41,6 +41,25 @@ const fmtM = (v: number | null | undefined): string => {
   return `$${(v / 1000000).toFixed(1)}M`;
 };
 
+function toLocalDateStr(d: unknown): string {
+  if (typeof d === 'string') return d;
+  if (d instanceof Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+  return String(d);
+}
+
+function getYearMonth(d: unknown): string {
+  if (d instanceof Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  const s = String(d);
+  return s.slice(0, 7);
+}
+
 function quarterToRange(quarter: string): { start: string; end: string } | null {
   const [yearStr, qStr] = quarter.split('-Q');
   if (!yearStr || !qStr) return null;
@@ -67,10 +86,10 @@ async function fetchMarketTrends(suburbName: string, startQuarter: string, endQu
     `SELECT region_name, region_type, period_month, median_price, sales_count, days_to_sell,
           median_price_1yr_prior, price_diff_1yr_pct, median_valuation, median_list_price, total_volume
      FROM market_monthly_snapshots
-     WHERE region_name IN ($1, 'North Shore City')
+     WHERE (region_name = $1 OR region_name = 'North Shore City')
        AND period_month >= $2::date AND period_month < $3::date
      ORDER BY region_name, period_month ASC`,
-    [suburbName, startDate, endDate]
+     [suburbName, startDate, endDate]
   );
   return result.rows;
 }
@@ -111,7 +130,6 @@ async function fetchQuarterlyAggregates(suburbName: string, startQuarter: string
   const q = await marieQuery<QuarterAggRawRow>(
     `SELECT
        region_name,
-       region_type,
        EXTRACT(YEAR FROM period_month)::int AS year,
        CEIL(EXTRACT(MONTH FROM period_month) / 3.0)::int AS quarter,
        SUM(total_volume) FILTER (WHERE total_volume IS NOT NULL) AS total_volume,
@@ -120,9 +138,9 @@ async function fetchQuarterlyAggregates(suburbName: string, startQuarter: string
        ROUND(AVG(median_price)) AS median_price,
        AVG(price_diff_1yr_pct) AS price_diff_1yr_pct
      FROM market_monthly_snapshots
-     WHERE region_name IN ($1, 'North Shore City')
-       AND period_month >= $2::date AND period_month < $3::date
-     GROUP BY region_name, region_type,
+      WHERE (region_name = $1 OR region_name = 'North Shore City')
+        AND period_month >= $2::date AND period_month < $3::date
+     GROUP BY region_name,
        EXTRACT(YEAR FROM period_month)::int,
        CEIL(EXTRACT(MONTH FROM period_month) / 3.0)::int
      ORDER BY region_name, year, quarter`,
@@ -132,7 +150,7 @@ async function fetchQuarterlyAggregates(suburbName: string, startQuarter: string
   if (q.rows.length === 0) return null;
   return q.rows.map(r => ({
     region_name: r.region_name,
-    region_type: r.region_type ?? null,
+    region_type: null,
     year: Number(r.year),
     quarter: Number(r.quarter),
     total_volume: r.total_volume !== null ? Number(r.total_volume) : null,
@@ -255,7 +273,7 @@ function buildBlocks(
 
   // Page 1: Cover
   blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
-  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Report`] });
+  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
   // Add introduction content, stripping any Days to Sell heading/paragraph (handled by KPI card instead)
   const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
   if (filteredIntroContent && filteredIntroContent.length > 0) {
@@ -278,82 +296,88 @@ function buildBlocks(
     let compareDaysUp = false;
     let compareLabel = 'Compared to Previous Period';
 
-    const norm = (s?: string) => (s || '').toLowerCase().trim();
-    const suburbNorm = norm(suburbName);
+    const qParts = (quarter || '').split('-Q');
+    const qYear = qParts.length === 2 ? Number(qParts[0]) : NaN;
+    const qNum = qParts.length === 2 ? Number(qParts[1]) : NaN;
+
+    const subData = marketTrends.filter((r) => r.region_name === suburbName);
 
     if (quarterAggs && quarterAggs.length > 0) {
-      // parse requested quarter (e.g. '2026-Q2') and match by year+quarter to avoid picking a different quarter's row
-      const qParts = (quarter || '').split('-Q');
-      const qYear = qParts.length === 2 ? Number(qParts[0]) : NaN;
-      const qNum = qParts.length === 2 ? Number(qParts[1]) : NaN;
-      const suburbAgg = quarterAggs.find(q => norm(q.region_name) === suburbNorm && q.year === qYear && q.quarter === qNum);
-      const prevQuarter = previousQuarter(quarter);
-      const prevSuburbAgg = prevQuarterAggs?.find(q => prevQuarter && norm(q.region_name) === suburbNorm && q.year === Number(prevQuarter.split('-Q')[0]) && q.quarter === Number(prevQuarter.split('-Q')[1]));
-
+      const suburbAgg = quarterAggs.find(q => q.region_name === suburbName && q.year === qYear && q.quarter === qNum);
       if (suburbAgg) {
         kpiTotalVolume = suburbAgg.total_volume !== null ? Number(suburbAgg.total_volume) : null;
         kpiSales = Number(suburbAgg.sales_count || 0);
         kpiDays = suburbAgg.days_to_sell !== null ? Number(suburbAgg.days_to_sell) : null;
-
-        if (prevSuburbAgg && prevSuburbAgg.median_price !== null && suburbAgg.median_price !== null) {
-          pricePct = prevSuburbAgg.median_price !== 0
-            ? ((suburbAgg.median_price - prevSuburbAgg.median_price) / prevSuburbAgg.median_price) * 100
-            : null;
-        } else {
-          pricePct = suburbAgg.price_diff_1yr_pct !== null ? Number(suburbAgg.price_diff_1yr_pct) : null;
-        }
+        pricePct = suburbAgg.price_diff_1yr_pct !== null ? Number(suburbAgg.price_diff_1yr_pct) : null;
       } else {
-        // fallback to monthly aggregation if quarterly aggregate for suburb missing
-        const subData = marketTrends.filter((r) => r.region_type === 'suburb' || norm(r.region_name) === suburbNorm);
+        const vols = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
+        kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
         kpiSales = sum(subData.map(r => r.sales_count));
         kpiDays = agg(subData.map(r => r.days_to_sell));
-        const totalVolumes = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
-        kpiTotalVolume = totalVolumes.length ? totalVolumes.reduce((a, b) => a + b, 0) : null;
         const lastSub = subData[subData.length - 1];
         pricePct = lastSub?.price_diff_1yr_pct != null ? Number(lastSub.price_diff_1yr_pct) : null;
       }
-
-      if (prevSuburbAgg && suburbAgg) {
-        const prevSales = Number(prevSuburbAgg.sales_count || 0);
-        if (prevSales > 0) {
-          const currentSales = Number(suburbAgg.sales_count || 0);
-          const salesDiffVal = ((currentSales - prevSales) / prevSales) * 100;
-          const salesUpVal = salesDiffVal >= 0;
-          const salesChangeVal = `${salesUpVal ? '+' : ''}${salesDiffVal.toFixed(1)}%`;
-          const prevDays = prevSuburbAgg.days_to_sell;
-          const daysDiffVal = prevDays != null && suburbAgg.days_to_sell != null ? suburbAgg.days_to_sell - prevDays : null;
-          const daysUpVal = daysDiffVal != null ? daysDiffVal > 0 : false;
-          const daysChangeVal = daysDiffVal != null ? `${daysDiffVal > 0 ? '+' : ''}${daysDiffVal}` : '';
-
-          salesDiff = salesDiffVal;
-          salesUp = salesUpVal;
-          salesChange = salesChangeVal;
-          compareDaysChange = daysChangeVal;
-          compareDaysUp = daysUpVal;
-          compareLabel = 'Compared to Previous Quarter';
-        }
-      }
     } else {
-      // No quarterly aggregates available, fall back to monthly aggregation
-      const subData = marketTrends.filter((r) => r.region_type === 'suburb' || norm(r.region_name) === suburbNorm);
+      const vols = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
+      kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
       kpiSales = sum(subData.map(r => r.sales_count));
       kpiDays = agg(subData.map(r => r.days_to_sell));
-      const totalVolumes = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
-      kpiTotalVolume = totalVolumes.length ? totalVolumes.reduce((a, b) => a + b, 0) : null;
       const lastSub = subData[subData.length - 1];
       pricePct = lastSub?.price_diff_1yr_pct != null ? Number(lastSub.price_diff_1yr_pct) : null;
+    }
+
+    const prevQuarter = previousQuarter(quarter);
+    if (prevQuarter) {
+      const [pYearStr, pQStr] = prevQuarter.split('-Q');
+      const pYear = Number(pYearStr);
+      const pNum = Number(pQStr);
+
+      let prevSales = 0;
+      let prevDays: number | null = null;
+
+      if (prevQuarterAggs && prevQuarterAggs.length > 0) {
+        const prevAgg = prevQuarterAggs.find(q => q.region_name === suburbName && q.year === pYear && q.quarter === pNum);
+        if (prevAgg) {
+          prevSales = Number(prevAgg.sales_count || 0);
+          prevDays = prevAgg.days_to_sell !== null ? Number(prevAgg.days_to_sell) : null;
+        }
+      } else {
+        const prevStartYM = `${pYear}-${String((pNum - 1) * 3 + 1).padStart(2, '0')}`;
+        const prevEndYM = `${pYear + (pNum === 4 ? 1 : 0)}-${String((pNum * 3) > 12 ? (pNum * 3 - 12) : (pNum * 3)).padStart(2, '0')}`;
+        const prevRows = subData.filter(r => {
+          const ym = getYearMonth(r.period_month);
+          return ym >= prevStartYM && ym <= prevEndYM;
+        });
+        prevSales = sum(prevRows.map(r => r.sales_count));
+        prevDays = agg(prevRows.map(r => r.days_to_sell));
+      }
+
+      if (prevSales > 0 && kpiSales > 0) {
+        const salesDiffVal = ((kpiSales - prevSales) / prevSales) * 100;
+        const salesUpVal = salesDiffVal >= 0;
+        salesDiff = salesDiffVal;
+        salesUp = salesUpVal;
+        salesChange = `${salesUpVal ? '+' : ''}${salesDiffVal.toFixed(1)}%`;
+      }
+
+      if (prevDays != null && kpiDays != null) {
+        const daysDiffVal = kpiDays - prevDays;
+        compareDaysUp = daysDiffVal > 0;
+        compareDaysChange = `${daysDiffVal > 0 ? '+' : ''}${daysDiffVal}`;
+      }
+      compareLabel = 'Compared to Previous Quarter';
     }
 
     const priceUp = (pricePct ?? 0) >= 0;
     const priceChange = pricePct != null && !Number.isNaN(pricePct) ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
 
     const hasCompare = pricePct != null || salesDiff != null;
-    // Use description extracted from introduction document if available, otherwise use generic default
-    const insightText = daysToSellFromIntro && /the\s+average\s+days?\s*to\s*sell/i.test(daysToSellFromIntro)
-      ? daysToSellFromIntro
-      : (kpiDays
-        ? `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`
-        : '');
+    let insightText = daysToSellFromIntro || '';
+    if (insightText && kpiDays != null) {
+      insightText = insightText.replace(/The average Days to Sell of \d+ days/i, `The average Days to Sell of ${kpiDays} days`);
+    } else if (!insightText && kpiDays != null) {
+      insightText = `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`;
+    }
 
     blocks.push({
       type: 'quarterlyData',
@@ -391,17 +415,30 @@ function buildBlocks(
   }
 
   if (marketTrends && marketTrends.length > 0) {
-    const suburbData = marketTrends.filter((r) => r.region_type === 'suburb');
-    const districtData = marketTrends.filter((r) => r.region_type !== 'suburb');
+    const suburbData = marketTrends.filter((r) => r.region_name === suburbName);
+    const districtData = marketTrends.filter((r) => r.region_name === 'North Shore City' && r.region_name !== suburbName);
 
-    // Quarterly aggregation matching analytics SQL:
-    // AVG(median_price) as median, SUM(sales_count) as sales
-    const subMedian = agg(suburbData.map(r => r.median_price));
-    const subSales = sum(suburbData.map(r => r.sales_count));
-    const subDays = agg(suburbData.map(r => r.days_to_sell));
-    const distMedian = agg(districtData.map(r => r.median_price));
-    const distSales = sum(districtData.map(r => r.sales_count));
-    const distDays = agg(districtData.map(r => r.days_to_sell));
+    const [qYear, qStr] = (quarter || '').split('-Q');
+    const qNum = parseInt(qStr);
+    const firstMonth = !isNaN(qNum) ? ((qNum - 1) * 3 + 1) : 1;
+    const qStartYM = `${qYear}-${String(firstMonth).padStart(2, '0')}`;
+    const lastMonth = firstMonth + 2;
+    const qEndYM = `${Number(qYear) + (lastMonth > 12 ? 1 : 0)}-${String(lastMonth > 12 ? lastMonth - 12 : lastMonth).padStart(2, '0')}`;
+    const summaryData = suburbData.filter(r => {
+      const ym = getYearMonth(r.period_month);
+      return ym >= qStartYM && ym <= qEndYM;
+    });
+    const summaryDist = districtData.filter(r => {
+      const ym = getYearMonth(r.period_month);
+      return ym >= qStartYM && ym <= qEndYM;
+    });
+
+    const subMedian = agg(summaryData.map(r => r.median_price));
+    const subSales = sum(summaryData.map(r => r.sales_count));
+    const subDays = agg(summaryData.map(r => r.days_to_sell));
+    const distMedian = agg(summaryDist.map(r => r.median_price));
+    const distSales = sum(summaryDist.map(r => r.sales_count));
+    const distDays = agg(summaryDist.map(r => r.days_to_sell));
 
     blocks.push({ type: 'heading', props: { level: 3 }, content: ['Quarterly Summary'] });
     const qRows = [
@@ -430,7 +467,7 @@ function buildBlocks(
     }
     blocks.push({ type: 'table', props: { width: 1 }, content: { type: 'tableContent', rows: qRows, headerRows: 1, columnWidths: [] } });
 
-    const monthStr = (d: unknown) => typeof d === 'string' ? d : new Date(d as string).toISOString().slice(0, 10);
+    const monthStr = (d: unknown) => toLocalDateStr(d);
     const months = [...new Set(marketTrends.map((r) => monthStr(r.period_month)))].sort();
     blocks.push({ type: 'heading', props: { level: 3 }, content: ['Monthly Breakdown'] });
 
@@ -551,7 +588,11 @@ export async function POST(request: Request) {
     if (suburbResult.rows.length === 0) {
       return NextResponse.json({ success: false, error: 'Suburb not found' }, { status: 404 });
     }
-    const suburb = suburbResult.rows[0];
+    let suburb = suburbResult.rows[0];
+    // North Shore data is stored as 'North Shore City' in market_monthly_snapshots
+    if (suburb.name === 'North Shore') {
+      suburb = { ...suburb, name: 'North Shore City' };
+    }
 
     const adminResult = await marieQuery<{ id: string }>(
       `SELECT id FROM admin_users WHERE email = $1 LIMIT 1`,
@@ -570,7 +611,7 @@ export async function POST(request: Request) {
       fetchSuburbIntroduction(suburb_id),
     ]);
 
-    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Report`;
+    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Market Report`;
     const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, prevQuarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
 
     const result = await marieQuery<{ id: string }>(
