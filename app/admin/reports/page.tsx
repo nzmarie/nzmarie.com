@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import TemplateSelector from './components/TemplateSelector';
 import { useTemplate } from './hooks/useTemplate';
+import { useReportStore } from './stores/report-store';
 
 interface SuburbDoc {
   id: string;
@@ -34,6 +35,8 @@ export default function ReportsPage() {
   const [showTemplate, setShowTemplate] = useState(false);
   const [selectedSuburbId, setSelectedSuburbId] = useState<string | null>(null);
   const { generateReport } = useTemplate();
+  const bumpRefreshKey = useReportStore(s => s.bumpRefreshKey);
+  const idToSlug = useReportStore(s => s.idToSlug);
   const suburbRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
@@ -69,7 +72,8 @@ export default function ReportsPage() {
   };
 
   const handleOpenDoc = (docId: string) => {
-    router.push(`/admin/reports/${docId}`);
+    const slug = idToSlug[docId];
+    router.push(`/admin/reports/${slug || docId}`);
   };
 
   if (loading) {
@@ -191,7 +195,10 @@ export default function ReportsPage() {
         onClose={() => { setShowTemplate(false); setSelectedSuburbId(null); }}
         onGenerate={async (suburbId, reportQuarter, startQuarter, endQuarter) => {
           const id = await generateReport(suburbId, reportQuarter, startQuarter, endQuarter);
-          if (id) router.push(`/admin/reports/${id}`);
+          if (id) {
+            bumpRefreshKey();
+            router.push(`/admin/reports/${id}`);
+          }
           return id;
         }}
         preselectedSuburbId={selectedSuburbId}

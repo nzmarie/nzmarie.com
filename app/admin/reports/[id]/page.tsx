@@ -14,7 +14,15 @@ export default function DocumentPage() {
   const isUuid = /^[a-f0-9-]{36}$/.test(rawId);
   const resolvedId = isUuid ? rawId : (slugMap[rawId] ?? null);
 
-  if (!resolvedId) return null;
+  // Slug not yet in the map — the layout is still fetching/building slugMap.
+  // Show a loading state instead of a blank page.
+  if (!resolvedId) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999', fontSize: '0.9rem' }}>
+        Loading report…
+      </div>
+    );
+  }
 
   return (
     <DocumentViewer

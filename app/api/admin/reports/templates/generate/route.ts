@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { generateChartImageUrl } from '@/lib/report-charts';
+import { getMonthlyData, type MonthlyDataPoint } from '@/lib/market-data-aggregator';
+import { aggregateToQuarterly } from '@/lib/quarterly-aggregator';
 import { extractDaysToSellDescription, filterOutDaysToSellFromIntro } from './intro-utils';
 
 interface TrendRow {
@@ -94,72 +96,7 @@ async function fetchMarketTrends(suburbName: string, startQuarter: string, endQu
   return result.rows;
 }
 
-interface QuarterAggRow {
-  region_name: string;
-  region_type: string | null;
-  year: number;
-  quarter: number;
-  total_volume: number | null;
-  sales_count: number;
-  days_to_sell: number | null;
-  median_price: number | null;
-  price_diff_1yr_pct: number | null;
-}
 
-interface QuarterAggRawRow {
-  region_name: string;
-  region_type: string | null;
-  year: string | number;
-  quarter: string | number;
-  total_volume: string | number | null;
-  sales_count: string | number;
-  days_to_sell: string | number | null;
-  median_price: string | number | null;
-  price_diff_1yr_pct: string | number | null;
-}
-
-async function fetchQuarterlyAggregates(suburbName: string, startQuarter: string, endQuarter?: string): Promise<QuarterAggRow[] | null> {
-  const start = quarterToRange(startQuarter);
-  if (!start) return null;
-  const startDate = start.start;
-  const endDate = endQuarter && endQuarter !== startQuarter
-    ? (quarterToRange(endQuarter)?.end ?? start.end)
-    : start.end;
-
-  // Aggregate at quarter level directly in SQL: sum total_volume, sum sales_count, avg days, avg median
-  const q = await marieQuery<QuarterAggRawRow>(
-    `SELECT
-       region_name,
-       EXTRACT(YEAR FROM period_month)::int AS year,
-       CEIL(EXTRACT(MONTH FROM period_month) / 3.0)::int AS quarter,
-       SUM(total_volume) FILTER (WHERE total_volume IS NOT NULL) AS total_volume,
-       SUM(sales_count) AS sales_count,
-       ROUND(AVG(days_to_sell)) AS days_to_sell,
-       ROUND(AVG(median_price)) AS median_price,
-       AVG(price_diff_1yr_pct) AS price_diff_1yr_pct
-     FROM market_monthly_snapshots
-      WHERE (region_name = $1 OR region_name = 'North Shore City')
-        AND period_month >= $2::date AND period_month < $3::date
-     GROUP BY region_name,
-       EXTRACT(YEAR FROM period_month)::int,
-       CEIL(EXTRACT(MONTH FROM period_month) / 3.0)::int
-     ORDER BY region_name, year, quarter`,
-    [suburbName, startDate, endDate]
-  );
-
-  if (q.rows.length === 0) return null;
-  return q.rows.map(r => ({
-    region_name: r.region_name,
-    region_type: null,
-    year: Number(r.year),
-    quarter: Number(r.quarter),
-    total_volume: r.total_volume !== null ? Number(r.total_volume) : null,
-    sales_count: Number(r.sales_count),
-    days_to_sell: r.days_to_sell !== null ? Number(r.days_to_sell) : null,
-    median_price: r.median_price !== null ? Number(r.median_price) : null,
-    price_diff_1yr_pct: r.price_diff_1yr_pct !== null ? Number(r.price_diff_1yr_pct) : null,
-  }));
-}
 
 async function fetchLastSoldData(suburbName: string): Promise<LastSoldRow | null> {
   const result = await marieQuery<LastSoldRow>(
@@ -255,8 +192,7 @@ function buildBlocks(
   suburbName: string,
   quarter: string,
   marketTrends: TrendRow[] | null,
-  quarterAggs: QuarterAggRow[] | null,
-  prevQuarterAggs: QuarterAggRow[] | null,
+  quarterAggs: MonthlyDataPoint[],
   lastSold: LastSoldRow | null,
   campaign: CampaignRow | null,
   chartImageUrl: string | null,
@@ -302,22 +238,21 @@ function buildBlocks(
 
     const subData = marketTrends.filter((r) => r.region_name === suburbName);
 
-    if (quarterAggs && quarterAggs.length > 0) {
-      const suburbAgg = quarterAggs.find(q => q.region_name === suburbName && q.year === qYear && q.quarter === qNum);
-      if (suburbAgg) {
-        kpiTotalVolume = suburbAgg.total_volume !== null ? Number(suburbAgg.total_volume) : null;
-        kpiSales = Number(suburbAgg.sales_count || 0);
-        kpiDays = suburbAgg.days_to_sell !== null ? Number(suburbAgg.days_to_sell) : null;
-        pricePct = suburbAgg.price_diff_1yr_pct !== null ? Number(suburbAgg.price_diff_1yr_pct) : null;
-      } else {
-        const vols = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
-        kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
-        kpiSales = sum(subData.map(r => r.sales_count));
-        kpiDays = agg(subData.map(r => r.days_to_sell));
-        const lastSub = subData[subData.length - 1];
-        pricePct = lastSub?.price_diff_1yr_pct != null ? Number(lastSub.price_diff_1yr_pct) : null;
+    const periodKey = !isNaN(qYear) && !isNaN(qNum) ? `${qYear}-Q${qNum}` : null;
+
+    // Use analytics-compatible quarterly aggregates when available
+    if (quarterAggs.length > 0 && periodKey) {
+      const qData = quarterAggs.find(d => d.period === periodKey);
+      const sd = qData?.suburbs[suburbName];
+      if (sd) {
+        kpiTotalVolume = sd.totalVolume ?? null;
+        kpiSales = sd.sales ?? 0;
+        kpiDays = sd.days ?? null;
+        pricePct = sd.priceDiff1yrPct ?? null;
       }
-    } else {
+    }
+    // Fallback: compute directly from monthly rows
+    if (kpiSales === 0) {
       const vols = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
       kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
       kpiSales = sum(subData.map(r => r.sales_count));
@@ -327,21 +262,19 @@ function buildBlocks(
     }
 
     const prevQuarter = previousQuarter(quarter);
-    if (prevQuarter) {
-      const [pYearStr, pQStr] = prevQuarter.split('-Q');
-      const pYear = Number(pYearStr);
-      const pNum = Number(pQStr);
-
+    if (prevQuarter && periodKey) {
       let prevSales = 0;
       let prevDays: number | null = null;
 
-      if (prevQuarterAggs && prevQuarterAggs.length > 0) {
-        const prevAgg = prevQuarterAggs.find(q => q.region_name === suburbName && q.year === pYear && q.quarter === pNum);
-        if (prevAgg) {
-          prevSales = Number(prevAgg.sales_count || 0);
-          prevDays = prevAgg.days_to_sell !== null ? Number(prevAgg.days_to_sell) : null;
-        }
+      const prevData = quarterAggs.find(d => d.period === prevQuarter);
+      const prevSd = prevData?.suburbs[suburbName];
+      if (prevSd) {
+        prevSales = prevSd.sales ?? 0;
+        prevDays = prevSd.days ?? null;
       } else {
+        const [pYearStr, pQStr] = prevQuarter.split('-Q');
+        const pYear = Number(pYearStr);
+        const pNum = Number(pQStr);
         const prevStartYM = `${pYear}-${String((pNum - 1) * 3 + 1).padStart(2, '0')}`;
         const prevEndYM = `${pYear + (pNum === 4 ? 1 : 0)}-${String((pNum * 3) > 12 ? (pNum * 3 - 12) : (pNum * 3)).padStart(2, '0')}`;
         const prevRows = subData.filter(r => {
@@ -600,19 +533,24 @@ export async function POST(request: Request) {
     );
     const userId = adminResult.rows[0].id;
 
+    // Cover both report quarter(s) and previous quarter in one unified data fetch (same as Analytics)
     const prevQuarter = previousQuarter(reportQuarter);
-    const [marketTrends, quarterAggs, prevQuarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent] = await Promise.all([
+    const monthlyRangeStart = quarterToRange(prevQuarter || dataStart)?.start ?? '2025-01-01';
+    const monthlyRangeEnd = quarterToRange(dataEnd || dataStart)?.end ?? '2026-12-31';
+
+    const [monthlyRaw, marketTrends, lastSold, campaign, chartImageUrl, suburbIntroContent] = await Promise.all([
+      getMonthlyData([suburb.name], 'North Shore City', monthlyRangeStart, monthlyRangeEnd),
       fetchMarketTrends(suburb.name, dataStart, dataEnd),
-      fetchQuarterlyAggregates(suburb.name, dataStart, dataEnd),
-      prevQuarter ? fetchQuarterlyAggregates(suburb.name, prevQuarter, prevQuarter) : Promise.resolve<QuarterAggRow[] | null>(null),
       fetchLastSoldData(suburb.name),
       fetchCampaignStats(suburb.name),
       generateChartImageUrl(suburb.name, reportQuarter, dataStart, dataEnd).catch(() => null),
       fetchSuburbIntroduction(suburb_id),
     ]);
 
+    const quarterAggs = aggregateToQuarterly(monthlyRaw);
+
     const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Market Report`;
-    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, prevQuarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
+    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
 
     const result = await marieQuery<{ id: string }>(
       `INSERT INTO report_documents (user_id, doc_type, suburb_id, quarter, title, content)

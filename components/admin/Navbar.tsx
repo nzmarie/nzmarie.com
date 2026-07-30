@@ -24,7 +24,7 @@ export function AdminNavbar() {
         lastScrollY.current = y;
         if (delta > 10 && y > 60) {
           setHidden(true);
-        } else if (delta < -10) {
+        } else if (delta < -10 || y <= 60) {
           setHidden(false);
         }
         ticking.current = false;
