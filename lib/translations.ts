@@ -188,11 +188,13 @@ export const translations = {
             email: "Email Address",
             phone: "Phone Number (Optional)",
             subregion: "Suburbs",
-            consent: "I agree to receive quarterly hyper-local property market insights from Marie Nian.",
+            consent: "I agree to receive quarterly hyper-local property market reports and insights from Marie Nian.",
             submit: "Download PDF Report",
             loading: "Preparing Download...",
             success: "Thank you! Your download has started.",
             error: "An error occurred. Please try again.",
+            inProgress: "The report for this suburb is currently being prepared. Please check back soon.",
+            limitReached: "You've reached the download limit (5 per month). Please try again next month.",
         }
     },
     zh: {
@@ -384,11 +386,13 @@ export const translations = {
             email: "电子邮箱",
             phone: "电话号码（选填）",
             subregion: "选择街区",
-            consent: "我同意接收来自 Marie Nian 的季度超本地房产市场动态信息。",
+            consent: "我同意接收来自 Marie Nian 的季度超本地房产市场报告与动态。",
             submit: "下载 PDF 报告",
             loading: "正在准备下载...",
             success: "谢谢！您的下载已开始。",
             error: "发生错误，请稍后重试。",
+            inProgress: "该街区的报告正在制作中，请耐心等待。",
+            limitReached: "您已达到下载上限（每月5次），请下个月再试。",
         }
     },
 };

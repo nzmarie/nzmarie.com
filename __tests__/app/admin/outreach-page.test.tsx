@@ -568,4 +568,34 @@ describe('Outreach page - List view mobile layout', () => {
     const likedBtns = screen.getAllByText('↩ Liked');
     expect(likedBtns.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('does not loop when classic mode restores an empty cached page', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+        }),
+      });
+
+    render(<OutreachPage />);
+    await screen.findByRole('button', { name: /☰ List/i });
+
+    const classicBtn = await screen.findByRole('button', { name: /Classic Pages/i });
+    fireEvent.click(classicBtn);
+
+    // If the render-phase setState loop existed, React would throw
+    // "Too many re-renders" before this assertion runs.
+    expect(screen.getByRole('button', { name: /☰ List/i })).toBeDefined();
+  });
 });

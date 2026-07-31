@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, Fragment } from 'react';
 import NextImage from 'next/image';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ interface SuburbReport {
   suburb: string;
   quarter: string;
   year: number;
+  doc_label?: string | null;
   file_url: string;
   file_name: string;
   file_size: number;
@@ -96,6 +97,8 @@ const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
+const DOC_LABEL_OPTIONS = ['Main Report', 'Letter', 'About Marie'] as const;
+
 export default function PDFManagerPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -108,7 +111,7 @@ export default function PDFManagerPage() {
   const [suburb, setSuburb] = useState('Oteha');
   const [year, setYear] = useState(CURRENT_YEAR.toString());
   const [quarter, setQuarter] = useState('Q2');
-  const [file, setFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Array<{ file: File; label: string }>>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -174,11 +177,42 @@ export default function PDFManagerPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const handleOpenUploadModal = (initialFile?: File) => {
-    if (initialFile) {
-      setFile(initialFile);
+  const handleDeleteReport = async (item: SuburbReport) => {
+    const label = item.doc_label || 'Main Report';
+    if (!confirm(`Delete "${item.file_name}" (${label}) for ${item.suburb} ${item.year}-${item.quarter}?\n\nThis will remove the document and its storage. This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/pdf/reports', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showNotify('success', 'Document deleted');
+        fetchReports();
+      } else {
+        showNotify('error', data.error || 'Failed to delete document');
+      }
+    } catch {
+      showNotify('error', 'Failed to delete document');
+    }
+  };
+
+  const handleOpenUploadModal = (initialFiles?: File[]) => {
+    if (initialFiles && initialFiles.length > 0) {
+      setSelectedFiles(initialFiles.map(f => ({ file: f, label: 'Main Report' })));
     }
     setIsModalOpen(true);
+  };
+
+  const updateFileLabel = (index: number, label: string) => {
+    setSelectedFiles(prev => prev.map((item, i) => (i === index ? { ...item, label } : item)));
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -197,25 +231,23 @@ export default function PDFManagerPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const droppedFiles = e.dataTransfer.files;
-    if (droppedFiles && droppedFiles.length > 0) {
-      const droppedFile = droppedFiles[0];
-      if (droppedFile.type === 'application/pdf') {
-        handleOpenUploadModal(droppedFile);
-      } else {
-        showNotify('error', 'Only PDF files are supported');
-      }
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    const pdfs = droppedFiles.filter(f => f.type === 'application/pdf');
+    if (pdfs.length > 0) {
+      handleOpenUploadModal(pdfs);
+    } else if (droppedFiles.length > 0) {
+      showNotify('error', 'Only PDF files are supported');
     }
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
-      showNotify('error', 'Please select a PDF file');
+    if (selectedFiles.length === 0) {
+      showNotify('error', 'Please select at least one PDF file');
       return;
     }
 
-    if (file.type !== 'application/pdf') {
+    if (selectedFiles.some(({ file }) => file.type !== 'application/pdf')) {
       showNotify('error', 'Only PDF files are accepted');
       return;
     }
@@ -223,7 +255,10 @@ export default function PDFManagerPage() {
     setIsUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      for (const { file } of selectedFiles) {
+        formData.append('files', file);
+      }
+      formData.append('labels', JSON.stringify(selectedFiles.map(({ label }) => label)));
       formData.append('suburb', suburb);
       formData.append('quarter', quarter);
       formData.append('year', year);
@@ -236,9 +271,9 @@ export default function PDFManagerPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        showNotify('success', `Report for ${suburb} ${year}-${quarter} uploaded successfully`);
+        showNotify('success', `${data.count || selectedFiles.length} document(s) for ${suburb} ${year}-${quarter} uploaded successfully`);
         setIsModalOpen(false);
-        setFile(null);
+        setSelectedFiles([]);
         fetchReports();
       } else {
         showNotify('error', data.error || 'Failed to upload report');
@@ -395,6 +430,23 @@ export default function PDFManagerPage() {
     if (mb >= 1) return `${mb.toFixed(2)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
   };
+
+  const groupedReports = useMemo(() => {
+    const map = new Map<string, SuburbReport[]>();
+    for (const item of reports) {
+      const key = `${item.suburb}|${item.year}|${item.quarter}`;
+      const arr = map.get(key) || [];
+      arr.push(item);
+      map.set(key, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => {
+      const [sa, ya, qa] = a[0].split('|');
+      const [sb, yb, qb] = b[0].split('|');
+      if (Number(yb) !== Number(ya)) return Number(yb) - Number(ya);
+      if (qb !== qa) return qa < qb ? -1 : 1;
+      return sa.localeCompare(sb);
+    });
+  }, [reports]);
 
   if (status === 'loading') {
     return <SkeletonPDFManager />;
@@ -703,7 +755,7 @@ export default function PDFManagerPage() {
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Quarterly Report</h3>
         <p className="text-gray-600 mb-6 max-w-md mx-auto text-sm">
-          Drag and drop a PDF file here, or click anywhere to select Suburb, Year and Quarter
+          Drag and drop one or more PDF files here, or click anywhere to select Suburb, Year and Quarter
         </p>
         <button
           type="button"
@@ -758,6 +810,7 @@ export default function PDFManagerPage() {
                   <th className="px-6 py-3">Suburb</th>
                   <th className="px-6 py-3">Quarter / Year</th>
                   <th className="px-6 py-3">File Info</th>
+                  <th className="px-6 py-3">Document</th>
                   <th className="px-6 py-3">Downloads</th>
                   <th className="px-6 py-3">Uploaded By</th>
                   <th className="px-6 py-3">Date</th>
@@ -765,36 +818,68 @@ export default function PDFManagerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {reports.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-gray-900">{item.suburb}</td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        {item.year}-{item.quarter}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 truncate max-w-xs">{item.file_name}</div>
-                      <div className="text-xs text-gray-400">{formatFileSize(item.file_size)}</div>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-gray-800">{item.download_count ?? 0}</td>
-                    <td className="px-6 py-4 text-xs text-gray-500">{item.uploaded_by || 'Admin'}</td>
-                    <td className="px-6 py-4 text-xs text-gray-500">
-                      {item.uploaded_at ? new Date(item.uploaded_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <a
-                        href={item.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
-                      >
-                        <FaDownload className="w-3 h-3" />
-                        <span>View PDF</span>
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {groupedReports.map(([key, items]) => {
+                  const [gSuburb, gYear, gQuarter] = key.split('|');
+                  return (
+                    <Fragment key={key}>
+                      <tr className="bg-slate-100 border-b border-gray-200">
+                        <td colSpan={8} className="px-6 py-2">
+                          <span className="font-bold text-gray-900">{gSuburb}</span>
+                          <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            {gYear}-{gQuarter}
+                          </span>
+                          <span className="ml-3 text-xs text-slate-500">{items.length} document(s)</span>
+                        </td>
+                      </tr>
+                      {items.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 font-semibold text-gray-900">{item.suburb}</td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              {item.year}-{item.quarter}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-gray-900 truncate max-w-xs">{item.file_name}</div>
+                            <div className="text-xs text-gray-400">{formatFileSize(item.file_size)}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                              {item.doc_label || 'Main Report'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-medium text-gray-800">{item.download_count ?? 0}</td>
+                          <td className="px-6 py-4 text-xs text-gray-500">{item.uploaded_by || 'Admin'}</td>
+                          <td className="px-6 py-4 text-xs text-gray-500">
+                            {item.uploaded_at ? new Date(item.uploaded_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <a
+                                href={item.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md transition-colors"
+                              >
+                                <FaDownload className="w-3 h-3" />
+                                <span>View PDF</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReport(item)}
+                                className="inline-flex items-center space-x-1 text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+                                title="Delete document"
+                              >
+                                <FaTrash className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -888,22 +973,72 @@ export default function PDFManagerPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  PDF Report File <span className="text-red-500">*</span>
+                  PDF Report Files <span className="text-red-500">*</span>
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-blue-500 transition-colors bg-slate-50">
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="application/pdf"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) {
+                        setSelectedFiles(prev => [...prev, ...files.map(f => ({ file: f, label: 'Main Report' }))]);
+                      }
+                      e.target.value = '';
+                    }}
                     className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
                   />
-                  {file && (
-                    <div className="mt-2 text-xs font-semibold text-blue-700">
-                      Selected: {file.name} ({formatFileSize(file.size)})
-                    </div>
-                  )}
+                  <p className="text-xs text-gray-400 mt-2">
+                    You can select multiple PDFs — e.g. cover letter, main report, About Marie
+                  </p>
                 </div>
+                {selectedFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {selectedFiles.map((item, idx) => (
+                      <div key={`${item.file.name}-${idx}`} className="flex items-start gap-2 bg-slate-50 border border-gray-200 rounded-lg p-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-blue-700 truncate" title={item.file.name}>
+                            {item.file.name} ({formatFileSize(item.file.size)})
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <select
+                              value={DOC_LABEL_OPTIONS.includes(item.label as (typeof DOC_LABEL_OPTIONS)[number]) ? item.label : 'custom'}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateFileLabel(idx, v === 'custom' ? (DOC_LABEL_OPTIONS.includes(item.label as (typeof DOC_LABEL_OPTIONS)[number]) ? '' : item.label) : v);
+                              }}
+                              className="px-2 py-1 text-xs rounded border border-gray-300 focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
+                            >
+                              {DOC_LABEL_OPTIONS.map(o => (
+                                <option key={o} value={o}>{o}</option>
+                              ))}
+                              <option value="custom">Other…</option>
+                            </select>
+                            {!DOC_LABEL_OPTIONS.includes(item.label as (typeof DOC_LABEL_OPTIONS)[number]) && (
+                              <input
+                                type="text"
+                                value={item.label}
+                                onChange={(e) => updateFileLabel(idx, e.target.value)}
+                                placeholder="Custom label"
+                                className="flex-1 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(idx)}
+                          className="text-gray-400 hover:text-red-600 p-1 cursor-pointer shrink-0"
+                          title="Remove file"
+                        >
+                          <FaTimes />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end space-x-3">

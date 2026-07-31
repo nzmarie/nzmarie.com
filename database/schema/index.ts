@@ -102,6 +102,7 @@ export const suburbReports = pgTable('suburb_reports', {
   suburb: varchar('suburb', { length: 100 }).notNull(),
   quarter: varchar('quarter', { length: 10 }).notNull(),
   year: integer('year').notNull(),
+  doc_label: varchar('doc_label', { length: 100 }).notNull().default('Main Report'),
   file_url: text('file_url').notNull(),
   file_name: varchar('file_name', { length: 255 }).notNull(),
   file_size: integer('file_size'),
@@ -114,7 +115,7 @@ export const suburbReports = pgTable('suburb_reports', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex('idx_suburb_reports_suburb_quarter').on(table.suburb, table.quarter, table.year),
+  uniqueIndex('idx_suburb_reports_suburb_quarter_label').on(table.suburb, table.quarter, table.year, table.doc_label),
   index('idx_suburb_reports_suburb').on(table.suburb),
   index('idx_suburb_reports_quarter').on(table.quarter, table.year),
   index('idx_suburb_reports_status').on(table.status),

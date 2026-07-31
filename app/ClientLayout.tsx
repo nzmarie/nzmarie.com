@@ -5,6 +5,8 @@ import { ChatProvider } from "./ChatProvider";
 import Chatbot from "@/components/Chatbot";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 
@@ -31,6 +33,17 @@ export default function ClientLayout({
           <GoogleAnalytics />
           {children}
           {!isAdmin && <Chatbot />}
+          <ToastContainer
+            position="bottom-center"
+            autoClose={4000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            pauseOnHover
+            theme="dark"
+          />
         </ChatProvider>
       </Theme>
     </QueryClientProvider>

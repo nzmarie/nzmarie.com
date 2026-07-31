@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS suburb_reports (
   suburb VARCHAR(100) NOT NULL,
   quarter VARCHAR(10) NOT NULL,  -- Format: 'Q1-2026', 'Q2-2026'
   year INT NOT NULL,
+  doc_label VARCHAR(100) NOT NULL DEFAULT 'Main Report',  -- e.g. Main Report, Cover Letter, About Marie
   
   -- File Information
   file_url TEXT NOT NULL,  -- Cloudflare R2 public URL
@@ -30,11 +31,12 @@ CREATE TABLE IF NOT EXISTS suburb_reports (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Unique constraint: one report per suburb per quarter
-CREATE UNIQUE INDEX IF NOT EXISTS idx_suburb_reports_suburb_quarter 
-ON suburb_reports(suburb, quarter, year);
+-- Unique constraint: multiple documents allowed per suburb/quarter/year, unique per doc_label
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suburb_reports_suburb_quarter_label 
+ON suburb_reports(suburb, quarter, year, doc_label);
 
 -- Indexes
+CREATE INDEX IF NOT EXISTS idx_suburb_reports_doc_label ON suburb_reports(doc_label);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_suburb ON suburb_reports(suburb);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_quarter ON suburb_reports(quarter, year);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_status ON suburb_reports(status);

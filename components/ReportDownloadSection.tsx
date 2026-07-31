@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { toast } from "react-toastify";
 import { translations, Language } from "../lib/translations";
 
 export default function ReportDownloadSection({ lang = "en" }: { lang?: Language }) {
@@ -15,13 +16,11 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "limit">("idle");
   const [limitInfo, setLimitInfo] = useState<{ remaining: number; canDownload: boolean } | null>(null);
-  const [isCheckingLimit, setIsCheckingLimit] = useState(false);
 
   // Check download limit when email changes
   React.useEffect(() => {
     const checkLimit = async () => {
       if (formData.email && formData.email.includes('@') && formData.suburb) {
-        setIsCheckingLimit(true);
         try {
           const res = await fetch(
             `/api/reports/check-limit?email=${encodeURIComponent(formData.email)}&suburb=${encodeURIComponent(formData.suburb)}`
@@ -40,8 +39,6 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
           }
         } catch (error) {
           console.error("Failed to check download limit:", error);
-        } finally {
-          setIsCheckingLimit(false);
         }
       }
     };
@@ -71,6 +68,7 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
       if (res.ok && data.action === "download" && data.downloadUrl) {
         setStatus("success");
         window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+        toast.success(t.success, { toastId: "report-download-success", autoClose: 5000 });
         setTimeout(() => {
           setStatus("idle");
           // Re-check limit after download
@@ -78,11 +76,17 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
         }, 3000);
       } else if (data.reason === "limit") {
         setStatus("limit");
+        toast.warning(t.limitReached, { toastId: "report-download-limit", autoClose: 6000 });
+      } else if (data.reason === "no_report") {
+        toast.info(t.inProgress, { toastId: "report-no-report", autoClose: 6000 });
+        setStatus("idle");
       } else {
         setStatus("error");
+        toast.error(t.error, { toastId: "report-download-error" });
       }
     } catch {
       setStatus("error");
+      toast.error(t.error, { toastId: "report-download-error" });
     }
   };
 
@@ -155,6 +159,7 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
                 <option value="Long Bay">Long Bay</option>
                 <option value="Torbay">Torbay</option>
                 <option value="Mairangi Bay">Mairangi Bay</option>
+                <option value="North Shore">North Shore</option>
               </select>
             </div>
             <div className="flex flex-col">
@@ -171,23 +176,7 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
             </div>
           </div>
 
-          <div className="flex items-start bg-slate-50 p-4 rounded-lg border border-slate-100">
-            <div className="flex items-center h-5">
-              <input
-                type="checkbox"
-                id="newsletter-consent"
-                checked={formData.subscribe}
-                onChange={(e) => setFormData({ ...formData, subscribe: e.target.checked })}
-                className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition duration-150 ease-in-out cursor-pointer"
-              />
-            </div>
-            <div className="ml-3 text-sm leading-5">
-              <label htmlFor="newsletter-consent" className="font-medium text-slate-700 cursor-pointer select-none">
-                {t.consent}
-              </label>
-            </div>
-          </div>
-
+          {/* Newsletter consent checkbox hidden until the feature is implemented */}
           <button
             type="submit"
             disabled={status === "loading" || status === "limit" || (limitInfo !== null && !limitInfo.canDownload)}
@@ -213,18 +202,6 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
                 ℹ️ {limitInfo.remaining} download{limitInfo.remaining !== 1 ? 's' : ''} remaining this month
               </p>
             </div>
-          )}
-
-          {status === "success" && (
-            <p className="text-green-600 text-sm text-center font-medium mt-2">{t.success}</p>
-          )}
-
-          {status === "error" && (
-            <p className="text-red-500 text-sm text-center font-medium mt-2">{t.error}</p>
-          )}
-
-          {isCheckingLimit && (
-            <p className="text-gray-500 text-xs text-center mt-2">Checking download availability...</p>
           )}
         </form>
       </div>

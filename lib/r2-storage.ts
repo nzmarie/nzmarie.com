@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || 'a128bb5285b94a778d4b098fbd8266f1';
@@ -53,4 +53,15 @@ export async function getSignedDownloadUrl(key: string, expiresIn: number = 300)
     Key: key,
   });
   return getSignedUrl(s3Client, command, { expiresIn });
+}
+
+export async function deleteFromR2(key: string): Promise<void> {
+  if (R2_ACCESS_KEY_ID.startsWith('mock-')) {
+    console.log('Skipping real R2 delete due to mock credentials');
+    return;
+  }
+  await s3Client.send(new DeleteObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+  }));
 }

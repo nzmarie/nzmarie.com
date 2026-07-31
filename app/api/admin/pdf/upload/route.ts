@@ -13,6 +13,10 @@ const r2 = new S3Client({
   },
 });
 
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+}
+
 export async function POST(request: Request) {
   const session = await auth();
 
@@ -22,62 +26,100 @@ export async function POST(request: Request) {
 
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
     const suburb = formData.get('suburb') as string;
     const quarter = formData.get('quarter') as string;
     const yearRaw = formData.get('year') as string;
     const year = parseInt(yearRaw, 10);
 
-    if (!file || !suburb || !quarter || isNaN(year)) {
+    // Support multiple files via the "files" field, with a parallel "labels" array (JSON).
+    // Backward compatible with a single "file" field.
+    const files = (formData.getAll('files') as File[]).filter(f => f && typeof f.name === 'string');
+    const singleFile = formData.get('file') as File | null;
+    if (singleFile && typeof singleFile.name === 'string') files.push(singleFile);
+
+    let labels: string[] = [];
+    const labelsRaw = formData.get('labels') as string | null;
+    if (labelsRaw) {
+      try {
+        labels = JSON.parse(labelsRaw) as string[];
+      } catch {
+        labels = [];
+      }
+    }
+
+    if (!suburb || !quarter || isNaN(year)) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    if (file.type !== 'application/pdf') {
+    if (files.length === 0) {
       return NextResponse.json(
-        { error: 'Only PDF files are allowed' },
+        { error: 'No PDF file provided' },
         { status: 400 }
       );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const key = `reports/${suburb}/${quarter}-${year}.pdf`;
-
-    if (process.env.R2_BUCKET_NAME) {
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: key,
-          Body: buffer,
-          ContentType: 'application/pdf',
-        })
-      );
-    }
-
     const publicDomain = (process.env.R2_PUBLIC_DOMAIN || 'https://r2.nzmarie.com').replace(/\/+$/, '');
-    const fileUrl = `${publicDomain}/${key}`;
+    const folderKey = `reports/${suburb}/${quarter}-${year}`;
+    const uploaded: Array<{ file_name: string; doc_label: string; file_url: string; file_size: number; report?: unknown }> = [];
 
-    const result = await marieDB.query(
-      `INSERT INTO suburb_reports (suburb, quarter, year, file_url, file_name, file_size, uploaded_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
-       ON CONFLICT (suburb, quarter, year) 
-       DO UPDATE SET 
-         file_url = $4, 
-         file_name = $5,
-         file_size = $6, 
-         uploaded_at = NOW(),
-         updated_at = NOW()
-       RETURNING *`,
-      [suburb, quarter, year, fileUrl, file.name || `${suburb}_${quarter}_${year}.pdf`, buffer.length, session.user.email]
-    );
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (file.type !== 'application/pdf') {
+        return NextResponse.json(
+          { error: `Only PDF files are allowed (${file.name})` },
+          { status: 400 }
+        );
+      }
+
+      const docLabel = (labels[i] || '').trim() || 'Main Report';
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const key = `${folderKey}/${sanitizeFileName(file.name)}`;
+
+      if (process.env.R2_BUCKET_NAME) {
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: key,
+            Body: buffer,
+            ContentType: 'application/pdf',
+          })
+        );
+      }
+
+      const fileUrl = `${publicDomain}/${key}`;
+
+      const result = await marieDB.query(
+        `INSERT INTO suburb_reports (suburb, quarter, year, doc_label, file_url, file_name, file_size, uploaded_by, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+         ON CONFLICT (suburb, quarter, year, doc_label)
+         DO UPDATE SET
+           file_url = $5,
+           file_name = $6,
+           file_size = $7,
+           uploaded_at = NOW(),
+           updated_at = NOW()
+         RETURNING *`,
+        [suburb, quarter, year, docLabel, fileUrl, file.name || `${suburb}_${quarter}_${year}.pdf`, buffer.length, session.user.email]
+      );
+
+      uploaded.push({
+        file_name: file.name,
+        doc_label: docLabel,
+        file_url: fileUrl,
+        file_size: buffer.length,
+        report: result.rows[0],
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      url: fileUrl,
-      report: result.rows[0],
-      message: 'Report uploaded successfully',
+      reports: uploaded,
+      count: uploaded.length,
+      message: `${uploaded.length} report document(s) uploaded successfully`,
     });
   } catch (error) {
     console.error('Error uploading PDF:', error);

@@ -8,6 +8,7 @@ interface PdfReport {
   suburb: string;
   quarter: string;
   year: number;
+  doc_label?: string | null;
   file_url: string;
   file_name: string;
   title?: string;
@@ -157,7 +158,7 @@ export default function SendReportModal({
               >
                 {reports.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.suburb} {r.year} {r.quarter} — {r.file_name}
+                    {r.suburb} {r.year} {r.quarter} — {r.doc_label || 'Main Report'} — {r.file_name}
                   </option>
                 ))}
               </select>

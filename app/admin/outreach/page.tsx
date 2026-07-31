@@ -950,18 +950,21 @@ export default function OutreachPage() {
       .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
     }, [currentContentKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Synchronously restore classic items from the shared per-page cache
-  // when switching to classic mode. This avoids a loading flash when the
-  // data was already fetched under infinite scroll (same cache key).
-  if (isClassic && classicItems.length === 0) {
+  // Restore classic items from the shared per-page cache when switching to
+  // classic mode. This avoids a loading flash when the data was already
+  // fetched under infinite scroll (same cache key). Runs in an effect to
+  // avoid calling setState during render, which causes a "Too many re-renders"
+  // loop when the cached page is empty.
+  useEffect(() => {
+    if (!isClassic || classicItems.length > 0) return;
     const key = buildCacheKey(currentPage);
     const cached = cacheRef.current.get(key);
     if (cached) {
       setClassicItems(cached.items);
       setClassicPagination(cached.pagination);
-      if (classicLoading) setClassicLoading(false);
+      setClassicLoading(false);
     }
-  }
+  }, [isClassic, classicItems.length, currentPage, buildCacheKey]);
 
   if (status === 'loading') return <SkeletonOutreach />;
 
@@ -3063,26 +3066,27 @@ function ReportFilterSection({
       </div>
       {reportSuburbFilter && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-          {availableReports.filter(r => r.suburb === reportSuburbFilter).map(r => {
-            const label = `${r.year}-${r.quarter}`;
-            return (
-              <button
-                key={`${r.suburb}-${label}`}
-                onClick={() => setReportQuarterFilter(prev => prev === label ? '' : label)}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: reportQuarterFilter === label ? '#3b82f6' : '#eff6ff',
-                  color: reportQuarterFilter === label ? 'white' : '#2563eb',
-                  border: reportQuarterFilter === label ? '2px solid #3b82f6' : '2px solid #bfdbfe',
-                  borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
-                  fontWeight: reportQuarterFilter === label ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+          {[...new Set(
+            availableReports
+              .filter(r => r.suburb === reportSuburbFilter)
+              .map(r => `${r.year}-${r.quarter}`)
+          )].map(label => (
+            <button
+              key={`${reportSuburbFilter}-${label}`}
+              onClick={() => setReportQuarterFilter(prev => prev === label ? '' : label)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: reportQuarterFilter === label ? '#3b82f6' : '#eff6ff',
+                color: reportQuarterFilter === label ? 'white' : '#2563eb',
+                border: reportQuarterFilter === label ? '2px solid #3b82f6' : '2px solid #bfdbfe',
+                borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
+                fontWeight: reportQuarterFilter === label ? '600' : '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
       <div style={{ display: "flex", gap: "8px" }}>

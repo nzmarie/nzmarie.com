@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS suburb_reports (
   suburb VARCHAR(100) NOT NULL,
   quarter VARCHAR(10) NOT NULL,
   year INT NOT NULL,
+  doc_label VARCHAR(100) NOT NULL DEFAULT 'Main Report',
   file_url TEXT NOT NULL,
   file_name VARCHAR(255) NOT NULL,
   file_size INT,
@@ -145,7 +146,8 @@ CREATE INDEX IF NOT EXISTS idx_outreach_sent_at ON outreach_tasks(sent_at);
 CREATE INDEX IF NOT EXISTS idx_outreach_property_id ON outreach_tasks(property_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_property_suburb ON outreach_tasks(property_address, suburb) WHERE status != 'RETURNED';
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_suburb_reports_suburb_quarter ON suburb_reports(suburb, quarter, year);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suburb_reports_suburb_quarter_label ON suburb_reports(suburb, quarter, year, doc_label);
+CREATE INDEX IF NOT EXISTS idx_suburb_reports_doc_label ON suburb_reports(doc_label);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_suburb ON suburb_reports(suburb);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_quarter ON suburb_reports(quarter, year);
 CREATE INDEX IF NOT EXISTS idx_suburb_reports_status ON suburb_reports(status);

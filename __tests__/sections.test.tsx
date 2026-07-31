@@ -3,6 +3,17 @@ import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-libra
 import React from "react";
 import AppraisalSection from "../components/AppraisalSection";
 import ReportDownloadSection from "../components/ReportDownloadSection";
+import { toast } from "react-toastify";
+
+vi.mock("react-toastify", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+  ToastContainer: () => null,
+}));
 
 // Mock Google Maps API
 const mockGoogleMaps = {
@@ -65,8 +76,9 @@ document.createElement = vi.fn((tagName: string) => {
 
 let mockFetchSuccess = true;
 let errorOnAppraisalSubmit = false;
+let mockNoReport = false;
 
-const mockFetch = vi.fn().mockImplementation((url, options) => {
+const mockFetchImpl = (url: unknown, options?: unknown) => {
   // API endpoints (not Google Maps)
   if (typeof url === 'string' && url.includes("/api/appraisal")) {
     if (errorOnAppraisalSubmit) {
@@ -83,16 +95,23 @@ const mockFetch = vi.fn().mockImplementation((url, options) => {
       json: () => Promise.resolve({ success: true }),
     });
   }
-  
+
   if (!mockFetchSuccess) {
     return Promise.reject(new Error("API Error"));
+  }
+  if (mockNoReport) {
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ success: false, reason: "no_report" }),
+    });
   }
   return Promise.resolve({
     ok: true,
     json: () => Promise.resolve({ success: true, action: "download", downloadUrl: "https://example.com/mock.pdf" }),
   });
-});
-global.fetch = mockFetch;
+};
+const mockFetch = vi.fn(mockFetchImpl);
+global.fetch = mockFetch as unknown as typeof fetch;
 
 describe("AppraisalSection", () => {
   beforeEach(() => {
@@ -235,6 +254,12 @@ describe("ReportDownloadSection", () => {
   beforeEach(() => {
     mockFetch.mockClear();
     mockFetchSuccess = true;
+    mockNoReport = false;
+    mockFetch.mockImplementation(mockFetchImpl);
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.info).mockClear();
+    vi.mocked(toast.warning).mockClear();
   });
 
   afterEach(() => {
@@ -277,6 +302,7 @@ describe("ReportDownloadSection", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith("/api/reports/download", expect.any(Object));
+    expect(toast.success).toHaveBeenCalledWith("Thank you! Your download has started.", expect.any(Object));
   });
 
   it("should handle error state when api fails", async () => {
@@ -295,6 +321,27 @@ describe("ReportDownloadSection", () => {
       await Promise.resolve().catch(() => {});
     });
 
-    expect(screen.getByText("An error occurred. Please try again.")).toBeDefined();
+    expect(toast.error).toHaveBeenCalledWith("An error occurred. Please try again.", expect.any(Object));
+  });
+
+  it("shows in-progress message when the selected suburb has no report", async () => {
+    mockNoReport = true;
+    render(<ReportDownloadSection lang="en" />);
+    const firstNameInput = screen.getByPlaceholderText("e.g. Jane");
+    const emailInput = screen.getByPlaceholderText("e.g. jane@example.com");
+    const submitBtn = screen.getByRole("button", { name: /Download PDF Report/i });
+
+    fireEvent.change(firstNameInput, { target: { value: "Jane" } });
+    fireEvent.change(emailInput, { target: { value: "jane@example.com" } });
+
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith(
+        "The report for this suburb is currently being prepared. Please check back soon.",
+        expect.any(Object)
+      );
+    });
+    mockNoReport = false;
   });
 });

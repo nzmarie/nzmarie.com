@@ -6,7 +6,7 @@ import { updateDownloadTracking } from "../../../../lib/tracking";
 
 const DOWNLOAD_LIMIT = 5;
 const DOWNLOAD_WINDOW_DAYS = 30;
-const allowedSuburbs = ["Oteha", "Northcross", "Albany", "Browns Bay", "Glenfield", "Pinehill", "Rosedale", "Long Bay", "Torbay", "Mairangi Bay", "Others"];
+const allowedSuburbs = ["Oteha", "Northcross", "Albany", "Browns Bay", "Glenfield", "Pinehill", "Rosedale", "Long Bay", "Torbay", "Mairangi Bay", "North Shore", "Others"];
 
 function isAllowedSuburb(value: unknown): value is string {
   return typeof value === "string" && allowedSuburbs.includes(value);
@@ -73,13 +73,17 @@ export async function POST(req: Request) {
     }
 
     const suburbReportResult = await query<{ id: string; file_url: string }>(
-      `SELECT id, file_url FROM suburb_reports WHERE suburb = $1 AND status = 'active' ORDER BY year DESC, quarter DESC, uploaded_at DESC LIMIT 1`,
+      `SELECT id, file_url FROM suburb_reports WHERE suburb = $1 AND status = 'active'
+       ORDER BY
+         CASE WHEN COALESCE(doc_label, 'Main Report') = 'Main Report' THEN 0 ELSE 1 END,
+         year DESC, quarter DESC, uploaded_at DESC
+       LIMIT 1`,
       [suburb]
     );
     const suburbReportRows = getRows<{ id: string; file_url: string }>(suburbReportResult);
 
     let fileUrlFromSuburbReports: string | null = null;
-    let r2Key: string;
+    let r2Key: string | null = null;
 
     if (suburbReportRows.length > 0 && suburbReportRows[0].file_url) {
       fileUrlFromSuburbReports = suburbReportRows[0].file_url;
@@ -96,9 +100,18 @@ export async function POST(req: Request) {
       const reportRows = getRows<{ r2_key: string }>(reportResult);
       if (reportRows.length > 0) {
         r2Key = reportRows[0].r2_key;
-      } else {
-        r2Key = `reports/${suburb}/latest.pdf`;
       }
+    }
+
+    if (!r2Key) {
+      return NextResponse.json(
+        {
+          success: false,
+          reason: "no_report",
+          message: "The report for this suburb is currently being prepared. Please check back soon.",
+        },
+        { status: 200 }
+      );
     }
 
     const insertResult = await query<{ id: string }>(
