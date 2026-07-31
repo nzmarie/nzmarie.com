@@ -38,10 +38,27 @@ export async function GET(request: Request) {
         return NextResponse.json({ available_campaigns: cachedList });
       }
 
-      const result = await marieDB.query(
-        `SELECT DISTINCT campaign_key FROM outreach_send_logs ORDER BY campaign_key DESC`
+      // Campaigns are driven by the uploaded quarterly report sets
+      // (suburb + year + quarter), e.g. "2026_Q2_Torbay". Historical send-log
+      // campaigns are merged in so past dispatches remain selectable.
+      const [reportResult, logsResult] = await Promise.all([
+        marieDB.query(
+          `SELECT DISTINCT suburb, year, quarter
+           FROM suburb_reports
+           WHERE status = 'active'
+           ORDER BY year DESC, quarter DESC, suburb ASC`
+        ),
+        marieDB.query(
+          `SELECT DISTINCT campaign_key FROM outreach_send_logs`
+        ),
+      ]);
+
+      const reportCampaigns = (reportResult.rows as { suburb: string; year: number; quarter: string }[]).map(
+        (r) => `${r.year}_${r.quarter}_${r.suburb}`
       );
-      const list = result.rows.map((r: { campaign_key: string }) => r.campaign_key);
+      const logCampaigns = (logsResult.rows as { campaign_key: string }[]).map((r) => r.campaign_key);
+
+      const list = [...new Set([...reportCampaigns, ...logCampaigns])].sort((a, b) => b.localeCompare(a));
       setCache('campaign_list', list, 300_000);
       return NextResponse.json({ available_campaigns: list });
     }

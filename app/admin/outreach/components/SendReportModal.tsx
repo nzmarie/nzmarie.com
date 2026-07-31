@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FaFilePdf, FaPaperPlane, FaTimes, FaCheckCircle } from 'react-icons/fa';
 
 interface PdfReport {
@@ -14,12 +14,47 @@ interface PdfReport {
   title?: string;
 }
 
+interface ReportSet {
+  key: string;
+  suburb: string;
+  quarter: string;
+  year: number;
+  mainReportId: string;
+  docCount: number;
+}
+
 interface SendReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedIds: string[];
   suburb: string;
   onSuccess: () => void;
+}
+
+// Groups individual PDF documents into a single quarterly report set
+// (suburb + year + quarter). Each set appears once, e.g. "Torbay 2026 Q2".
+function buildReportSets(reports: PdfReport[]): ReportSet[] {
+  const grouped = new Map<string, PdfReport[]>();
+  for (const r of reports) {
+    const key = `${r.suburb}|${r.year}|${r.quarter}`;
+    const arr = grouped.get(key) || [];
+    arr.push(r);
+    grouped.set(key, arr);
+  }
+
+  return Array.from(grouped.entries()).map(([key, docs]) => {
+    const first = docs[0];
+    const main =
+      docs.find((d) => (d.doc_label || '').toLowerCase() === 'main report') || first;
+    return {
+      key,
+      suburb: first.suburb,
+      quarter: first.quarter,
+      year: first.year,
+      mainReportId: main.id,
+      docCount: docs.length,
+    };
+  }).sort((a, b) => b.year - a.year || b.quarter.localeCompare(a.quarter) || a.suburb.localeCompare(b.suburb));
 }
 
 export default function SendReportModal({
@@ -30,13 +65,16 @@ export default function SendReportModal({
   onSuccess,
 }: SendReportModalProps) {
   const [reports, setReports] = useState<PdfReport[]>([]);
+  const [selectedSetKey, setSelectedSetKey] = useState<string>('');
   const [selectedReportId, setSelectedReportId] = useState<string>('');
   const [customTitle, setCustomTitle] = useState<string>('');
-  const [campaignKey, setCampaignKey] = useState<string>('2026_Q2');
+  const [campaignKey, setCampaignKey] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchingReports, setFetchingReports] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+
+  const reportSets = useMemo(() => buildReportSets(reports), [reports]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -44,6 +82,11 @@ export default function SendReportModal({
     const fetchReports = async () => {
       setFetchingReports(true);
       setError('');
+      setReports([]);
+      setSelectedSetKey('');
+      setSelectedReportId('');
+      setCustomTitle('');
+      setCampaignKey('');
       try {
         const querySuburb = suburb && suburb !== 'all-suburbs' ? suburb : '';
         const url = `/api/admin/pdf/reports?status=active${querySuburb ? `&suburb=${encodeURIComponent(querySuburb)}` : ''}`;
@@ -51,13 +94,9 @@ export default function SendReportModal({
         if (res.ok) {
           const data = await res.json();
           setReports(data.reports || []);
-          if (data.reports && data.reports.length > 0) {
-            setSelectedReportId(data.reports[0].id);
-            setCustomTitle(`${data.reports[0].suburb} ${data.reports[0].year} ${data.reports[0].quarter} Market Report`);
-            setCampaignKey(`${data.reports[0].year}_${data.reports[0].quarter}_${data.reports[0].suburb}`);
-          } else {
-            setCustomTitle(`${suburb || 'Suburbs'} 2026 Q2 Market Report`);
-            setCampaignKey(`2026_Q2_${suburb || 'General'}`);
+          if ((data.reports || []).length === 0) {
+            setCustomTitle(`${suburb || 'Suburbs'} ${new Date().getFullYear()} Q2 Market Report`);
+            setCampaignKey(`${new Date().getFullYear()}_Q2_${suburb || 'General'}`);
           }
         }
       } catch (err) {
@@ -70,16 +109,23 @@ export default function SendReportModal({
     fetchReports();
   }, [isOpen, suburb]);
 
+  // Auto-select the first (or previously selected) report set and fill the
+  // dispatch details from it. Idempotent: identical state values are no-ops.
+  useEffect(() => {
+    if (reportSets.length === 0) return;
+    const target = reportSets.find((s) => s.key === selectedSetKey) || reportSets[0];
+    if (target.key !== selectedSetKey) {
+      setSelectedSetKey(target.key);
+    }
+    setSelectedReportId(target.mainReportId);
+    setCustomTitle(`${target.suburb} ${target.year} ${target.quarter} Market Report`);
+    setCampaignKey(`${target.year}_${target.quarter}_${target.suburb}`);
+  }, [reportSets, selectedSetKey]);
+
   if (!isOpen) return null;
 
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const repId = e.target.value;
-    setSelectedReportId(repId);
-    const found = reports.find((r) => r.id === repId);
-    if (found) {
-      setCustomTitle(`${found.suburb} ${found.year} ${found.quarter} Market Report`);
-      setCampaignKey(`${found.year}_${found.quarter}_${found.suburb}`);
-    }
+  const handleSetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSetKey(e.target.value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,22 +192,28 @@ export default function SendReportModal({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Select Finalized PDF Report (from PDF Manager)
+              Select Report Set (from PDF Manager)
             </label>
             {fetchingReports ? (
               <div className="h-10 bg-slate-100 rounded-xl animate-pulse" />
-            ) : reports.length > 0 ? (
-              <select
-                value={selectedReportId}
-                onChange={handleSelectChange}
-                className="w-full h-10 px-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
-              >
-                {reports.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.suburb} {r.year} {r.quarter} — {r.doc_label || 'Main Report'} — {r.file_name}
-                  </option>
-                ))}
-              </select>
+            ) : reportSets.length > 0 ? (
+              <>
+                <select
+                  value={selectedSetKey}
+                  onChange={handleSetChange}
+                  className="w-full h-10 px-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
+                >
+                  {reportSets.map((set) => (
+                    <option key={set.key} value={set.key}>
+                      {set.suburb} {set.year} {set.quarter}
+                      {set.docCount > 1 ? ` (${set.docCount} documents)` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-slate-400">
+                  One quarterly report set per suburb — documents are grouped into a single set.
+                </p>
+              </>
             ) : (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center space-x-2">
                 <FaFilePdf className="text-amber-600 flex-shrink-0" />

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -213,16 +213,19 @@ describe('Extra admin pages', () => {
     expect(screen.getByText('Downloads')).toBeTruthy();
   });
 
-  it('renders assets page with QR Codes tab by default and tab switching', async () => {
+  it('renders assets page with PDF Reports tab by default and tab switching', async () => {
     const qc = createQueryClient();
     render(
       <QueryClientProvider client={qc}>
         <PDFManagerPage />
       </QueryClientProvider>
     );
-    expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
-    expect(screen.getByText('QR Codes')).toBeTruthy();
+    expect(await screen.findByText('Upload Quarterly Report')).toBeTruthy();
     expect(screen.getByText('PDF Reports')).toBeTruthy();
+    expect(screen.getByText('QR Codes')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('QR Codes'));
+    expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
   });
 
   it('renders Last Sold Data For Sale table with suburb rows', async () => {

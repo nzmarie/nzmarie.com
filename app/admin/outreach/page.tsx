@@ -258,6 +258,7 @@ export default function OutreachPage() {
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [sendTargetIds, setSendTargetIds] = useState<string[]>([]);
+  const [sendTargetSuburb, setSendTargetSuburb] = useState('');
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [historyTargetId, setHistoryTargetId] = useState<string | null>(null);
   const [historyTargetAddress, setHistoryTargetAddress] = useState<string>('');
@@ -265,6 +266,14 @@ export default function OutreachPage() {
   const openSendModal = (ids?: string[]) => {
     const targets = ids || Array.from(selected);
     if (targets.length === 0) return;
+    // Derive the report suburb from the selected target addresses so the
+    // modal defaults to that suburb's quarterly report set (e.g. "Torbay 2026 Q2").
+    const suburbs = new Set(
+      targets
+        .map((id) => items.find((p) => p.id === id)?.suburb)
+        .filter((s): s is string => Boolean(s))
+    );
+    setSendTargetSuburb(suburbs.size === 1 ? [...suburbs][0] : '');
     setSendTargetIds(targets);
     setSendModalOpen(true);
   };
@@ -2969,7 +2978,7 @@ export default function OutreachPage() {
           isOpen={sendModalOpen}
           onClose={() => setSendModalOpen(false)}
           selectedIds={sendTargetIds}
-          suburb={suburbFilter}
+          suburb={sendTargetSuburb}
           onSuccess={() => {
             showNotification('success', 'Report dispatch logged successfully');
             clearSelected();

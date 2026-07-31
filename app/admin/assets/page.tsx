@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
 import { isAdmin } from '@/lib/permissions';
-import { FaFilePdf, FaUpload, FaDownload, FaTimes, FaCheck, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash, FaEye, FaArrowRight } from 'react-icons/fa';
+import { FaFilePdf, FaUpload, FaDownload, FaTimes, FaCheck, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash, FaEye, FaArrowRight, FaInfoCircle } from 'react-icons/fa';
 
 interface SuburbReport {
   id: string;
@@ -127,7 +127,7 @@ export default function PDFManagerPage() {
   const [qrDotColor, setQrDotColor] = useState('#000000');
   const [qrBgColor, setQrBgColor] = useState('#FFFFFF');
   const [qrCornerColor, setQrCornerColor] = useState('#000000');
-  const [activeTab, setActiveTab] = useState<'qr' | 'pdf'>('qr');
+  const [activeTab, setActiveTab] = useState<'qr' | 'pdf'>('pdf');
 
   const userEmail = session?.user?.email ?? '';
   const isUserAdmin = isAdmin(userEmail);
@@ -448,6 +448,15 @@ export default function PDFManagerPage() {
     });
   }, [reports]);
 
+  // Documents already uploaded for the currently selected report set
+  // (suburb + year + quarter). Re-uploading replaces matching labels only.
+  const existingSetReports = useMemo(
+    () => reports.filter(
+      (r) => r.suburb === suburb && r.year === Number(year) && r.quarter === quarter
+    ),
+    [reports, suburb, year, quarter]
+  );
+
   if (status === 'loading') {
     return <SkeletonPDFManager />;
   }
@@ -486,17 +495,6 @@ export default function PDFManagerPage() {
       {/* Tab Bar */}
       <div className="flex space-x-1 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('qr')}
-          className={`px-5 py-3 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer ${
-            activeTab === 'qr'
-              ? 'bg-white text-purple-700 border border-gray-200 border-b-white -mb-px'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <FaQrcode className="inline w-4 h-4 mr-1.5" />
-          QR Codes
-        </button>
-        <button
           onClick={() => setActiveTab('pdf')}
           className={`px-5 py-3 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer ${
             activeTab === 'pdf'
@@ -506,6 +504,17 @@ export default function PDFManagerPage() {
         >
           <FaFilePdf className="inline w-4 h-4 mr-1.5" />
           PDF Reports
+        </button>
+        <button
+          onClick={() => setActiveTab('qr')}
+          className={`px-5 py-3 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer ${
+            activeTab === 'qr'
+              ? 'bg-white text-purple-700 border border-gray-200 border-b-white -mb-px'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <FaQrcode className="inline w-4 h-4 mr-1.5" />
+          QR Codes
         </button>
       </div>
 
@@ -975,6 +984,15 @@ export default function PDFManagerPage() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
                   PDF Report Files <span className="text-red-500">*</span>
                 </label>
+                {existingSetReports.length > 0 && (
+                  <div className="mb-3 flex items-start space-x-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                    <FaInfoCircle className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <span>
+                      A report set for <strong>{suburb} {year}-{quarter}</strong> already exists ({existingSetReports.length} document{existingSetReports.length !== 1 ? 's' : ''}).
+                      Re-uploading a document with the same label will replace it; other documents in this set are kept.
+                    </span>
+                  </div>
+                )}
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-blue-500 transition-colors bg-slate-50">
                   <input
                     ref={fileInputRef}

@@ -557,6 +557,16 @@ export default function DispatchStatsPanel() {
 
   const statsCacheRef = React.useRef<Map<string, CampaignStats>>(new Map());
 
+  // "2026_Q2_Torbay" → "Torbay 2026 Q2"; falls back to a readable key.
+  const formatCampaignLabel = (c: string) => {
+    const parts = c.split('_');
+    if (parts.length >= 3) {
+      const [year, quarter, ...suburbParts] = parts;
+      return `${suburbParts.join(' ')} ${year} ${quarter}`.trim();
+    }
+    return c.replace(/_/g, ' ');
+  };
+
   useEffect(() => {
     const fetchCampaigns = async () => {
       setLoadingCampaigns(true);
@@ -638,20 +648,25 @@ export default function DispatchStatsPanel() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="text-sm font-semibold text-slate-700">Campaign:</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm font-semibold text-slate-700 mr-1">Campaign:</label>
             {campaigns.length === 0 ? (
               <span className="text-sm text-slate-400">No campaign data available.</span>
             ) : (
-              <select
-                value={selectedCampaign}
-                onChange={(e) => setSelectedCampaign(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {campaigns.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              campaigns.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setSelectedCampaign(c)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    selectedCampaign === c
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {formatCampaignLabel(c)}
+                </button>
+              ))
             )}
           </div>
 

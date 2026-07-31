@@ -166,7 +166,7 @@ describe('DispatchStatsPanel', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Campaign:')).toBeTruthy();
-      expect(screen.getByText('2026_Q2_Oteha')).toBeTruthy();
+      expect(screen.getByText('Oteha 2026 Q2')).toBeTruthy();
     });
 
     await waitFor(() => {
@@ -239,8 +239,7 @@ describe('DispatchStatsPanel', () => {
       expect(screen.getByText('42')).toBeTruthy();
     });
 
-    const select = screen.getByRole('combobox');
-    fireEvent.change(select, { target: { value: '2026_Q1_Oteha' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Oteha 2026 Q1' }));
 
     await waitFor(() => {
       expect(screen.getByText('18')).toBeTruthy();
