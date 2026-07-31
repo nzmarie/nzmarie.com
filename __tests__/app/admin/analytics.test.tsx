@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+let chartDataCalls = 0;
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -71,9 +73,16 @@ beforeEach(() => {
       });
     }
     if (typeof url === 'string' && url.includes('/api/admin/analytics/chart-data')) {
+      chartDataCalls += 1;
       return Promise.resolve({
         ok: true,
         json: async () => ({ success: true, data: { monthlyData: [], quarterlyData: [] } }),
+      });
+    }
+    if (typeof url === 'string' && url.includes('/api/admin/analytics/available-suburbs')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ availableSuburbs: ['Oteha', 'Albany', 'Torbay'] }),
       });
     }
     if (typeof url === 'string' && url.includes('/api/admin/analytics/overview')) {
@@ -99,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  chartDataCalls = 0;
 });
 
 describe('Analytics Page — suburb sync between sections', () => {
@@ -152,6 +162,26 @@ describe('Analytics Page — suburb sync between sections', () => {
       const reinzAlbany = screen.getAllByText('Albany');
       expect(reinzAlbany[0].className).toContain('text-white');
     });
+  });
+
+  it('does not refetch chart data repeatedly when selection is unchanged', async () => {
+    const AnalyticsPage = (await import('../../../app/admin/analytics/page')).default;
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <AnalyticsPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(chartDataCalls).toBeGreaterThan(0);
+    });
+
+    const callsAfterLoad = chartDataCalls;
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(chartDataCalls).toBe(callsAfterLoad);
   });
 
   it('click North Shore in Analysis Data deselects all REINZ suburbs', async () => {

@@ -176,7 +176,11 @@ export default function AnalyticsPage() {
         setSelectedSuburbs(prev => {
           if (prev.length === 0) return prev;
           const filtered = prev.filter(s => sorted.includes(s));
-          return filtered.length > 0 ? filtered : [sorted[0]];
+          const next = filtered.length > 0 ? filtered : [sorted[0]];
+          if (next.length === prev.length && next.every((s, i) => s === prev[i])) {
+            return prev;
+          }
+          return next;
         });
       }
     } catch {
@@ -244,7 +248,7 @@ export default function AnalyticsPage() {
       fetchLastSoldData(lastSoldFilterType);
       fetchScanData();
     }
-  }, [status, session, fetchAvailableSuburbs, fetchLastSoldData, fetchScanData, lastSoldFilterType]);
+  }, [status, session?.user?.email, fetchAvailableSuburbs, fetchLastSoldData, fetchScanData, lastSoldFilterType]);
 
   const fetchChartData = useCallback(async (suburbs: string[]) => {
     const reqId = ++chartReqIdRef.current;
@@ -268,11 +272,13 @@ export default function AnalyticsPage() {
     }
   }, []);
 
+  const selectedSuburbsKey = selectedSuburbs.join(',');
+
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && isSuperAdmin(session.user.email)) {
-      fetchChartData(selectedSuburbs);
+      fetchChartData(selectedSuburbsKey.split(',').filter(Boolean));
     }
-  }, [status, session, selectedSuburbs, fetchChartData]);
+  }, [status, session?.user?.email, selectedSuburbsKey, fetchChartData]);
 
   const toggleSuburb = (s: string) => {
     setSelectedSuburbs(prev =>

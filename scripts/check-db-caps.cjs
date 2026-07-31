@@ -1,5 +1,4 @@
 const { Client } = require('pg');
-const fs = require('fs');
 
 const DB_URL = 'postgresql://nzmarie:HHa_pWigbE_OcEX83FNRPg@baby-centaur-27756.j77.aws-ap-southeast-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full';
 
