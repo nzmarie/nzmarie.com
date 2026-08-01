@@ -44,6 +44,10 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const city = searchParams.get('city');
   const suburb = searchParams.get('suburb');
   const street = searchParams.get('street');
+  const streets = (searchParams.get('streets') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const search = searchParams.get('search');
   const lastSoldNone = searchParams.get('last_sold_none');
   const lastSoldMinYears = searchParams.get('last_sold_min_years');
@@ -97,6 +101,11 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   if (street) {
     conditions.push(`street ILIKE $${params.length + 1}`);
     params.push(street);
+  }
+  if (streets.length > 0) {
+    const placeholders = streets.map((_, i) => `$${params.length + 1 + i}`).join(', ');
+    conditions.push(`street IN (${placeholders})`);
+    params.push(...streets);
   }
   if (search) {
     const cleanSearch = search.split(',')[0].trim();
@@ -247,6 +256,10 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const city = searchParams.get('city');
   const suburb = searchParams.get('suburb');
   const street = searchParams.get('street');
+  const streets = (searchParams.get('streets') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const search = searchParams.get('search');
   const sortOrder = searchParams.get('sortOrder') || 'asc';
   const page = parseInt(searchParams.get('page') || '1');
@@ -348,6 +361,11 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   if (street) {
     query += ` AND op.street ILIKE $${idx++}`;
     params.push(street);
+  }
+  if (streets.length > 0) {
+    const placeholders = streets.map(() => `$${idx++}`).join(', ');
+    query += ` AND op.street IN (${placeholders})`;
+    params.push(...streets);
   }
   if (search) {
     const cleanSearch = search.split(',')[0].trim();

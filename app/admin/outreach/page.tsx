@@ -10,6 +10,7 @@ import { getFixedImageUrl } from '@/lib/google-maps';
 import SendReportModal from './components/SendReportModal';
 import DispatchHistoryDrawer from './components/DispatchHistoryDrawer';
 import SentDateFilter from './components/SentDateFilter';
+import TodayRunSection, { type TodayRunData } from './components/TodayRunSection';
 import {
   FaBed,
   FaBath,
@@ -222,6 +223,7 @@ export default function OutreachPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [suburbFilter, setSuburbFilter] = useState('');
   const [streetFilter, setStreetFilter] = useState('');
+  const [runStreetFilter, setRunStreetFilter] = useState<string[]>([]);
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [lastSoldPreset, setLastSoldPreset] = useState('all');
@@ -235,6 +237,21 @@ export default function OutreachPage() {
   const [sortMode, setSortMode] = useState<'address' | 'time'>('address');
   const [sentDateFilter, setSentDateFilter] = useState<string[]>([todayDateKey()]);
   const [availableReports, setAvailableReports] = useState<Array<{ suburb: string; quarter: string; year: number; id: string }>>([]);
+
+  // Today's Run: shared street-clusters data (fetched when Pending + Unsent).
+  const [todayRunBudget, setTodayRunBudget] = useState<number>(() => {
+    if (typeof window === 'undefined') return 30;
+    const stored = window.localStorage.getItem('today_run_budget_v2');
+    const n = stored ? parseInt(stored, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 30;
+  });
+  const [todayRunData, setTodayRunData] = useState<TodayRunData | null>(null);
+  const [todayRunLoading, setTodayRunLoading] = useState(false);
+  const [todayRunError, setTodayRunError] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.localStorage.setItem('today_run_budget_v2', String(todayRunBudget));
+  }, [todayRunBudget]);
 
   // Debounce filter changes: only trigger fetch after 300ms of filter stability
   const [debouncedFilterKey, setDebouncedFilterKey] = useState(0);
@@ -253,7 +270,7 @@ export default function OutreachPage() {
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
@@ -500,13 +517,13 @@ export default function OutreachPage() {
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
   const buildCacheKey = useCallback((page: number) => {
     return [
-      activeTab, suburbFilter, streetFilter, campaignFilter,
+      activeTab, suburbFilter, streetFilter, runStreetFilter.join(','), campaignFilter,
       debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset,
       reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
       sentDateFilter.join(','),
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
@@ -526,8 +543,10 @@ export default function OutreachPage() {
       limit: PAGE_SIZE.toString(),
       sortOrder,
     });
-    if (suburbFilter) params.set('suburb', suburbFilter);
+    const effectiveSuburb = suburbFilter || (runStreetFilter.length > 0 ? reportSuburbFilter : '');
+    if (effectiveSuburb) params.set('suburb', effectiveSuburb);
     if (streetFilter) params.set('street', streetFilter);
+    if (runStreetFilter.length > 0) params.set('streets', runStreetFilter.join(','));
     if (campaignFilter) params.set('campaign', campaignFilter);
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (propertyFilter === 'house') params.set('standalone_only', 'true');
@@ -565,7 +584,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -918,6 +937,50 @@ export default function OutreachPage() {
     return displayItems.map((i) => i.id).join(',') + '|' + sortOrder;
   }, [displayItems, sortOrder]);
 
+  const firstPendingSuburb = useMemo(() => {
+    const s = displayItems.find((i) => i.suburb)?.suburb;
+    return s || '';
+  }, [displayItems]);
+
+  // Fetch street clusters when Pending + Unsent + a suburb is known.
+  const todayRunSuburb = reportSuburbFilter || firstPendingSuburb;
+  useEffect(() => {
+    if (activeTab !== 'pending' || sentStatusFilter !== 'unsent' || !todayRunSuburb) {
+      setTodayRunData(null);
+      setTodayRunError(null);
+      return;
+    }
+    let cancelled = false;
+    setTodayRunLoading(true);
+    setTodayRunError(null);
+    const params = new URLSearchParams({
+      suburb: todayRunSuburb,
+      radius: '500',
+      budget: String(todayRunBudget),
+      status: 'pending',
+      sent_status: 'unsent',
+    });
+    if (reportQuarterFilter) {
+      params.set('report_quarter', reportQuarterFilter);
+    }
+    fetch(`/api/admin/outreach/street-clusters?${params}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (!json.success) throw new Error(json.error || 'Failed to load');
+        setTodayRunData(json);
+      })
+      .catch((e) => {
+        if (!cancelled) setTodayRunError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setTodayRunLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, reportQuarterFilter]);
+
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
     
@@ -935,7 +998,20 @@ export default function OutreachPage() {
       }
       streetMap.get(street)!.push(item);
     });
-    
+
+    // Cluster order map: street name -> sort index, from the street-clusters
+    // API for the active suburb. Streets not in the cluster list sort last.
+    const clusterOrder = new Map<string, number>();
+    if (todayRunData && todayRunData.suburb) {
+      todayRunData.groups.forEach((g) => {
+        g.streets.forEach((s) => {
+          if (!clusterOrder.has(s.street)) {
+            clusterOrder.set(s.street, clusterOrder.size);
+          }
+        });
+      });
+    }
+
     return Array.from(groups.entries())
       .map(([suburb, streetMap]) => {
         const streets = Array.from(streetMap.entries())
@@ -960,7 +1036,14 @@ export default function OutreachPage() {
             }),
             totalCount: properties.length,
           }))
-          .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }));
+          .sort((a, b) => {
+            const ia = clusterOrder.get(a.street);
+            const ib = clusterOrder.get(b.street);
+            if (ia !== undefined && ib !== undefined) return ia - ib;
+            if (ia !== undefined) return -1;
+            if (ib !== undefined) return 1;
+            return a.street.localeCompare(b.street, undefined, { sensitivity: 'base' });
+          });
         
         return {
           suburb,
@@ -969,7 +1052,7 @@ export default function OutreachPage() {
         };
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
-    }, [currentContentKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [currentContentKey, todayRunData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restore classic items from the shared per-page cache when switching to
   // classic mode. This avoids a loading flash when the data was already
@@ -1042,7 +1125,7 @@ export default function OutreachPage() {
             {(['liked', 'pending', 'sent'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); }}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); setRunStreetFilter([]); setStreetFilter(''); }}
                 style={{
                   padding: '8px 18px',
                   backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
@@ -1086,8 +1169,34 @@ export default function OutreachPage() {
               sentStatusFilter={sentStatusFilter}
               setSentStatusFilter={setSentStatusFilter}
               setSuburbFilter={setSuburbFilter}
+              onClearRunFilter={() => {
+                setRunStreetFilter([]);
+                setStreetFilter('');
+              }}
             />
           </div>
+        )}
+
+        {activeTab === 'pending' && sentStatusFilter === 'unsent' && (
+          <TodayRunSection
+            isMobile={isMobile}
+            status={sentStatusFilter}
+            data={todayRunData}
+            loading={todayRunLoading}
+            error={todayRunError}
+            budget={todayRunBudget}
+            onBudgetChange={setTodayRunBudget}
+            onSelectRun={(suburb, streets) => {
+              setReportSuburbFilter(suburb);
+              setRunStreetFilter(streets);
+              setStreetFilter('');
+            }}
+            onSelectStreet={(suburb, street) => {
+              setReportSuburbFilter(suburb);
+              setRunStreetFilter([]);
+              setStreetFilter(street);
+            }}
+          />
         )}
 
         {activeTab === 'sent' && (
@@ -1525,6 +1634,8 @@ export default function OutreachPage() {
               setReportQuarterFilter('');
               setSentStatusFilter('all');
               setSortMode('address');
+              setRunStreetFilter([]);
+              setStreetFilter('');
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
@@ -3121,6 +3232,7 @@ function ReportFilterSection({
   reportQuarterFilter, setReportQuarterFilter,
   sentStatusFilter, setSentStatusFilter,
   setSuburbFilter,
+  onClearRunFilter,
 }: {
   availableReports: Array<{ suburb: string; quarter: string; year: number; id: string }>;
   setAvailableReports: React.Dispatch<React.SetStateAction<Array<{ suburb: string; quarter: string; year: number; id: string }>>>;
@@ -3131,6 +3243,7 @@ function ReportFilterSection({
   sentStatusFilter: 'all' | 'sent' | 'unsent';
   setSentStatusFilter: React.Dispatch<React.SetStateAction<'all' | 'sent' | 'unsent'>>;
   setSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
+  onClearRunFilter: () => void;
 }) {
   const [loaded, setLoaded] = useState(availableReports.length > 0);
   const [loading, setLoading] = useState(false);
@@ -3219,6 +3332,7 @@ function ReportFilterSection({
               setSuburbFilter(prev => prev === s ? '' : s);
               setReportSuburbFilter(prev => prev === s ? '' : s);
               setReportQuarterFilter('');
+              onClearRunFilter();
             }}
             style={{
               padding: '7px 14px',
@@ -3234,7 +3348,7 @@ function ReportFilterSection({
           </button>
         ))}
         {reportSuburbFilter && (
-          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); }}
+          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); onClearRunFilter(); }}
             style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >✕ Clear</button>
         )}
@@ -3248,7 +3362,7 @@ function ReportFilterSection({
           )].map(label => (
             <button
               key={`${reportSuburbFilter}-${label}`}
-              onClick={() => setReportQuarterFilter(prev => prev === label ? '' : label)}
+              onClick={() => { setReportQuarterFilter(prev => prev === label ? '' : label); onClearRunFilter(); }}
               style={{
                 padding: '6px 12px',
                 backgroundColor: reportQuarterFilter === label ? '#3b82f6' : '#eff6ff',
