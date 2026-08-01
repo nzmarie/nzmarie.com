@@ -11,15 +11,7 @@ ALTER TABLE appraisal_leads
 ADD COLUMN IF NOT EXISTS suburb VARCHAR(100);
 
 -- Add index if not exists
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_indexes 
-        WHERE indexname = 'idx_appraisal_suburb'
-    ) THEN
-        CREATE INDEX idx_appraisal_suburb ON appraisal_leads(suburb);
-    END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_appraisal_suburb ON appraisal_leads(suburb);
 
 -- =====================================================
 -- 2. Enhanced report_downloads table with tracking
@@ -28,21 +20,13 @@ END $$;
 ALTER TABLE report_downloads
 ADD COLUMN IF NOT EXISTS name VARCHAR(255),
 ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
-ADD COLUMN IF NOT EXISTS ip_address INET,
+ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45),
 ADD COLUMN IF NOT EXISTS user_agent TEXT,
 ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(50);
 
 -- Add indexes
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_downloads_tracking_code') THEN
-        CREATE INDEX idx_downloads_tracking_code ON report_downloads(tracking_code);
-    END IF;
-    
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_downloads_source') THEN
-        CREATE INDEX idx_downloads_source ON report_downloads(source);
-    END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_downloads_tracking_code ON report_downloads(tracking_code);
+CREATE INDEX IF NOT EXISTS idx_downloads_source ON report_downloads(source);
 
 -- =====================================================
 -- 3. Create direct_mail_campaigns table
@@ -81,6 +65,15 @@ CREATE TABLE IF NOT EXISTS direct_mail_campaigns (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   notes TEXT
 );
+
+-- Ensure all enhancement columns exist (the table may already exist, created
+-- by 004_create_direct_mail_campaigns.sql, without the columns below)
+ALTER TABLE direct_mail_campaigns
+ADD COLUMN IF NOT EXISTS campaign_type VARCHAR(50) DEFAULT 'quarterly_report',
+ADD COLUMN IF NOT EXISTS planned_date DATE,
+ADD COLUMN IF NOT EXISTS quarter VARCHAR(10),
+ADD COLUMN IF NOT EXISTS total_printed INT DEFAULT 0,
+ADD COLUMN IF NOT EXISTS total_delivered INT DEFAULT 0;
 
 -- Add indexes
 CREATE INDEX IF NOT EXISTS idx_campaigns_suburb ON direct_mail_campaigns(suburb);
@@ -149,6 +142,25 @@ CREATE TABLE IF NOT EXISTS direct_mail_addresses (
   created_by VARCHAR(255)
 );
 
+-- Ensure all enhancement columns exist (the table may already exist, created
+-- by 005_create_direct_mail_addresses.sql, without the columns below)
+ALTER TABLE direct_mail_addresses
+ADD COLUMN IF NOT EXISTS street VARCHAR(255),
+ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS owner_email VARCHAR(255),
+ADD COLUMN IF NOT EXISTS owner_phone VARCHAR(50),
+ADD COLUMN IF NOT EXISTS mail_status VARCHAR(20) DEFAULT 'SENT',
+ADD COLUMN IF NOT EXISTS appraisal_requested_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS appraisal_lead_id UUID,
+ADD COLUMN IF NOT EXISTS contact_attempts INT DEFAULT 0,
+ADD COLUMN IF NOT EXISTS agent_notes TEXT,
+ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'medium',
+ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5, 2),
+ADD COLUMN IF NOT EXISTS commission_amount DECIMAL(10, 2),
+ADD COLUMN IF NOT EXISTS next_quarter_action VARCHAR(100),
+ADD COLUMN IF NOT EXISTS next_quarter_scheduled_at DATE,
+ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);
+
 -- Add indexes
 CREATE INDEX IF NOT EXISTS idx_dma_campaign_id ON direct_mail_addresses(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_dma_suburb ON direct_mail_addresses(suburb);
@@ -166,173 +178,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_dma_campaign_address
 ON direct_mail_addresses(campaign_id, property_address);
 
 -- =====================================================
--- 5. Helper Functions
+-- 5. Helper Functions & Triggers
 -- =====================================================
-
--- Function: Check download limit (5 per month per email+suburb)
-CREATE OR REPLACE FUNCTION check_download_limit(
-  p_email VARCHAR(255),
-  p_suburb VARCHAR(100)
-) RETURNS JSON AS $$
-DECLARE
-  v_count INT;
-  v_can_download BOOLEAN;
-  v_message TEXT;
-  v_reset_date TIMESTAMPTZ;
-BEGIN
-  -- Count downloads this month
-  SELECT COUNT(*) INTO v_count
-  FROM report_downloads
-  WHERE email = p_email
-  AND suburb = p_suburb
-  AND downloaded_at >= date_trunc('month', CURRENT_TIMESTAMP);
-  
-  -- Check limit (5 per month)
-  v_can_download := (v_count < 5);
-  v_reset_date := date_trunc('month', CURRENT_TIMESTAMP) + interval '1 month';
-  
-  IF v_can_download THEN
-    v_message := format('You can download %s more times this month', 5 - v_count);
-  ELSE
-    v_message := 'Download limit reached for this month (5 downloads max)';
-  END IF;
-  
-  RETURN json_build_object(
-    'can_download', v_can_download,
-    'current_count', v_count,
-    'limit', 5,
-    'remaining', GREATEST(0, 5 - v_count),
-    'message', v_message,
-    'reset_date', v_reset_date
-  );
-END;
-$$ LANGUAGE plpgsql;
-
--- Function: Auto-update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
+-- NOTE: The PL/pgSQL helper functions and database triggers originally defined
+--       here cannot run on CockroachDB (PL/pgSQL functions containing DML and
+--       DROP/CREATE TRIGGER are not supported). Their behaviour is implemented
+--       in the application layer instead:
+--         - lib/tracking.ts (updateDownloadTracking / updateAppraisalTracking)
+--         - app/api/reports/download/route.ts
+--       The simple updated_at trigger on each table is created by the matching
+--       00X_create_*.sql migration, and check_download_limit is created by
+--       003_add_missing_fields.sql.
 -- =====================================================
--- 6. Triggers
--- =====================================================
-
--- Trigger: Update updated_at on campaigns
-DROP TRIGGER IF EXISTS trg_update_campaign_timestamp ON direct_mail_campaigns;
-CREATE TRIGGER trg_update_campaign_timestamp
-BEFORE UPDATE ON direct_mail_campaigns
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
--- Trigger: Update updated_at on addresses
-DROP TRIGGER IF EXISTS trg_update_address_timestamp ON direct_mail_addresses;
-CREATE TRIGGER trg_update_address_timestamp
-BEFORE UPDATE ON direct_mail_addresses
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
--- Trigger: Track downloads automatically
-CREATE OR REPLACE FUNCTION update_download_tracking()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Update direct_mail_addresses when someone downloads
-  UPDATE direct_mail_addresses
-  SET 
-    has_downloaded = TRUE,
-    download_count = download_count + 1,
-    last_download_at = NEW.downloaded_at,
-    first_download_at = COALESCE(first_download_at, NEW.downloaded_at),
-    updated_at = NOW(),
-    contact_status = CASE 
-      WHEN contact_status = 'not_contacted' THEN 'attempted'
-      ELSE contact_status
-    END,
-    priority = CASE 
-      WHEN download_count + 1 >= 3 AND priority = 'medium' THEN 'high'
-      WHEN download_count + 1 >= 3 AND priority = 'low' THEN 'medium'
-      ELSE priority
-    END
-  WHERE tracking_code = NEW.tracking_code
-  OR (suburb = NEW.suburb AND owner_email = NEW.email);
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_update_download_tracking ON report_downloads;
-CREATE TRIGGER trg_update_download_tracking
-AFTER INSERT ON report_downloads
-FOR EACH ROW
-EXECUTE FUNCTION update_download_tracking();
-
--- Trigger: Track appraisal requests automatically
-CREATE OR REPLACE FUNCTION update_appraisal_tracking()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Update direct_mail_addresses when someone requests appraisal
-  UPDATE direct_mail_addresses
-  SET 
-    has_requested_appraisal = TRUE,
-    appraisal_requested_at = NEW.created_at,
-    appraisal_lead_id = NEW.id,
-    contact_status = 'interested',
-    priority = 'high',
-    updated_at = NOW(),
-    next_follow_up_at = COALESCE(next_follow_up_at, CURRENT_DATE)
-  WHERE (property_address = NEW.property_address AND suburb = NEW.suburb)
-  OR (owner_email = NEW.email AND suburb = NEW.suburb);
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_update_appraisal_tracking ON appraisal_leads;
-CREATE TRIGGER trg_update_appraisal_tracking
-AFTER INSERT ON appraisal_leads
-FOR EACH ROW
-EXECUTE FUNCTION update_appraisal_tracking();
-
--- =====================================================
--- 7. Update campaign stats automatically
--- =====================================================
-CREATE OR REPLACE FUNCTION update_campaign_stats()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE direct_mail_campaigns
-    SET 
-      total_addresses = (
-        SELECT COUNT(*) 
-        FROM direct_mail_addresses 
-        WHERE campaign_id = NEW.campaign_id
-      ),
-      updated_at = NOW()
-    WHERE id = NEW.campaign_id;
-  ELSIF TG_OP = 'DELETE' THEN
-    UPDATE direct_mail_campaigns
-    SET 
-      total_addresses = (
-        SELECT COUNT(*) 
-        FROM direct_mail_addresses 
-        WHERE campaign_id = OLD.campaign_id
-      ),
-      updated_at = NOW()
-    WHERE id = OLD.campaign_id;
-  END IF;
-  
-  RETURN COALESCE(NEW, OLD);
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_update_campaign_stats ON direct_mail_addresses;
-CREATE TRIGGER trg_update_campaign_stats
-AFTER INSERT OR DELETE ON direct_mail_addresses
-FOR EACH ROW
-EXECUTE FUNCTION update_campaign_stats();
 
 -- =====================================================
 -- Migration Complete

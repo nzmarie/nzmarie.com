@@ -54,6 +54,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const noJunkMail = searchParams.get('no_junk_mail');
   const sentStatus = searchParams.get('sent_status');
   const reportQuarter = searchParams.get('report_quarter');
+  const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortOrder = searchParams.get('sortOrder') || 'asc';
   const sortMode = searchParams.get('sort_mode');
 
@@ -67,6 +68,14 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   } else if (status) {
     conditions.push(`status = $${params.length + 1}`);
     params.push(status);
+  }
+
+  if (sentDates.length > 0) {
+    const placeholders = sentDates.map((_, i) => `$${params.length + 1 + i}`).join(', ');
+    conditions.push(
+      `EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = id AND (sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN (${placeholders}))`
+    );
+    params.push(...sentDates);
   }
 
   if (campaign) {
@@ -252,6 +261,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const noJunkMail = searchParams.get('no_junk_mail');
   const sentStatus = searchParams.get('sent_status');
   const reportQuarter = searchParams.get('report_quarter');
+  const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortMode = searchParams.get('sort_mode');
 
   let query = `
@@ -421,6 +431,13 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     } else {
       query += ` AND NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id)`;
     }
+  }
+
+  if (sentDates.length > 0) {
+    const placeholders = sentDates.map((_, i) => `$${idx + i}`).join(', ');
+    query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id AND (sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN (${placeholders}))`;
+    params.push(...sentDates);
+    idx += sentDates.length;
   }
 
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';

@@ -128,6 +128,37 @@ describe('Outreach MV GET /api/admin/outreach', () => {
     const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
     expect(queryCall).toContain('no_junk_mail = true');
   });
+
+  it('filters sent properties by sent_dates', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=sent&sent_dates=2026-07-01,2026-07-02&limit=10'));
+    expect(response.status).toBe(200);
+
+    const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    const params = vi.mocked(marieDB.query).mock.calls[0][1] as unknown[];
+    expect(queryCall).toContain("(sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN");
+    expect(params).toContain('2026-07-01');
+    expect(params).toContain('2026-07-02');
+  });
+
+  it('filters sent properties by sent_dates in legacy mode', async () => {
+    mockAuth();
+    process.env.USE_OUTREACH_MV = 'false';
+
+    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=sent&sent_dates=2026-07-03&limit=10'));
+    expect(response.status).toBe(200);
+
+    const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    const params = vi.mocked(marieDB.query).mock.calls[0][1] as unknown[];
+    expect(queryCall).toContain('outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id');
+    expect(queryCall).toContain("(sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN");
+    expect(params).toContain('2026-07-03');
+  });
 });
 
 describe('Outreach MV POST /api/admin/outreach (add property)', () => {

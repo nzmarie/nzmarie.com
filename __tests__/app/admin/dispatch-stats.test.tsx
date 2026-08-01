@@ -103,14 +103,16 @@ function makeFetchMock(overrides?: {
   scanLogs?: object;
   stats?: object;
   campaigns?: string[];
+  defaultCampaign?: string;
   scansError?: boolean;
   statsError?: boolean;
 }) {
   const campaigns = overrides?.campaigns ?? mockCampaigns;
   const stats = overrides?.stats ?? mockStats;
   const scanLogs = overrides?.scanLogs ?? { success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] };
+  const defaultCampaign = overrides?.defaultCampaign ?? '';
 
-  return vi.fn((url: RequestInfo) => {
+  return vi.fn((url: RequestInfo, init?: RequestInit) => {
     const s = String(url || '');
     if (s.includes('/api/admin/analytics/scans')) {
       if (overrides?.scansError) return Promise.reject(new Error('Scan logs unavailable'));
@@ -121,7 +123,10 @@ function makeFetchMock(overrides?: {
         if (overrides?.statsError) return Promise.resolve({ ok: false, json: async () => ({ error: 'Server error' }) });
         return Promise.resolve({ ok: true, json: async () => stats });
       }
-      return Promise.resolve({ ok: true, json: async () => ({ available_campaigns: campaigns }) });
+      return Promise.resolve({ ok: true, json: async () => ({ available_campaigns: campaigns, default_campaign: defaultCampaign }) });
+    }
+    if (s.includes('/api/admin/outreach/default-campaign') && init?.method === 'POST') {
+      return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
     }
     return Promise.resolve({ ok: true, json: async () => ({}) });
   });
@@ -244,6 +249,57 @@ describe('DispatchStatsPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('18')).toBeTruthy();
     });
+  });
+
+  it('preselects the default campaign when one is configured', async () => {
+    const fetchMock = makeFetchMock({ defaultCampaign: '2026_Q1_Oteha' });
+    (global.fetch as any) = fetchMock;
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
+    });
+
+    const q1Call = fetchMock.mock.calls.some(
+      ([url, init]) =>
+        String(url).includes('campaign-stats') && String(url).includes('campaign=2026_Q1_Oteha') && !init
+    );
+    expect(q1Call).toBe(true);
+  });
+
+  it('sets the selected campaign as default via the button', async () => {
+    const fetchMock = makeFetchMock();
+    (global.fetch as any) = fetchMock;
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '☆ Set as default' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '☆ Set as default' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
+    });
+
+    const postCall = fetchMock.mock.calls.some(
+      ([url, init]) =>
+        String(url).includes('/api/admin/outreach/default-campaign') &&
+        (init as RequestInit | undefined)?.method === 'POST'
+    );
+    expect(postCall).toBe(true);
   });
 
   it('shows campaign overview with pie chart and percentage legend', async () => {

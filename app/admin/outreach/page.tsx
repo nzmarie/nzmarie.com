@@ -9,6 +9,7 @@ import { isAdmin } from '@/lib/permissions';
 import { getFixedImageUrl } from '@/lib/google-maps';
 import SendReportModal from './components/SendReportModal';
 import DispatchHistoryDrawer from './components/DispatchHistoryDrawer';
+import SentDateFilter from './components/SentDateFilter';
 import {
   FaBed,
   FaBath,
@@ -99,6 +100,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const PAGE_SIZE = 18;
+
+function todayDateKey(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 interface PropertyHistoryRecord {
   date?: string;
@@ -224,6 +233,7 @@ export default function OutreachPage() {
   const [reportQuarterFilter, setReportQuarterFilter] = useState('');
   const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'sent' | 'unsent'>('all');
   const [sortMode, setSortMode] = useState<'address' | 'time'>('address');
+  const [sentDateFilter, setSentDateFilter] = useState<string[]>([todayDateKey()]);
   const [availableReports, setAvailableReports] = useState<Array<{ suburb: string; quarter: string; year: number; id: string }>>([]);
 
   // Debounce filter changes: only trigger fetch after 300ms of filter stability
@@ -243,7 +253,7 @@ export default function OutreachPage() {
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
@@ -493,9 +503,10 @@ export default function OutreachPage() {
       activeTab, suburbFilter, streetFilter, campaignFilter,
       debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset,
       reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
+      sentDateFilter.join(','),
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
@@ -538,6 +549,7 @@ export default function OutreachPage() {
     if (sentStatusFilter !== 'all') params.set('sent_status', sentStatusFilter);
     if (reportQuarterFilter) params.set('report_quarter', reportQuarterFilter);
     if (sortMode === 'time') params.set('sort_mode', 'time');
+    if (activeTab === 'sent' && sentDateFilter.length > 0) params.set('sent_dates', sentDateFilter.join(','));
 
     const res = await fetch(`/api/admin/outreach?${params}`, { signal: controller.signal });
     if (controller.signal.aborted) {
@@ -553,7 +565,7 @@ export default function OutreachPage() {
       })),
       pagination: data.pagination ?? null,
     };
-  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode]);
+  }, [activeTab, suburbFilter, streetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -1030,7 +1042,7 @@ export default function OutreachPage() {
             {(['liked', 'pending', 'sent'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); }}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); }}
                 style={{
                   padding: '8px 18px',
                   backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
@@ -1082,8 +1094,8 @@ export default function OutreachPage() {
           <div style={{ marginBottom: "20px", display: "flex", gap: "8px", alignItems: "center" }}>
             <span style={{ fontSize: "0.875rem", fontWeight: "500", color: "#4a5568" }}>Sort:</span>
             {([
-              { value: 'address' as const, label: 'By Street' },
               { value: 'time' as const, label: 'By Time' },
+              { value: 'address' as const, label: 'By Street' },
             ]).map(opt => (
               <button
                 key={opt.value}
@@ -1101,6 +1113,12 @@ export default function OutreachPage() {
                 {opt.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {activeTab === 'sent' && (
+          <div style={{ marginBottom: "20px" }}>
+            <SentDateFilter dates={sentDateFilter} onChange={setSentDateFilter} />
           </div>
         )}
 
@@ -1197,6 +1215,15 @@ export default function OutreachPage() {
 
         <div className="flex flex-wrap gap-3">
           <select
+            value={sortOrder}
+            onChange={(e) => { setSortOrder(e.target.value as 'asc' | 'desc'); }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="asc">📅 Time: Oldest First</option>
+            <option value="desc">📅 Time: Newest First</option>
+          </select>
+
+          <select
             value={streetFilter}
             onChange={(e) => { setStreetFilter(e.target.value); }}
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1206,15 +1233,6 @@ export default function OutreachPage() {
             {availableStreets.map((street) => (
               <option key={street} value={street}>{street}</option>
             ))}
-          </select>
-
-          <select
-            value={sortOrder}
-            onChange={(e) => { setSortOrder(e.target.value as 'asc' | 'desc'); }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="asc">📅 Time: Oldest First</option>
-            <option value="desc">📅 Time: Newest First</option>
           </select>
         </div>
 
@@ -1405,6 +1423,71 @@ export default function OutreachPage() {
             ))}
           </div>
         </div>
+        )}
+
+        {/* No Junk Mail filter — always available on mobile, even when a report filter is active */}
+        {isMobile && (reportSuburbFilter || reportQuarterFilter) && (
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+              No Junk Mail
+            </label>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => setJunkFilter(junkFilter === 'no_junk' ? 'all' : 'no_junk')}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: junkFilter === 'no_junk' ? '#ef4444' : 'white',
+                  color: junkFilter === 'no_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'no_junk' ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: junkFilter === 'no_junk' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Filter addresses with No Junk Mail"
+              >
+                🚫 No Junk
+              </button>
+              <button
+                onClick={() => setJunkFilter(junkFilter === 'allow_junk' ? 'all' : 'allow_junk')}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: junkFilter === 'allow_junk' ? '#22c55e' : 'white',
+                  color: junkFilter === 'allow_junk' ? 'white' : '#4a5568',
+                  border: junkFilter === 'allow_junk' ? '2px solid #22c55e' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: junkFilter === 'allow_junk' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Filter addresses without No Junk Mail"
+              >
+                ✅ Allow Junk
+              </button>
+              <button
+                onClick={() => setJunkFilter('all')}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: junkFilter === 'all' ? '#3b82f6' : 'white',
+                  color: junkFilter === 'all' ? 'white' : '#4a5568',
+                  border: junkFilter === 'all' ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: junkFilter === 'all' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Show all addresses"
+              >
+                All
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="flex flex-wrap gap-3">
@@ -2648,11 +2731,42 @@ export default function OutreachPage() {
                                      className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
                                    />
                                    <div className="min-w-0 flex-1">
-                                     <div className="flex flex-wrap items-center gap-3">
-                                       <div className="font-medium text-slate-800 truncate">
-                                         {prop.property_address}
-                                       </div>
-                                       <div className="flex gap-2 shrink-0">
+                                      <div className="flex flex-wrap items-center gap-3">
+                                        <div className="font-medium text-slate-800 truncate">
+                                          {prop.property_address}
+                                        </div>
+                                        {prop.joined_property_id && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const pid = prop.joined_property_id;
+                                              if (!pid) return;
+                                              const newVal = !prop.no_junk_mail;
+                                              cacheRef.current.clear();
+                                              setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                                              setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                                              fetch(`/api/admin/properties/${pid}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ no_junk_mail: newVal }),
+                                              }).catch(() => {
+                                                cacheRef.current.clear();
+                                                setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                                                setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                                              });
+                                            }}
+                                            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors ${
+                                              prop.no_junk_mail
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                            }`}
+                                            title={prop.no_junk_mail ? 'No Junk Mail - click to allow' : 'Click to mark No Junk Mail'}
+                                          >
+                                            🚫
+                                          </button>
+                                        )}
+                                        <div className="flex gap-2 shrink-0">
                                          {(prop.pv_url || prop.property_url) && (
                                            <a
                                              href={prop.pv_url || prop.property_url || ''}
@@ -3032,10 +3146,62 @@ function ReportFilterSection({
         }));
         setAvailableReports(reports);
         setLoaded(true);
+        try {
+          const dr = await fetch('/api/admin/outreach/default-report');
+          if (dr.ok) {
+            const d = await dr.json();
+            if (d?.defaultReport?.suburb && d?.defaultReport?.label) {
+              const { suburb, label } = d.defaultReport;
+              const exists = reports.some((r: { suburb: string; quarter: string; year: number }) => r.suburb === suburb && `${r.year}-${r.quarter}` === label);
+              if (exists) {
+                setDefaultReport({ suburb, label });
+                setSuburbFilter(suburb);
+                setReportSuburbFilter(suburb);
+                setReportQuarterFilter(label);
+              }
+            }
+          }
+        } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
     setLoading(false);
-  }, [loading, loaded, setAvailableReports]);
+  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter]);
+
+  const initRef = useRef(false);
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+    if (!loaded) {
+      loadReports();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [defaultReport, setDefaultReport] = useState<{ suburb: string; label: string } | null>(null);
+  const [savingDefault, setSavingDefault] = useState(false);
+
+  const setAsDefault = async () => {
+    if (!reportSuburbFilter || !reportQuarterFilter) return;
+    setSavingDefault(true);
+    try {
+      const res = await fetch('/api/admin/outreach/default-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: reportSuburbFilter, label: reportQuarterFilter }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        setDefaultReport({ suburb: reportSuburbFilter, label: reportQuarterFilter });
+      }
+    } catch { /* ignore */ }
+    setSavingDefault(false);
+  };
+
+  const isCurrentDefault =
+    !!defaultReport &&
+    defaultReport.suburb === reportSuburbFilter &&
+    defaultReport.label === reportQuarterFilter;
+
   return (
     <>
       <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
@@ -3064,7 +3230,7 @@ function ReportFilterSection({
               transition: 'all 0.2s ease',
             }}
           >
-            {s}
+            {s}{defaultReport?.suburb === s ? ' ★' : ''}
           </button>
         ))}
         {reportSuburbFilter && (
@@ -3093,10 +3259,28 @@ function ReportFilterSection({
                 transition: 'all 0.2s ease',
               }}
             >
-              {label}
+              {label}{defaultReport?.suburb === reportSuburbFilter && defaultReport?.label === label ? ' ★' : ''}
             </button>
           ))}
         </div>
+      )}
+      {reportSuburbFilter && reportQuarterFilter && (
+        <button
+          onClick={setAsDefault}
+          disabled={savingDefault}
+          title="Set as default report selection"
+          style={{
+            padding: '6px 12px',
+            backgroundColor: isCurrentDefault ? '#fefce8' : '#fffbeb',
+            color: isCurrentDefault ? '#a16207' : '#b45309',
+            border: isCurrentDefault ? '2px solid #fde047' : '2px solid #fcd34d',
+            borderRadius: '8px', cursor: savingDefault ? 'wait' : 'pointer', fontSize: '0.8rem',
+            fontWeight: '600', marginBottom: '10px',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {savingDefault ? 'Saving…' : isCurrentDefault ? '★ Default' : '☆ Set as default report'}
+        </button>
       )}
       <div style={{ display: "flex", gap: "8px" }}>
         {([

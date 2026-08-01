@@ -34,8 +34,21 @@ export async function GET(request: Request) {
 
     if (!campaign) {
       const cachedList = getCached<string[]>('campaign_list');
+
+      let defaultCampaign = '';
+      try {
+        const setting = await marieDB.query(
+          `SELECT setting_value FROM admin_settings WHERE setting_key = 'default_outreach_campaign'`
+        );
+        if (setting.rows.length > 0) {
+          defaultCampaign = String(setting.rows[0].setting_value);
+        }
+      } catch {
+        // admin_settings may not exist yet; fall back to no default
+      }
+
       if (cachedList) {
-        return NextResponse.json({ available_campaigns: cachedList });
+        return NextResponse.json({ available_campaigns: cachedList, default_campaign: defaultCampaign });
       }
 
       // Campaigns are driven by the uploaded quarterly report sets
@@ -59,8 +72,9 @@ export async function GET(request: Request) {
       const logCampaigns = (logsResult.rows as { campaign_key: string }[]).map((r) => r.campaign_key);
 
       const list = [...new Set([...reportCampaigns, ...logCampaigns])].sort((a, b) => b.localeCompare(a));
+
       setCache('campaign_list', list, 300_000);
-      return NextResponse.json({ available_campaigns: list });
+      return NextResponse.json({ available_campaigns: list, default_campaign: defaultCampaign });
     }
 
     const cacheKey = `stats_${campaign}`;

@@ -40,13 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_outreach_louis_property_id
 
 -- ============================================================
 -- 3. Trigram index for ILIKE '%search%' on property_address
---    Requires the pg_trgm extension (may need superuser)
+--    Skipped: pg_trgm is a PostgreSQL extension not available on
+--    CockroachDB. CockroachDB 23+ ships its own trigram support; the
+--    application relies on the plain idx_outreach_address index instead.
 -- ============================================================
-DO $$
-BEGIN
-  CREATE EXTENSION IF NOT EXISTS pg_trgm;
-  CREATE INDEX IF NOT EXISTS idx_outreach_address_trgm
-    ON outreach_properties USING gin (property_address gin_trgm_ops);
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'Trigram index skipped (pg_trgm not available): %', SQLERRM;
-END $$;

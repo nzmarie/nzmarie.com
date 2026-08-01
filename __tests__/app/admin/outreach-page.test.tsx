@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import OutreachPage from '../../../app/admin/outreach/page';
 
@@ -53,33 +53,43 @@ describe('Outreach page', () => {
   });
 
   it('renders pending address row and shows mark as sent button', async () => {
-    (global.fetch as any)
-      .mockResolvedValueOnce({
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?') && s.includes('status=pending')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                id: 'out-1',
+                property_address: '15 Marine Parade',
+                suburb: 'Takapuna',
+                city: 'Auckland',
+                region: 'North Shore',
+                status: 'PENDING',
+                created_at: '2026-07-01T10:00:00Z',
+              },
+            ],
+            pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         json: async () => ({
           success: true,
           data: [],
           pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
         }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: [
-            {
-              id: 'out-1',
-              property_address: '15 Marine Parade',
-              suburb: 'Takapuna',
-              city: 'Auckland',
-              region: 'North Shore',
-              status: 'PENDING',
-              created_at: '2026-07-01T10:00:00Z',
-            },
-          ],
-          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
-        }),
       });
+    });
 
     render(<OutreachPage />);
 
@@ -96,46 +106,51 @@ describe('Outreach page', () => {
   });
 
   it('marks a pending address as sent when row button clicked', async () => {
-    (global.fetch as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: [],
-          pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: [
-            {
+    let markedSent = false;
+    (global.fetch as any) = vi.fn((url: RequestInfo, init?: RequestInit) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/out-1/mark-sent')) {
+        markedSent = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
               id: 'out-1',
-              property_address: '15 Marine Parade',
-              suburb: 'Takapuna',
-              city: 'Auckland',
-              region: 'North Shore',
-              status: 'PENDING',
-              created_at: '2026-07-01T10:00:00Z',
+              status: 'SENT',
+              sent_by: 'nzlouis.com@gmail.com',
+              sent_at: '2026-07-02T12:00:00Z',
             },
-          ],
-          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: {
-            id: 'out-1',
-            status: 'SENT',
-            sent_by: 'nzlouis.com@gmail.com',
-            sent_at: '2026-07-02T12:00:00Z',
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?') && s.includes('status=pending')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: markedSent ? [] : [
+              {
+                id: 'out-1',
+                property_address: '15 Marine Parade',
+                suburb: 'Takapuna',
+                city: 'Auckland',
+                region: 'North Shore',
+                status: 'PENDING',
+                created_at: '2026-07-01T10:00:00Z',
+              },
+            ],
+            pagination: { page: 1, limit: 50, total: markedSent ? 0 : 1, totalPages: markedSent ? 0 : 1 },
+          }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         json: async () => ({
           success: true,
@@ -143,6 +158,7 @@ describe('Outreach page', () => {
           pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
         }),
       });
+    });
 
     window.confirm = vi.fn().mockReturnValue(true);
 
@@ -515,15 +531,25 @@ describe('Outreach page - List view mobile layout', () => {
       data: { user: { email: 'nzlouis.com@gmail.com' } },
       status: 'authenticated',
     };
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce({
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?') && s.includes('status=pending')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 50, total: 2, totalPages: 1 } }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 50, total: 2, totalPages: 1 } }),
       });
+    });
   });
 
   afterEach(() => {
@@ -597,5 +623,132 @@ describe('Outreach page - List view mobile layout', () => {
     // If the render-phase setState loop existed, React would throw
     // "Too many re-renders" before this assertion runs.
     expect(screen.getByRole('button', { name: /☰ List/i })).toBeDefined();
+  });
+
+  it('auto-selects the default report after reports are loaded', async () => {
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, defaultReport: { suburb: 'Oteha', label: '2026-Q2' } }),
+        });
+      }
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            reports: [
+              { suburb: 'Oteha', quarter: 'Q2', year: 2026, id: 'r1' },
+              { suburb: 'Torbay', quarter: 'Q1', year: 2026, id: 'r2' },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: 'Oteha ★' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2026-Q2 ★' })).toBeTruthy();
+  });
+
+  it('sets the selected report as default via the button', async () => {
+    let postedBody: { suburb?: string; label?: string } | null = null;
+    (global.fetch as any) = vi.fn((url: RequestInfo, init?: RequestInit) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/outreach/default-report')) {
+        if (init?.method === 'POST') {
+          postedBody = JSON.parse(String(init.body));
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: postedBody }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            reports: [{ suburb: 'Oteha', quarter: 'Q2', year: 2026, id: 'r1' }],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    fireEvent.click(await within(reportSection).findByRole('button', { name: 'Oteha' }));
+    fireEvent.click(await within(reportSection).findByRole('button', { name: '2026-Q2' }));
+
+    const setBtn = await within(reportSection).findByRole('button', { name: '☆ Set as default report' });
+    fireEvent.click(setBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
+    });
+    expect(postedBody).toEqual({ suburb: 'Oteha', label: '2026-Q2' });
+  });
+
+  it('filters sent properties by sent date via calendar', async () => {
+    const calls: string[] = [];
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      calls.push(s);
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: 'out-s-1',
+              property_address: '10 Sent St',
+              suburb: 'Takapuna',
+              city: 'Auckland',
+              region: 'North Shore',
+              status: 'sent',
+              created_at: '2026-07-01T10:00:00Z',
+              sent_at: '2026-07-02T12:00:00Z',
+            },
+          ],
+          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+        }),
+      });
+    });
+
+    render(<OutreachPage />);
+
+    const sentTab = await screen.findByRole('button', { name: /✓ Sent/i });
+    fireEvent.click(sentTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Today' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+
+    await waitFor(() => {
+      const sentFetch = calls.find(c => c.includes('/api/admin/outreach?') && c.includes('status=sent'));
+      expect(sentFetch).toBeTruthy();
+      expect(sentFetch).toContain('sent_dates=');
+    });
   });
 });

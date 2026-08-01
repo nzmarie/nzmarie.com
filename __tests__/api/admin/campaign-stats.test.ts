@@ -30,6 +30,9 @@ describe('GET /api/admin/outreach/campaign-stats', () => {
 
     vi.mocked(marieDB.query)
       .mockResolvedValueOnce({
+        rows: [{ setting_value: '2026_Q2_Torbay' }],
+      } as any)
+      .mockResolvedValueOnce({
         rows: [
           { suburb: 'Torbay', year: 2026, quarter: 'Q2' },
           { suburb: 'Oteha', year: 2026, quarter: 'Q1' },
@@ -53,6 +56,8 @@ describe('GET /api/admin/outreach/campaign-stats', () => {
     expect(data.available_campaigns).toContain('2025_Q4_Takapuna');
     // Newest quarter/year sorts first
     expect(data.available_campaigns[0]).toBe('2026_Q2_Torbay');
+    // Admin-configured default campaign is surfaced so the page can pre-select it
+    expect(data.default_campaign).toBe('2026_Q2_Torbay');
   });
 
   it('returns 401 for non-admin users', async () => {

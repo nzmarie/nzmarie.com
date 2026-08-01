@@ -550,9 +550,11 @@ function CombinedScanChart({ campaignScans, bizCardScans, campaignName = 'Campai
 export default function DispatchStatsPanel() {
   const [campaigns, setCampaigns] = useState<string[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
+  const [defaultCampaign, setDefaultCampaign] = useState<string>('');
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [savingDefault, setSavingDefault] = useState(false);
   const [error, setError] = useState('');
 
   const statsCacheRef = React.useRef<Map<string, CampaignStats>>(new Map());
@@ -575,9 +577,13 @@ export default function DispatchStatsPanel() {
         if (res.ok) {
           const data = await res.json();
           const list: string[] = data.available_campaigns || [];
+          const defaultCampaign: string = data.default_campaign || '';
           setCampaigns(list);
+          setDefaultCampaign(defaultCampaign);
           if (list.length > 0) {
-            setSelectedCampaign(list[0]);
+            setSelectedCampaign(
+              defaultCampaign && list.includes(defaultCampaign) ? defaultCampaign : list[0]
+            );
           }
         } else {
           const data = await res.json().catch(() => ({}));
@@ -591,6 +597,28 @@ export default function DispatchStatsPanel() {
     };
     fetchCampaigns();
   }, []);
+
+  const setAsDefault = async () => {
+    if (!selectedCampaign) return;
+    setSavingDefault(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/outreach/default-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaign: selectedCampaign }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to set default campaign');
+      }
+      setDefaultCampaign(selectedCampaign);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set default campaign');
+    } finally {
+      setSavingDefault(false);
+    }
+  };
 
   const fetchStats = useCallback(async (campaign: string) => {
     const cached = statsCacheRef.current.get(campaign);
@@ -665,8 +693,28 @@ export default function DispatchStatsPanel() {
                   }`}
                 >
                   {formatCampaignLabel(c)}
+                  {defaultCampaign === c && <span className="ml-1 opacity-80" title="Default campaign">★</span>}
                 </button>
               ))
+            )}
+            {campaigns.length > 0 && selectedCampaign && (
+              <button
+                type="button"
+                onClick={setAsDefault}
+                disabled={savingDefault}
+                title="Open this page with this campaign pre-selected"
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+                  defaultCampaign === selectedCampaign
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 cursor-default'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                } disabled:opacity-50`}
+              >
+                {savingDefault
+                  ? 'Saving…'
+                  : defaultCampaign === selectedCampaign
+                    ? '★ Default'
+                    : '☆ Set as default'}
+              </button>
             )}
           </div>
 
