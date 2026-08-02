@@ -171,3 +171,58 @@ function cloneGroupWith(streets: StreetPoint[]): ClusterGroup {
     extentMeters: 0,
   };
 }
+
+function orderedRunChunk(streets: StreetPoint[]): ClusterGroup[] {
+  return [
+    {
+      groupId: 1,
+      streets,
+      totalPending: streets.reduce((s, st) => s + st.pendingCount, 0),
+      extentMeters: 0,
+    },
+  ];
+}
+
+/**
+ * Split an explicitly ordered street list into budget-sized runs.
+ * Unlike splitRuns, the given order is the delivery route and is never
+ * re-clustered. Each run is emitted as a single group chunk so callers get
+ * the same ClusterGroup[][] shape used by splitRuns.
+ */
+export function splitOrderedStreets(
+  streets: StreetPoint[],
+  budget: number
+): ClusterGroup[][] {
+  const runs: ClusterGroup[][] = [];
+  let current: StreetPoint[] = [];
+  let currentTotal = 0;
+
+  const flush = () => {
+    if (current.length > 0) {
+      runs.push(orderedRunChunk(current));
+      current = [];
+      currentTotal = 0;
+    }
+  };
+
+  for (const street of streets) {
+    if (street.pendingCount > budget) {
+      flush();
+      runs.push(orderedRunChunk([street]));
+      continue;
+    }
+
+    const wouldOvershoot = currentTotal + street.pendingCount > budget;
+    const halfFull = currentTotal >= Math.ceil(budget / 2);
+
+    if (wouldOvershoot && halfFull) {
+      flush();
+    }
+
+    current.push(street);
+    currentTotal += street.pendingCount;
+  }
+  flush();
+
+  return runs;
+}

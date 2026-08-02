@@ -3,6 +3,7 @@ import {
   haversineMeters,
   clusterStreets,
   splitRuns,
+  splitOrderedStreets,
   StreetPoint,
   ClusterGroup,
 } from '../../lib/street-clustering';
@@ -170,5 +171,39 @@ describe('splitRuns', () => {
     expect(runs).toHaveLength(1);
     const streets = runs[0].flatMap((g) => g.streets.map((s) => s.street));
     expect(streets).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('splitOrderedStreets', () => {
+  function ordered(name: string, count: number): StreetPoint {
+    return street(name, offsetNorth(0), offsetEast(0), count);
+  }
+
+  it('returns empty for no streets', () => {
+    expect(splitOrderedStreets([], 20)).toEqual([]);
+  });
+
+  it('keeps the given order and splits by budget', () => {
+    const runs = splitOrderedStreets(
+      [ordered('Gamma', 5), ordered('Alpha', 5), ordered('Beta', 5)],
+      12
+    );
+    expect(runs).toHaveLength(2);
+    expect(runs[0][0].streets.map((s) => s.street)).toEqual(['Gamma', 'Alpha']);
+    expect(runs[1][0].streets.map((s) => s.street)).toEqual(['Beta']);
+  });
+
+  it('emits each run as a single group chunk', () => {
+    const runs = splitOrderedStreets([ordered('A', 3), ordered('B', 4)], 20);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toHaveLength(1);
+    expect(runs[0][0].totalPending).toBe(7);
+  });
+
+  it('gives an oversized street its own run', () => {
+    const runs = splitOrderedStreets([ordered('Big', 30), ordered('Small', 5)], 20);
+    expect(runs).toHaveLength(2);
+    expect(runs[0][0].streets.map((s) => s.street)).toEqual(['Big']);
+    expect(runs[1][0].streets.map((s) => s.street)).toEqual(['Small']);
   });
 });

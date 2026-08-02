@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import ManualRunPanel from './ManualRunPanel';
 
 export interface RunStreet {
   street: string;
@@ -30,6 +31,8 @@ export interface TodayRunData {
   groups: RunGroup[];
   runs: Run[];
   unclusteredStreets: { street: string; has_coords: boolean }[];
+  manualOrder?: boolean;
+  manualOrderCount?: number;
 }
 
 interface TodayRunSectionProps {
@@ -42,6 +45,9 @@ interface TodayRunSectionProps {
   onBudgetChange: (budget: number) => void;
   onSelectRun: (suburb: string, streets: string[]) => void;
   onSelectStreet: (suburb: string, street: string) => void;
+  reportQuarter?: string;
+  onOrderApplied?: (streets: string[]) => void;
+  onResetManualOrder?: (suburb: string) => void;
 }
 
 const VISIBLE_RUNS = 2;
@@ -56,11 +62,15 @@ export default function TodayRunSection({
   onBudgetChange,
   onSelectRun,
   onSelectStreet,
+  reportQuarter,
+  onOrderApplied = () => {},
+  onResetManualOrder = () => {},
 }: TodayRunSectionProps) {
   const [customBudget, setCustomBudget] = useState<string>('');
   const [expandedRuns, setExpandedRuns] = useState<Set<number>>(new Set());
   const [showAllRuns, setShowAllRuns] = useState(false);
   const [activeRunId, setActiveRunId] = useState<number | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     setExpandedRuns(new Set());
@@ -120,6 +130,23 @@ export default function TodayRunSection({
         }}
       >
         <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>🚀 Today&apos;s Run</span>
+        <button
+          type="button"
+          onClick={() => setManualOpen((v) => !v)}
+          style={{
+            fontSize: '0.8rem',
+            fontWeight: '600',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: manualOpen ? '#ffffff' : 'rgba(255,255,255,0.15)',
+            color: manualOpen ? '#6d28d9' : '#ffffff',
+            border: manualOpen ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.5)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ⚙️ Manual Run
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.8rem', opacity: 0.9 }}>Addresses</span>
           <input
@@ -155,6 +182,42 @@ export default function TodayRunSection({
           <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>per run</span>
         </div>
       </div>
+
+      {data?.manualOrder && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            padding: '8px 16px',
+            backgroundColor: '#f5f3ff',
+            borderBottom: '1px solid #ede9fe',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: '0.8rem', color: '#7c3aed', fontWeight: '600' }}>
+            ⚙️ Manual order applied · {data.manualOrderCount}{' '}
+            {data.manualOrderCount === 1 ? 'street' : 'streets'} ordered
+          </span>
+          <button
+            type="button"
+            onClick={() => onResetManualOrder(data.suburb)}
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: '600',
+              color: '#7c3aed',
+              backgroundColor: '#ffffff',
+              border: '1px solid #d8b4fe',
+              borderRadius: '6px',
+              padding: '3px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            ↺ Reset to Auto
+          </button>
+        </div>
+      )}
 
       <div style={{ padding: '12px 16px' }}>
         {loading && <div style={{ fontSize: '0.85rem', color: '#7c3aed' }}>Loading…</div>}
@@ -358,6 +421,16 @@ export default function TodayRunSection({
           </div>
         )}
       </div>
+
+      {manualOpen && data && (
+        <ManualRunPanel
+          isOpen={manualOpen}
+          onClose={() => setManualOpen(false)}
+          suburb={data.suburb}
+          reportQuarter={reportQuarter}
+          onOrderApplied={onOrderApplied}
+        />
+      )}
     </div>
   );
 }

@@ -248,6 +248,7 @@ export default function OutreachPage() {
   const [todayRunData, setTodayRunData] = useState<TodayRunData | null>(null);
   const [todayRunLoading, setTodayRunLoading] = useState(false);
   const [todayRunError, setTodayRunError] = useState<string | null>(null);
+  const [todayRunRefreshKey, setTodayRunRefreshKey] = useState(0);
 
   useEffect(() => {
     window.localStorage.setItem('today_run_budget_v2', String(todayRunBudget));
@@ -944,6 +945,22 @@ export default function OutreachPage() {
 
   // Fetch street clusters when Pending + Unsent + a suburb is known.
   const todayRunSuburb = reportSuburbFilter || firstPendingSuburb;
+
+  const handleTodayRunOrderApplied = useCallback(() => {
+    setTodayRunRefreshKey((k) => k + 1);
+  }, []);
+
+  const handleResetManualOrder = useCallback(async (suburb: string) => {
+    try {
+      await fetch(`/api/admin/outreach/street-order?suburb=${encodeURIComponent(suburb)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // non-fatal; the refresh below re-renders Today's Run
+    }
+    setTodayRunRefreshKey((k) => k + 1);
+  }, []);
+
   useEffect(() => {
     if (activeTab !== 'pending' || sentStatusFilter !== 'unsent' || !todayRunSuburb) {
       setTodayRunData(null);
@@ -979,7 +996,7 @@ export default function OutreachPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, reportQuarterFilter]);
+  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, reportQuarterFilter, todayRunRefreshKey]);
 
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
@@ -1196,6 +1213,9 @@ export default function OutreachPage() {
               setRunStreetFilter([]);
               setStreetFilter(street);
             }}
+            reportQuarter={reportQuarterFilter || undefined}
+            onOrderApplied={handleTodayRunOrderApplied}
+            onResetManualOrder={handleResetManualOrder}
           />
         )}
 

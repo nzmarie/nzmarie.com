@@ -123,4 +123,56 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     );
     expect(response.status).toBe(500);
   });
+
+  it('applies a saved manual order when one exists', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { street: 'Alpha Street', property_address: '1 Alpha Street', lat: '-36.6958', lng: '174.7453' },
+          { street: 'Beta Street', property_address: '2 Beta Street', lat: '-36.6959', lng: '174.7454' },
+          { street: 'Gamma Street', property_address: '3 Gamma Street', lat: '-36.6957', lng: '174.7452' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [{ street: 'NoCoord Street', address_count: 2 }],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [{ setting_value: JSON.stringify(['Gamma Street', 'Alpha Street']) }],
+      } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&radius=500&budget=20')
+    );
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.manualOrder).toBe(true);
+    expect(body.manualOrderCount).toBe(2);
+
+    const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets.map((s: any) => s.street));
+    // Saved order first (Gamma, Alpha), then remaining streets alphabetically (Beta),
+    // then the no-coordinate street appended at the end.
+    expect(runStreets).toEqual(['Gamma Street', 'Alpha Street', 'Beta Street', 'NoCoord Street']);
+  });
+
+  it('returns manualOrder false when no saved order exists', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { street: 'Alpha Street', property_address: '1 Alpha Street', lat: '-36.6958', lng: '174.7453' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay')
+    );
+    const body = await response.json();
+    expect(body.manualOrder).toBe(false);
+  });
 });
