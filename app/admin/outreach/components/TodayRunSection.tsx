@@ -33,6 +33,8 @@ export interface TodayRunData {
   unclusteredStreets: { street: string; has_coords: boolean }[];
   manualOrder?: boolean;
   manualOrderCount?: number;
+  startStreet?: string | null;
+  allStreets?: { street: string; count: number }[];
 }
 
 interface TodayRunSectionProps {
@@ -48,6 +50,8 @@ interface TodayRunSectionProps {
   reportQuarter?: string;
   onOrderApplied?: (streets: string[]) => void;
   onResetManualOrder?: (suburb: string) => void;
+  startStreet?: string;
+  onStartStreetChange?: (suburb: string, street: string) => void;
 }
 
 const VISIBLE_RUNS = 2;
@@ -65,6 +69,8 @@ export default function TodayRunSection({
   reportQuarter,
   onOrderApplied = () => {},
   onResetManualOrder = () => {},
+  startStreet = '',
+  onStartStreetChange = () => {},
 }: TodayRunSectionProps) {
   const [customBudget, setCustomBudget] = useState<string>('');
   const [expandedRuns, setExpandedRuns] = useState<Set<number>>(new Set());
@@ -216,6 +222,58 @@ export default function TodayRunSection({
           >
             ↺ Reset to Auto
           </button>
+        </div>
+      )}
+
+      {data && data.allStreets && data.allStreets.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 16px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #ede9fe',
+            flexWrap: 'wrap',
+          }}
+        >
+          <label
+            htmlFor="today-run-start-street"
+            style={{ fontSize: '0.8rem', color: '#6d28d9', fontWeight: '600' }}
+          >
+            Start from
+          </label>
+          <select
+            id="today-run-start-street"
+            aria-label="Start street"
+            value={startStreet || ''}
+            disabled={!!data.manualOrder}
+            onChange={(e) => onStartStreetChange(data.suburb, e.target.value)}
+            style={{
+              minWidth: '200px',
+              padding: '5px 10px',
+              borderRadius: '8px',
+              border: '1px solid #d8b4fe',
+              backgroundColor: data.manualOrder ? '#f3f4f6' : '#ffffff',
+              fontSize: '0.8rem',
+              color: '#374151',
+              cursor: data.manualOrder ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <option value="">
+              Auto (default{data.startStreet ? `: ${data.startStreet}` : ''})
+            </option>
+            {data.allStreets.map((s) => (
+              <option key={s.street} value={s.street}>
+                {s.street} ({s.count})
+              </option>
+            ))}
+          </select>
+          {data.manualOrder && (
+            <span style={{ fontSize: '0.72rem', color: '#b45309' }}>
+              Manual order applied — reset to Auto to use the start street
+            </span>
+          )}
         </div>
       )}
 

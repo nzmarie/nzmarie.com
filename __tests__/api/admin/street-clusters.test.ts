@@ -24,6 +24,10 @@ function mockAuth() {
   } as any);
 }
 
+function addr(street: string, property_address: string, lat?: number, lng?: number) {
+  return { street, property_address, house_number: null, lat: lat ?? null, lng: lng ?? null };
+}
+
 describe('GET /api/admin/outreach/street-clusters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,27 +52,24 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     expect(body.error).toBe('Missing suburb parameter');
   });
 
-  it('returns clusters with runs and unclustered streets', async () => {
+  it('orders streets by nearest distance and returns runs', async () => {
     mockAuth();
 
     vi.mocked(marieDB.query)
-      // single addresses+coords JOIN query
       .mockResolvedValueOnce({
         rows: [
-          { street: 'Alpha Street', property_address: '1 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Alpha Street', property_address: '3 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Alpha Street', property_address: '5 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Alpha Street', property_address: '7 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Alpha Street', property_address: '9 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Beta Street', property_address: '2 Beta Street', lat: '-36.6959', lng: '174.7454' },
-          { street: 'Beta Street', property_address: '4 Beta Street', lat: '-36.6959', lng: '174.7454' },
-          { street: 'Beta Street', property_address: '6 Beta Street', lat: '-36.6959', lng: '174.7454' },
+          addr('Alpha Street', '1 Alpha Street', -36.6958, 174.7453),
+          addr('Alpha Street', '3 Alpha Street', -36.6958, 174.7453),
+          addr('Alpha Street', '5 Alpha Street', -36.6958, 174.7453),
+          addr('Alpha Street', '7 Alpha Street', -36.6958, 174.7453),
+          addr('Alpha Street', '9 Alpha Street', -36.6958, 174.7453),
+          addr('Beta Street', '2 Beta Street', -36.6959, 174.7454),
+          addr('Beta Street', '4 Beta Street', -36.6959, 174.7454),
+          addr('Beta Street', '6 Beta Street', -36.6959, 174.7454),
+          addr('NoCoord Street', '1 NoCoord Street'),
         ],
       } as any)
-      // no-coords query
-      .mockResolvedValueOnce({
-        rows: [{ street: 'NoCoord Street' }],
-      } as any);
+      .mockResolvedValueOnce({ rows: [] } as any);
 
     const response = await GET(
       new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&radius=500&budget=20')
@@ -80,21 +81,25 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     expect(body.suburb).toBe('Torbay');
     expect(body.radius).toBe(500);
     expect(body.budget).toBe(20);
+    expect(body.manualOrder).toBe(false);
 
-    // Both streets are close (<500m) so one group.
+    // Alpha (house 1) is the start street, then the nearest street Beta,
+    // then the no-coordinate street appended at the end.
+    const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets.map((s: any) => s.street));
+    expect(runStreets).toEqual(['Alpha Street', 'Beta Street', 'NoCoord Street']);
+
     expect(body.groups).toHaveLength(1);
-    expect(body.groups[0].streets).toHaveLength(2);
-    expect(body.groups[0].totalPending).toBe(8);
+    expect(body.groups[0].streets).toHaveLength(3);
+    expect(body.groups[0].totalPending).toBe(9);
 
-    // Runs derived from the group.
     expect(body.runs).toHaveLength(1);
-    expect(body.runs[0].totalPending).toBe(8);
-    expect(body.runs[0].streetCount).toBe(2);
+    expect(body.runs[0].totalPending).toBe(9);
+    expect(body.runs[0].streetCount).toBe(3);
     expect(body.runs[0].runId).toBe(1);
 
-    // Addresses attached per street in run detail.
-    const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets);
-    const alpha = runStreets.find((s: any) => s.street === 'Alpha Street');
+    const alpha = body.runs[0].groups
+      .flatMap((g: any) => g.streets)
+      .find((s: any) => s.street === 'Alpha Street');
     expect(alpha.addresses).toEqual([
       '1 Alpha Street', '3 Alpha Street', '5 Alpha Street', '7 Alpha Street', '9 Alpha Street',
     ]);
@@ -130,13 +135,12 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     vi.mocked(marieDB.query)
       .mockResolvedValueOnce({
         rows: [
-          { street: 'Alpha Street', property_address: '1 Alpha Street', lat: '-36.6958', lng: '174.7453' },
-          { street: 'Beta Street', property_address: '2 Beta Street', lat: '-36.6959', lng: '174.7454' },
-          { street: 'Gamma Street', property_address: '3 Gamma Street', lat: '-36.6957', lng: '174.7452' },
+          addr('Alpha Street', '1 Alpha Street', -36.6958, 174.7453),
+          addr('Beta Street', '2 Beta Street', -36.6959, 174.7454),
+          addr('Gamma Street', '3 Gamma Street', -36.6957, 174.7452),
+          addr('NoCoord Street', '1 NoCoord Street'),
+          addr('NoCoord Street', '2 NoCoord Street'),
         ],
-      } as any)
-      .mockResolvedValueOnce({
-        rows: [{ street: 'NoCoord Street', address_count: 2 }],
       } as any)
       .mockResolvedValueOnce({
         rows: [{ setting_value: JSON.stringify(['Gamma Street', 'Alpha Street']) }],
@@ -163,10 +167,9 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     vi.mocked(marieDB.query)
       .mockResolvedValueOnce({
         rows: [
-          { street: 'Alpha Street', property_address: '1 Alpha Street', lat: '-36.6958', lng: '174.7453' },
+          addr('Alpha Street', '1 Alpha Street', -36.6958, 174.7453),
         ],
       } as any)
-      .mockResolvedValueOnce({ rows: [] } as any)
       .mockResolvedValueOnce({ rows: [] } as any);
 
     const response = await GET(
@@ -174,5 +177,62 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     );
     const body = await response.json();
     expect(body.manualOrder).toBe(false);
+  });
+
+  it('starts the route from the requested start_street and reports it back', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          addr('Alpha Street', '1 Alpha Street', -36.6958, 174.7453),
+          addr('Alpha Street', '3 Alpha Street', -36.6958, 174.7453),
+          addr('Beta Street', '2 Beta Street', -36.6959, 174.7454),
+          addr('Beta Street', '4 Beta Street', -36.6959, 174.7454),
+          addr('Gamma Street', '5 Gamma Street', -36.7, 174.74),
+          addr('NoCoord Street', '1 NoCoord Street'),
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&start_street=Beta%20Street&budget=20')
+    );
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.startStreet).toBe('Beta Street');
+    expect(body.allStreets).toEqual([
+      { street: 'Alpha Street', count: 2 },
+      { street: 'Beta Street', count: 2 },
+      { street: 'Gamma Street', count: 1 },
+      { street: 'NoCoord Street', count: 1 },
+    ]);
+
+    // Beta is first (requested start), Alpha is nearest, then Gamma, then no-coord.
+    const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets.map((s: any) => s.street));
+    expect(runStreets).toEqual(['Beta Street', 'Alpha Street', 'Gamma Street', 'NoCoord Street']);
+  });
+
+  it('falls back to the default start when start_street is unknown', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          addr('Alpha Street', '1 Alpha Street', -36.6958, 174.7453),
+          addr('Beta Street', '2 Beta Street', -36.6959, 174.7454),
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&start_street=Missing%20Street')
+    );
+    const body = await response.json();
+    // Default start is the smallest house number street.
+    expect(body.startStreet).toBe('Alpha Street');
+    const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets.map((s: any) => s.street));
+    expect(runStreets).toEqual(['Alpha Street', 'Beta Street']);
   });
 });

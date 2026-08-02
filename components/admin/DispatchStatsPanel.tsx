@@ -547,6 +547,25 @@ function CombinedScanChart({ campaignScans, bizCardScans, campaignName = 'Campai
   );
 }
 
+const CAMPAIGN_STORAGE_KEY = 'activity_dispatch_campaign';
+
+function getStoredCampaign(): string {
+  try {
+    return window.localStorage.getItem(CAMPAIGN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function storeCampaign(campaign: string): void {
+  try {
+    if (campaign) window.localStorage.setItem(CAMPAIGN_STORAGE_KEY, campaign);
+    else window.localStorage.removeItem(CAMPAIGN_STORAGE_KEY);
+  } catch {
+    // ignore storage errors (private browsing / SSR)
+  }
+}
+
 export default function DispatchStatsPanel() {
   const [campaigns, setCampaigns] = useState<string[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
@@ -567,57 +586,6 @@ export default function DispatchStatsPanel() {
       return `${suburbParts.join(' ')} ${year} ${quarter}`.trim();
     }
     return c.replace(/_/g, ' ');
-  };
-
-  useEffect(() => {
-    const fetchCampaigns = async () => {
-      setLoadingCampaigns(true);
-      try {
-        const res = await fetch('/api/admin/outreach/campaign-stats');
-        if (res.ok) {
-          const data = await res.json();
-          const list: string[] = data.available_campaigns || [];
-          const defaultCampaign: string = data.default_campaign || '';
-          setCampaigns(list);
-          setDefaultCampaign(defaultCampaign);
-          if (list.length > 0) {
-            setSelectedCampaign(
-              defaultCampaign && list.includes(defaultCampaign) ? defaultCampaign : list[0]
-            );
-          }
-        } else {
-          const data = await res.json().catch(() => ({}));
-          setError(data.error || `Failed to load campaigns (${res.status})`);
-        }
-      } catch {
-        setError('Failed to load campaigns');
-      } finally {
-        setLoadingCampaigns(false);
-      }
-    };
-    fetchCampaigns();
-  }, []);
-
-  const setAsDefault = async () => {
-    if (!selectedCampaign) return;
-    setSavingDefault(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/outreach/default-campaign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaign: selectedCampaign }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to set default campaign');
-      }
-      setDefaultCampaign(selectedCampaign);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set default campaign');
-    } finally {
-      setSavingDefault(false);
-    }
   };
 
   const fetchStats = useCallback(async (campaign: string) => {
@@ -648,6 +616,72 @@ export default function DispatchStatsPanel() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Optimistic: start loading the last-known campaign immediately so the
+    // default content appears as soon as a single request returns, without
+    // waiting for the campaign list round-trip first.
+    const optimistic = getStoredCampaign();
+    if (optimistic) {
+      fetchStats(optimistic);
+    }
+
+    const fetchCampaigns = async () => {
+      setLoadingCampaigns(true);
+      try {
+        const res = await fetch('/api/admin/outreach/campaign-stats');
+        if (res.ok) {
+          const data = await res.json();
+          const list: string[] = data.available_campaigns || [];
+          const def: string = data.default_campaign || '';
+          if (cancelled) return;
+          setCampaigns(list);
+          setDefaultCampaign(def);
+          const chosen = list.length > 0
+            ? def && list.includes(def)
+              ? def
+              : list[0]
+            : '';
+          setSelectedCampaign(chosen);
+          storeCampaign(chosen);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          if (!cancelled) setError(data.error || `Failed to load campaigns (${res.status})`);
+        }
+      } catch {
+        if (!cancelled) setError('Failed to load campaigns');
+      } finally {
+        if (!cancelled) setLoadingCampaigns(false);
+      }
+    };
+    fetchCampaigns();
+
+    return () => { cancelled = true; };
+  }, [fetchStats]);
+
+  const setAsDefault = async () => {
+    if (!selectedCampaign) return;
+    setSavingDefault(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/outreach/default-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaign: selectedCampaign }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to set default campaign');
+      }
+      setDefaultCampaign(selectedCampaign);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set default campaign');
+    } finally {
+      setSavingDefault(false);
+    }
+  };
+
+  useEffect(() => {
     if (selectedCampaign) {
       fetchStats(selectedCampaign);
     }
@@ -655,9 +689,68 @@ export default function DispatchStatsPanel() {
 
   return (
     <div className="space-y-6">
-      {loadingCampaigns ? (
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-sm font-semibold text-slate-700 mr-1">Campaign:</label>
+        {loadingCampaigns ? (
+          <div className="h-10 w-64 bg-slate-100 rounded-xl animate-pulse" />
+        ) : campaigns.length === 0 ? (
+          <span className="text-sm text-slate-400">No campaign data available.</span>
+        ) : (
+          campaigns.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setSelectedCampaign(c)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                selectedCampaign === c
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {formatCampaignLabel(c)}
+              {defaultCampaign === c && <span className="ml-1 opacity-80" title="Default campaign">★</span>}
+            </button>
+          ))
+        )}
+        {!loadingCampaigns && campaigns.length > 0 && selectedCampaign && (
+          <button
+            type="button"
+            onClick={setAsDefault}
+            disabled={savingDefault}
+            title="Open this page with this campaign pre-selected"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              defaultCampaign === selectedCampaign
+                ? 'bg-amber-50 text-amber-700 border-amber-300 cursor-default'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+            } disabled:opacity-50`}
+          >
+            {savingDefault
+              ? 'Saving…'
+              : defaultCampaign === selectedCampaign
+                ? '★ Default'
+                : '☆ Set as default'}
+          </button>
+        )}
+      </div>
+
+      {stats ? (
         <>
-          <div className="h-10 bg-slate-100 rounded-xl animate-pulse w-64" />
+          <SummaryCards summary={stats.summary} bizPv={stats.business_card_summary.pv} bizUv={stats.business_card_summary.uv} />
+          <CampaignOverview summary={stats.summary} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DailySendChart data={stats.daily_sends} noJunkTotal={stats.summary.no_junk_mail_count} />
+            <CombinedScanChart campaignScans={stats.daily_scans} bizCardScans={stats.business_card_daily_scans} campaignName={stats.campaign} />
+          </div>
+          <CampaignScanLogsPanel />
+        </>
+      ) : loading || loadingCampaigns ? (
+        <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
@@ -667,90 +760,12 @@ export default function DispatchStatsPanel() {
             ))}
           </div>
           <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
-        </>
-      ) : (
-        <>
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700 mr-1">Campaign:</label>
-            {campaigns.length === 0 ? (
-              <span className="text-sm text-slate-400">No campaign data available.</span>
-            ) : (
-              campaigns.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setSelectedCampaign(c)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    selectedCampaign === c
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {formatCampaignLabel(c)}
-                  {defaultCampaign === c && <span className="ml-1 opacity-80" title="Default campaign">★</span>}
-                </button>
-              ))
-            )}
-            {campaigns.length > 0 && selectedCampaign && (
-              <button
-                type="button"
-                onClick={setAsDefault}
-                disabled={savingDefault}
-                title="Open this page with this campaign pre-selected"
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
-                  defaultCampaign === selectedCampaign
-                    ? 'bg-amber-50 text-amber-700 border-amber-300 cursor-default'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
-                } disabled:opacity-50`}
-              >
-                {savingDefault
-                  ? 'Saving…'
-                  : defaultCampaign === selectedCampaign
-                    ? '★ Default'
-                    : '☆ Set as default'}
-              </button>
-            )}
-          </div>
-
-          {loading && !stats && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                    <div className="h-4 bg-slate-100 rounded w-16 mb-2 animate-pulse" />
-                    <div className="h-7 bg-slate-100 rounded w-12 animate-pulse" />
-                  </div>
-                ))}
-              </div>
-              <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
-            </div>
-          )}
-
-          {!loading && !stats && !error && campaigns.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              Select a campaign to view dispatch statistics.
-            </div>
-          )}
-
-          {stats && (
-            <>
-              <SummaryCards summary={stats.summary} bizPv={stats.business_card_summary.pv} bizUv={stats.business_card_summary.uv} />
-              <CampaignOverview summary={stats.summary} />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <DailySendChart data={stats.daily_sends} noJunkTotal={stats.summary.no_junk_mail_count} />
-                <CombinedScanChart campaignScans={stats.daily_scans} bizCardScans={stats.business_card_daily_scans} campaignName={stats.campaign} />
-              </div>
-              <CampaignScanLogsPanel />
-            </>
-          )}
-        </>
-      )}
+        </div>
+      ) : !error && campaigns.length > 0 ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+          Select a campaign to view dispatch statistics.
+        </div>
+      ) : null}
     </div>
   );
 }

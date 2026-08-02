@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
-import { clusterStreets, splitRuns, splitOrderedStreets, StreetPoint } from '@/lib/street-clustering';
+import { buildOutreachFilter } from '@/lib/outreach-filter';
+import { buildStreetSummaries, toOrderable, AddressRow } from '@/lib/outreach-streets';
+import { orderStreetsGreedily } from '@/lib/street-ordering';
+import { splitOrderedStreets, StreetPoint } from '@/lib/street-clustering';
 
 const STREET_ORDER_KEY_PREFIX = 'outreach_street_order:';
 
@@ -21,13 +24,16 @@ function parseStreetOrder(value: string | null): string[] {
 
 /**
  * GET /api/admin/outreach/street-clusters
- * Returns streets in a suburb clustered by proximity, with pending counts,
- * ready for the "Today's Run" planner.
+ * Returns streets in a suburb ordered by nearest walking distance
+ * (greedy nearest-neighbor from the minimum house number address of
+ * each street), split into budget-sized runs for the "Today's Run" planner.
  *
  * Query params:
- *   - suburb: suburb to cluster (required)
- *   - radius: clustering radius in meters (default 500)
+ *   - suburb: suburb to plan (required)
+ *   - radius: kept for API compatibility (no longer used for ordering)
  *   - budget: run budget - number of addresses per run (default 20)
+ *   - start_street: optional street to start the route from (defaults to the
+ *     street with the globally smallest house number)
  *   - status: which status to count (default 'pending')
  *   - sent_status: 'all' | 'sent' | 'unsent'
  *   - report_quarter: optional quarter filter, e.g. '2026-Q2'
@@ -50,8 +56,9 @@ export async function GET(request: Request) {
     Math.max(1, parseInt(searchParams.get('budget') || '20', 10) || 20)
   );
   const status = searchParams.get('status') || 'pending';
-  const sentStatus = searchParams.get('sent_status') || 'all';
+  const sentStatus = (searchParams.get('sent_status') || 'all') as 'all' | 'unsent' | 'sent';
   const reportQuarter = searchParams.get('report_quarter');
+  const startStreet = searchParams.get('start_street') || '';
 
   if (!suburb) {
     return NextResponse.json({ error: 'Missing suburb parameter' }, { status: 400 });
@@ -60,146 +67,40 @@ export async function GET(request: Request) {
   try {
     await marieDB.ensureOutreachTablesExist?.();
 
-    const params: unknown[] = [suburb, status];
-    let idx = 3;
-
-    let sentCondition = '';
-    if (sentStatus === 'unsent' || sentStatus === 'sent') {
-      const exists = sentStatus === 'sent' ? 'EXISTS' : 'NOT EXISTS';
-      let sub = `SELECT 1 FROM outreach_send_logs sl3
-        JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id
-        WHERE sl3.outreach_property_id = op.id
-          AND sr3.suburb = $${idx}`;
-      params.push(suburb);
-      idx++;
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx + 1}`;
-          params.push(parts[1], isNaN(y) ? 0 : y);
-          idx += 2;
-        }
-      }
-      sentCondition = `AND ${exists} (${sub})`;
-    }
+    const { sql: where, params } = buildOutreachFilter({
+      suburb,
+      status,
+      sentStatus,
+      reportQuarter,
+    });
 
     const { rows: addressRows } = await marieDB.query(
       `
-      SELECT
-        op.street,
-        op.property_address,
-        sl.center_lat AS lat,
-        sl.center_lng AS lng
+      SELECT op.street, op.house_number, op.property_address,
+             p.latitude AS lat, p.longitude AS lng
       FROM outreach_properties op
-      JOIN street_locations sl
-        ON sl.suburb = op.suburb
-        AND sl.street = op.street
-        AND sl.center_lat IS NOT NULL
-        AND sl.center_lng IS NOT NULL
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
-      WHERE op.suburb = $1
-        AND op.status = $2
-        AND op.street IS NOT NULL
-        AND TRIM(op.street) <> ''
-        AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)
-        ${sentCondition}
-      ORDER BY op.street ASC, op.property_address ASC
+      WHERE ${where}
+      ORDER BY op.street ASC, op.house_number ASC NULLS LAST, op.property_address ASC
       `,
       params
     );
 
-    const streetMap = new Map<string, { lat: number; lng: number; addresses: string[] }>();
-    for (const r of addressRows) {
-      if (!streetMap.has(r.street)) {
-        streetMap.set(r.street, { lat: Number(r.lat), lng: Number(r.lng), addresses: [] });
-      }
-      streetMap.get(r.street)!.addresses.push(r.property_address);
-    }
-
-    const streetPoints: StreetPoint[] = Array.from(streetMap.entries()).map(([street, data]) => ({
-      street,
-      suburb,
-      lat: data.lat,
-      lng: data.lng,
-      pendingCount: data.addresses.length,
-      addresses: data.addresses,
-    }));
-
-    const noCoordParams: unknown[] = [suburb, status];
-    let noCoordIdx = 3;
-    let noCoordSentCondition = '';
-
-    if (sentStatus === 'unsent' || sentStatus === 'sent') {
-      const exists = sentStatus === 'sent' ? 'EXISTS' : 'NOT EXISTS';
-      let sub = `SELECT 1 FROM outreach_send_logs sl3
-        JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id
-        WHERE sl3.outreach_property_id = op.id
-          AND sr3.suburb = $${noCoordIdx}`;
-      noCoordParams.push(suburb);
-      noCoordIdx++;
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${noCoordIdx} AND sr3.year = $${noCoordIdx + 1}`;
-          noCoordParams.push(parts[1], isNaN(y) ? 0 : y);
-          noCoordIdx += 2;
-        }
-      }
-      noCoordSentCondition = `AND ${exists} (${sub})`;
-    }
-
-    const { rows: noCoords } = await marieDB.query(
-      `
-      SELECT op.street, COUNT(*) AS address_count
-      FROM outreach_properties op
-      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
-      WHERE op.suburb = $1
-        AND op.status = $2
-        AND op.street IS NOT NULL
-        AND TRIM(op.street) <> ''
-        AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)
-        ${noCoordSentCondition}
-        AND NOT EXISTS (
-          SELECT 1 FROM street_locations sl
-          WHERE sl.suburb = op.suburb AND sl.street = op.street
-        )
-      GROUP BY op.street
-      ORDER BY op.street ASC
-      `,
-      noCoordParams
-    );
+    const summaries = buildStreetSummaries(addressRows as AddressRow[], suburb);
 
     const storedOrder = await marieDB.query(
       `SELECT setting_value FROM admin_settings WHERE setting_key = $1 LIMIT 1`,
       [`${STREET_ORDER_KEY_PREFIX}${suburb}`]
     );
     const savedOrder = parseStreetOrder(storedOrder?.rows?.[0]?.setting_value ?? null);
-    const validOrder = savedOrder.filter((s) => streetMap.has(s));
+    const streetNames = new Set(summaries.map((s) => s.street));
+    const validOrder = savedOrder.filter((s) => streetNames.has(s));
 
-    let groups;
-    let runs;
-    let manualOrder = false;
-    let manualOrderCount = 0;
-
+    let orderedSummaries = summaries;
     if (validOrder.length > 0) {
-      manualOrder = true;
-      manualOrderCount = validOrder.length;
-
       const orderIndex = new Map<string, number>();
       validOrder.forEach((name, i) => orderIndex.set(name, i));
-
-      const noCoordPoints: StreetPoint[] = noCoords.map((r) => ({
-        street: r.street,
-        suburb,
-        lat: 0,
-        lng: 0,
-        pendingCount: Number(r.address_count) || 0,
-        addresses: [],
-      }));
-
-      const combined = [...streetPoints, ...noCoordPoints].sort((a, b) => {
+      orderedSummaries = [...summaries].sort((a, b) => {
         const ia = orderIndex.get(a.street);
         const ib = orderIndex.get(b.street);
         if (ia !== undefined && ib !== undefined) return ia - ib;
@@ -207,20 +108,34 @@ export async function GET(request: Request) {
         if (ib !== undefined) return 1;
         return a.street.localeCompare(b.street, undefined, { sensitivity: 'base' });
       });
-
-      groups = [
-        {
-          groupId: 1,
-          streets: combined,
-          totalPending: combined.reduce((s, st) => s + st.pendingCount, 0),
-          extentMeters: 0,
-        },
-      ];
-      runs = splitOrderedStreets(combined, budget);
     } else {
-      groups = clusterStreets(streetPoints, radius);
-      runs = splitRuns(groups, budget);
+      const order = orderStreetsGreedily(summaries.map(toOrderable), startStreet || undefined);
+      const orderIndex = new Map(order.map((name, i) => [name, i]));
+      orderedSummaries = [...summaries].sort(
+        (a, b) => (orderIndex.get(a.street) ?? 0) - (orderIndex.get(b.street) ?? 0)
+      );
     }
+
+    const streetPoints: StreetPoint[] = orderedSummaries.map((s) => ({
+      street: s.street,
+      suburb,
+      lat: s.anchorLat ?? 0,
+      lng: s.anchorLng ?? 0,
+      pendingCount: s.address_count,
+      addresses: s.addresses,
+    }));
+
+    const groups = [
+      {
+        groupId: 1,
+        streets: streetPoints,
+        totalPending: orderedSummaries.reduce((sum, s) => sum + s.address_count, 0),
+        extentMeters: 0,
+      },
+    ];
+    const runs = splitOrderedStreets(streetPoints, budget);
+
+    const noAnchorStreets = summaries.filter((s) => s.anchorLat == null || s.anchorLng == null);
 
     return NextResponse.json({
       success: true,
@@ -234,12 +149,16 @@ export async function GET(request: Request) {
         totalPending: run.reduce((s, g) => s + g.totalPending, 0),
         streetCount: run.reduce((s, g) => s + g.streets.length, 0),
       })),
-      unclusteredStreets: noCoords.map((r) => ({
-        street: r.street,
-        has_coords: false,
+      unclusteredStreets: noAnchorStreets.map((s) => ({
+        street: s.street,
+        has_coords: s.has_coords,
       })),
-      manualOrder,
-      manualOrderCount,
+      startStreet: orderedSummaries[0]?.street ?? null,
+      allStreets: summaries
+        .map((s) => ({ street: s.street, count: s.address_count }))
+        .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' })),
+      manualOrder: validOrder.length > 0,
+      manualOrderCount: validOrder.length,
     });
   } catch (error) {
     console.error('Error fetching street clusters:', error);

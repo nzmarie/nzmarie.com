@@ -752,3 +752,164 @@ describe('Outreach page - List view mobile layout', () => {
     });
   });
 });
+
+describe('Outreach page - Card view run ordering', () => {
+  const runStreetOrder = ['Alpha Street', 'Zeta Street', 'Beta Street'];
+
+  function makeStreet(street: string, i: number) {
+    return {
+      street,
+      suburb: 'Torbay',
+      lat: -36.6 + i * 0.01,
+      lng: 174.7 + i * 0.01,
+      pendingCount: 1,
+      addresses: [`${i + 1} ${street}`],
+    };
+  }
+
+  beforeEach(() => {
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it('renders cards in the Today Run street order, not the API order', async () => {
+    const clusterStreets = runStreetOrder.map(makeStreet);
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            suburb: 'Torbay',
+            groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }],
+            runs: [{ runId: 1, groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }], totalPending: 3, streetCount: 3 }],
+            totalPending: 3,
+            unclusteredStreets: [],
+            allStreets: runStreetOrder.map((st) => ({ street: st, count: 1 })),
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        // API returns Beta first, then Alpha, then Zeta — NOT the run order.
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 'out-b', property_address: '5 Beta Street', street: 'Beta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+              { id: 'out-a', property_address: '3 Alpha Street', street: 'Alpha Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+              { id: 'out-z', property_address: '7 Zeta Street', street: 'Zeta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+            ],
+            pagination: { page: 1, limit: 50, total: 3, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('3 Alpha Street')).toBeTruthy();
+      expect(screen.getByText('5 Beta Street')).toBeTruthy();
+      expect(screen.getByText('7 Zeta Street')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const h3s = Array.from(document.querySelectorAll('h3')).map((h) => h.textContent || '');
+    const alphaIdx = h3s.indexOf('3 Alpha Street');
+    const zetaIdx = h3s.indexOf('7 Zeta Street');
+    const betaIdx = h3s.indexOf('5 Beta Street');
+    expect(alphaIdx).toBeGreaterThanOrEqual(0);
+    expect(zetaIdx).toBeGreaterThan(alphaIdx);
+    expect(betaIdx).toBeGreaterThan(zetaIdx);
+  });
+
+  it('renders ALL addresses on a multi-address street (Glamorgan Drive, 6 addresses) in card view', async () => {
+    const glamorganStreets = [
+      { street: 'Glamorgan Drive', suburb: 'Torbay', lat: -36.6958, lng: 174.7453, pendingCount: 6, addresses: ['98A Glamorgan Drive', '100 Glamorgan Drive', '102 Glamorgan Drive', '104 Glamorgan Drive', '106 Glamorgan Drive', '108 Glamorgan Drive'] },
+    ];
+    const apiAddresses = [
+      { id: 'g1', property_address: '98A Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:00:00Z' },
+      { id: 'g2', property_address: '100 Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:01:00Z' },
+      { id: 'g3', property_address: '102 Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:02:00Z' },
+      { id: 'g4', property_address: '104 Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:03:00Z' },
+      { id: 'g5', property_address: '106 Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:04:00Z' },
+      { id: 'g6', property_address: '108 Glamorgan Drive', street: 'Glamorgan Drive', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:05:00Z' },
+    ];
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            suburb: 'Torbay',
+            groups: [{ groupId: 1, streets: glamorganStreets, totalPending: 6, extentMeters: 500 }],
+            runs: [{ runId: 1, groups: [{ groupId: 1, streets: glamorganStreets, totalPending: 6, extentMeters: 500 }], totalPending: 6, streetCount: 1 }],
+            totalPending: 6,
+            unclusteredStreets: [],
+            allStreets: [{ street: 'Glamorgan Drive', count: 6 }],
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: apiAddresses,
+            pagination: { page: 1, limit: 50, total: 6, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('98A Glamorgan Drive')).toBeTruthy();
+      expect(screen.getByText('108 Glamorgan Drive')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const h3s = Array.from(document.querySelectorAll('h3')).map((h) => h.textContent || '');
+    for (const addr of apiAddresses) {
+      expect(h3s).toContain(addr.property_address);
+    }
+    expect(h3s.filter((t) => t.includes('Glamorgan Drive'))).toHaveLength(6);
+  });
+});
+

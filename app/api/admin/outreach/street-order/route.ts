@@ -2,18 +2,12 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
-import { clusterStreets, StreetPoint } from '@/lib/street-clustering';
+import { buildOutreachFilter } from '@/lib/outreach-filter';
+import { buildStreetSummaries, toOrderable, AddressRow } from '@/lib/outreach-streets';
+import { orderStreetsGreedily } from '@/lib/street-ordering';
 
 const KEY_PREFIX = 'outreach_street_order:';
 const MAX_ORDER_STREETS = 500;
-
-interface StreetRow {
-  street: string;
-  address_count: string | number;
-  has_coords: boolean | string;
-  center_lat: string | number | null;
-  center_lng: string | number | null;
-}
 
 function parseOrder(value: string | null): string[] {
   if (!value) return [];
@@ -28,29 +22,6 @@ function parseOrder(value: string | null): string[] {
   return [];
 }
 
-function buildUnsentCondition(
-  params: unknown[],
-  idx: number,
-  suburb: string,
-  reportQuarter: string | null
-): string {
-  let sub = `SELECT 1 FROM outreach_send_logs sl3
-    JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id
-    WHERE sl3.outreach_property_id = op.id
-      AND sr3.suburb = $${idx}`;
-  params.push(suburb);
-  idx++;
-  if (reportQuarter) {
-    const parts = reportQuarter.split('-');
-    if (parts.length === 2) {
-      const y = parseInt(parts[0], 10);
-      sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx + 1}`;
-      params.push(parts[1], isNaN(y) ? 0 : y);
-    }
-  }
-  return `AND NOT EXISTS (${sub})`;
-}
-
 export async function GET(request: Request) {
   const session = await auth();
 
@@ -62,10 +33,7 @@ export async function GET(request: Request) {
   const suburb = searchParams.get('suburb');
   const status = searchParams.get('status') || 'pending';
   const reportQuarter = searchParams.get('report_quarter');
-  const radius = Math.min(
-    2000,
-    Math.max(100, parseInt(searchParams.get('radius') || '500', 10) || 500)
-  );
+  const sentStatus = (searchParams.get('sent_status') || 'unsent') as 'all' | 'unsent' | 'sent';
 
   if (!suburb) {
     return NextResponse.json({ error: 'Missing suburb parameter' }, { status: 400 });
@@ -74,40 +42,31 @@ export async function GET(request: Request) {
   try {
     await marieDB.ensureOutreachTablesExist?.();
 
-    const params: unknown[] = [suburb, status];
-    const sentCondition = buildUnsentCondition(params, 3, suburb, reportQuarter);
+    const { sql: where, params } = buildOutreachFilter({
+      suburb,
+      status,
+      sentStatus,
+      reportQuarter,
+    });
 
     const { rows } = await marieDB.query(
       `
-      SELECT
-        op.street,
-        COUNT(*) AS address_count,
-        BOOL_OR(sl.center_lat IS NOT NULL AND sl.center_lng IS NOT NULL) AS has_coords,
-        sl.center_lat,
-        sl.center_lng
+      SELECT op.street, op.house_number, op.property_address,
+             p.latitude AS lat, p.longitude AS lng
       FROM outreach_properties op
-      LEFT JOIN street_locations sl
-        ON sl.suburb = op.suburb AND sl.street = op.street
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
-      WHERE op.suburb = $1
-        AND op.status = $2
-        AND op.street IS NOT NULL
-        AND TRIM(op.street) <> ''
-        AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)
-        ${sentCondition}
-      GROUP BY op.street, sl.center_lat, sl.center_lng
-      ORDER BY op.street ASC
+      WHERE ${where}
+      ORDER BY op.street ASC, op.house_number ASC NULLS LAST, op.property_address ASC
       `,
       params
     );
 
-    const streetRows = rows as unknown as StreetRow[];
-
-    const streets = streetRows.map((r) => ({
-      street: r.street,
+    const summaries = buildStreetSummaries(rows as AddressRow[], suburb);
+    const streets = summaries.map((s) => ({
+      street: s.street,
       suburb,
-      address_count: Number(r.address_count) || 0,
-      has_coords: Boolean(r.has_coords),
+      address_count: s.address_count,
+      has_coords: s.has_coords,
     }));
 
     const stored = await marieDB.query(
@@ -118,8 +77,7 @@ export async function GET(request: Request) {
     const streetSet = new Set(streets.map((s) => s.street));
     const savedOrder = rawOrder.filter((s) => streetSet.has(s));
 
-    let ordered: string[] = [];
-
+    let ordered: string[];
     if (savedOrder.length > 0) {
       const known = new Set(savedOrder);
       const rest = streets
@@ -128,23 +86,7 @@ export async function GET(request: Request) {
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
       ordered = [...savedOrder, ...rest];
     } else {
-      const points: StreetPoint[] = streetRows
-        .filter((r) => r.center_lat != null && r.center_lng != null)
-        .map((r) => ({
-          street: r.street,
-          suburb,
-          lat: Number(r.center_lat),
-          lng: Number(r.center_lng),
-          pendingCount: Number(r.address_count) || 0,
-        }));
-      const groups = clusterStreets(points, radius);
-      const clustered = groups.flatMap((g) => g.streets.map((s) => s.street));
-      const known = new Set(clustered);
-      const noCoord = streets
-        .filter((s) => !known.has(s.street))
-        .map((s) => s.street)
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-      ordered = [...clustered, ...noCoord];
+      ordered = orderStreetsGreedily(summaries.map(toOrderable));
     }
 
     const orderIndex = new Map(ordered.map((name, i) => [name, i]));

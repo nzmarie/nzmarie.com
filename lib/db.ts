@@ -123,6 +123,11 @@ export async function ensureOutreachTablesExist(): Promise<void> {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       updated_by VARCHAR(255)
     );
+
+    ALTER TABLE outreach_properties ADD COLUMN IF NOT EXISTS house_number BIGINT;
+
+    CREATE INDEX IF NOT EXISTS idx_outreach_suburb_street_housenumber
+    ON outreach_properties(suburb, street, house_number);
     `;
 
     await mariePool.query(sql);

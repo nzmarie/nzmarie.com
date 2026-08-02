@@ -151,6 +151,7 @@ async function renderWithStats(scanLogsMock = mockScanLogs) {
 
 describe('DispatchStatsPanel', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     global.fetch = vi.fn();
   });
 
@@ -273,6 +274,49 @@ describe('DispatchStatsPanel', () => {
     expect(q1Call).toBe(true);
   });
 
+  it('optimistically loads stored campaign stats while the campaign list is still loading', async () => {
+    let resolveList!: (v: unknown) => void;
+    const listGate = new Promise<unknown>((r) => { resolveList = r; });
+
+    window.localStorage.setItem('activity_dispatch_campaign', '2026_Q2_Oteha');
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/analytics/scans')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, total_scans: 0, total_unique: 0, campaigns: [], logs: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/campaign-stats')) {
+        if (s.includes('?campaign=')) {
+          return Promise.resolve({ ok: true, json: async () => mockStats });
+        }
+        return listGate.then(() => Promise.resolve({ ok: true, json: async () => ({ available_campaigns: mockCampaigns, default_campaign: '' }) }));
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <DispatchStatsPanel />
+      </QueryClientProvider>
+    );
+
+    // Stored campaign's stats appear before the list fetch resolves.
+    await waitFor(() => {
+      expect(screen.getByText('100')).toBeTruthy();
+      expect(screen.getByText('120 / 45')).toBeTruthy();
+    });
+
+    // Campaign buttons are still absent while the list is pending.
+    expect(screen.queryByRole('button', { name: 'Oteha 2026 Q2' })).toBeNull();
+
+    // Resolve the list; buttons appear and the selection reconciles.
+    resolveList(null);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Oteha 2026 Q2' })).toBeTruthy();
+    });
+  });
+
   it('sets the selected campaign as default via the button', async () => {
     const fetchMock = makeFetchMock();
     (global.fetch as any) = fetchMock;
@@ -383,6 +427,7 @@ describe('DispatchStatsPanel', () => {
 
 describe('CampaignScanLogsPanel', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     global.fetch = vi.fn();
   });
 

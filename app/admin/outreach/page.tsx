@@ -249,6 +249,7 @@ export default function OutreachPage() {
   const [todayRunLoading, setTodayRunLoading] = useState(false);
   const [todayRunError, setTodayRunError] = useState<string | null>(null);
   const [todayRunRefreshKey, setTodayRunRefreshKey] = useState(0);
+  const [todayRunStartStreet, setTodayRunStartStreet] = useState<string>('');
 
   useEffect(() => {
     window.localStorage.setItem('today_run_budget_v2', String(todayRunBudget));
@@ -266,6 +267,7 @@ export default function OutreachPage() {
     if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     filterDebounceRef.current = setTimeout(() => {
       cacheRef.current.clear();
+      setCurrentPage(1);
       setDebouncedFilterKey(k => k + 1);
     }, 300);
     return () => {
@@ -531,20 +533,27 @@ export default function OutreachPage() {
     return () => clearTimeout(t);
   }, [addressInput]);
 
-  const fetchPageData = useCallback(async (pageNum: number): Promise<{ items: OutreachProperty[]; pagination: PaginationMeta | null }> => {
+  const fetchPageData = useCallback(async (pageNum: number): Promise<{ items: OutreachProperty[]; pagination: PaginationMeta | null; effectiveLimit: number }> => {
     // Cancel any in-flight request so a slower earlier request can't
     // overwrite the result of a newer filter/tab/page change.
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // When a Today's Run street set is active, fetch ALL addresses in that run
+    // in a single request. Runs typically have 20–50 addresses across 10–15
+    // streets. Using PAGE_SIZE (18) here would cut off later streets because
+    // the API sorts alphabetically, so geographic-first streets like
+    // "Glamorgan Drive" would never appear on page 1 when A-C streets fill it.
+    const effectiveLimit = runStreetFilter.length > 0 ? 500 : PAGE_SIZE;
+
     const params = new URLSearchParams({
       status: activeTab,
       page: pageNum.toString(),
-      limit: PAGE_SIZE.toString(),
+      limit: effectiveLimit.toString(),
       sortOrder,
     });
-    const effectiveSuburb = suburbFilter || (runStreetFilter.length > 0 ? reportSuburbFilter : '');
+    const effectiveSuburb = reportSuburbFilter || suburbFilter;
     if (effectiveSuburb) params.set('suburb', effectiveSuburb);
     if (streetFilter) params.set('street', streetFilter);
     if (runStreetFilter.length > 0) params.set('streets', runStreetFilter.join(','));
@@ -584,6 +593,7 @@ export default function OutreachPage() {
         status: normalizeStatus(item.status),
       })),
       pagination: data.pagination ?? null,
+      effectiveLimit,
     };
   }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
@@ -621,11 +631,11 @@ export default function OutreachPage() {
       cacheRef.current.set(key1, {
         items: result.items,
         pagination: result.pagination,
-        hasMore: result.items.length >= PAGE_SIZE,
+        hasMore: result.items.length >= result.effectiveLimit,
       });
       setItems(result.items);
       setPagination(result.pagination);
-      if (result.items.length < PAGE_SIZE) {
+      if (result.items.length < result.effectiveLimit) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
@@ -667,7 +677,7 @@ export default function OutreachPage() {
           cacheRef.current.set(key, {
             items: result.items,
             pagination: result.pagination,
-            hasMore: result.items.length >= PAGE_SIZE,
+            hasMore: result.items.length >= result.effectiveLimit,
           });
           setClassicItems(result.items);
           setClassicPagination(result.pagination);
@@ -705,11 +715,11 @@ export default function OutreachPage() {
       cacheRef.current.set(key, {
         items: result.items,
         pagination: result.pagination,
-        hasMore: result.items.length >= PAGE_SIZE,
+        hasMore: result.items.length >= result.effectiveLimit,
       });
       setItems((prev) => [...prev, ...result.items]);
       pageRef.current = nextPage;
-      if (result.items.length < PAGE_SIZE) {
+      if (result.items.length < result.effectiveLimit) {
         setHasMore(false);
         hasMoreRef.current = false;
       }
@@ -962,6 +972,16 @@ export default function OutreachPage() {
   }, []);
 
   useEffect(() => {
+    if (!todayRunSuburb) {
+      setTodayRunStartStreet('');
+      return;
+    }
+    const stored =
+      window.localStorage.getItem(`today_run_start_street:${todayRunSuburb}`) || '';
+    setTodayRunStartStreet(stored);
+  }, [todayRunSuburb]);
+
+  useEffect(() => {
     if (activeTab !== 'pending' || sentStatusFilter !== 'unsent' || !todayRunSuburb) {
       setTodayRunData(null);
       setTodayRunError(null);
@@ -977,6 +997,9 @@ export default function OutreachPage() {
       status: 'pending',
       sent_status: 'unsent',
     });
+    if (todayRunStartStreet) {
+      params.set('start_street', todayRunStartStreet);
+    }
     if (reportQuarterFilter) {
       params.set('report_quarter', reportQuarterFilter);
     }
@@ -985,6 +1008,14 @@ export default function OutreachPage() {
       .then((json) => {
         if (cancelled) return;
         if (!json.success) throw new Error(json.error || 'Failed to load');
+        if (
+          todayRunStartStreet &&
+          Array.isArray(json.allStreets) &&
+          !json.allStreets.some((s: { street: string }) => s.street === todayRunStartStreet)
+        ) {
+          window.localStorage.removeItem(`today_run_start_street:${todayRunSuburb}`);
+          setTodayRunStartStreet('');
+        }
         setTodayRunData(json);
       })
       .catch((e) => {
@@ -996,7 +1027,7 @@ export default function OutreachPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, reportQuarterFilter, todayRunRefreshKey]);
+  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
 
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
@@ -1070,6 +1101,52 @@ export default function OutreachPage() {
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
     }, [currentContentKey, todayRunData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Card view mirrors the list view's ordering: streets follow the Today's Run
+  // cluster order (from street-clusters), then house number within a street.
+  const cardOrderedItems = useMemo(() => {
+    const items = [...displayItems];
+    const clusterOrder = new Map<string, number>();
+    if (todayRunData && todayRunData.suburb) {
+      todayRunData.groups.forEach((g) => {
+        g.streets.forEach((s) => {
+          if (!clusterOrder.has(s.street)) {
+            clusterOrder.set(s.street, clusterOrder.size);
+          }
+        });
+      });
+    }
+    items.sort((a, b) => {
+      const suburbA = a.suburb || 'Unknown';
+      const suburbB = b.suburb || 'Unknown';
+      const suburbCmp = suburbA.localeCompare(suburbB, undefined, { sensitivity: 'base' });
+      if (suburbCmp !== 0) return suburbCmp;
+
+      const streetA = a.street || extractStreetName(a.property_address);
+      const streetB = b.street || extractStreetName(b.property_address);
+      const ia = clusterOrder.get(streetA);
+      const ib = clusterOrder.get(streetB);
+      if (ia !== undefined && ib !== undefined) {
+        if (ia !== ib) return ia - ib;
+      } else if (ia !== undefined) {
+        return -1;
+      } else if (ib !== undefined) {
+        return 1;
+      }
+      if (streetA !== streetB) {
+        return streetA.localeCompare(streetB, undefined, { sensitivity: 'base' });
+      }
+
+      const houseA = extractHouseNumber(a.property_address);
+      const houseB = extractHouseNumber(b.property_address);
+      if (houseA.houseNumber !== houseB.houseNumber) return houseA.houseNumber - houseB.houseNumber;
+      if (houseA.unitNumber !== houseB.unitNumber) return houseA.unitNumber - houseB.unitNumber;
+      return sortOrder === 'asc'
+        ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    return items;
+  }, [displayItems, todayRunData, sortOrder]);  
 
   // Restore classic items from the shared per-page cache when switching to
   // classic mode. This avoids a loading flash when the data was already
@@ -1216,6 +1293,11 @@ export default function OutreachPage() {
             reportQuarter={reportQuarterFilter || undefined}
             onOrderApplied={handleTodayRunOrderApplied}
             onResetManualOrder={handleResetManualOrder}
+            startStreet={todayRunStartStreet}
+            onStartStreetChange={(suburb, street) => {
+              window.localStorage.setItem(`today_run_start_street:${suburb}`, street);
+              setTodayRunStartStreet(street);
+            }}
           />
         )}
 
@@ -1903,7 +1985,7 @@ export default function OutreachPage() {
             gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
             gap: "20px",
           }}>
-              {displayItems.map((prop) => (
+              {cardOrderedItems.map((prop) => (
                 <div
                   key={prop.id}
                   style={{
@@ -3270,33 +3352,55 @@ function ReportFilterSection({
   const loadReports = useCallback(async () => {
     if (loading || loaded) return;
     setLoading(true);
-    try {
-      const res = await fetch('/api/admin/pdf/reports?status=active');
-      if (res.ok) {
-        const data = await res.json();
-        const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string }) => ({
-          suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id,
-        }));
-        setAvailableReports(reports);
-        setLoaded(true);
-        try {
-          const dr = await fetch('/api/admin/outreach/default-report');
-          if (dr.ok) {
-            const d = await dr.json();
-            if (d?.defaultReport?.suburb && d?.defaultReport?.label) {
-              const { suburb, label } = d.defaultReport;
-              const exists = reports.some((r: { suburb: string; quarter: string; year: number }) => r.suburb === suburb && `${r.year}-${r.quarter}` === label);
-              if (exists) {
-                setDefaultReport({ suburb, label });
-                setSuburbFilter(suburb);
-                setReportSuburbFilter(suburb);
-                setReportQuarterFilter(label);
-              }
+
+    // Optimistic: apply the default report as soon as it arrives (parallel
+    // with the report list) so the list + "Displaying" data load immediately.
+    let optimisticDefault: { suburb: string; label: string } | null = null;
+    const applyDefault = async () => {
+      try {
+        const dr = await fetch('/api/admin/outreach/default-report');
+        if (dr.ok) {
+          const d = await dr.json();
+          if (d?.defaultReport?.suburb && d?.defaultReport?.label) {
+            const { suburb, label } = d.defaultReport;
+            optimisticDefault = { suburb, label };
+            setDefaultReport(optimisticDefault);
+            setSuburbFilter(suburb);
+            setReportSuburbFilter(suburb);
+            setReportQuarterFilter(label);
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    const loadList = async () => {
+      try {
+        const res = await fetch('/api/admin/pdf/reports?status=active');
+        if (res.ok) {
+          const data = await res.json();
+          const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string }) => ({
+            suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id,
+          }));
+          setAvailableReports(reports);
+          setLoaded(true);
+          // Re-validate the optimistically-applied default against the list.
+          const optimistic = optimisticDefault;
+          if (optimistic) {
+            const exists = reports.some((r: { suburb: string; quarter: string; year: number }) =>
+              r.suburb === optimistic.suburb && `${r.year}-${r.quarter}` === optimistic.label
+            );
+            if (!exists) {
+              setDefaultReport(null);
+              setSuburbFilter('');
+              setReportSuburbFilter('');
+              setReportQuarterFilter('');
             }
           }
-        } catch { /* ignore */ }
-      }
-    } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+    };
+
+    await Promise.all([applyDefault(), loadList()]);
     setLoading(false);
   }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter]);
 

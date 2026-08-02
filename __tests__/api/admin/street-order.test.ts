@@ -22,8 +22,12 @@ function mockAuth() {
   vi.mocked(auth).mockResolvedValue({ user: { email: 'admin@test.com' } } as any);
 }
 
-function streetRow(street: string, address_count: number, lat: number, lng: number) {
-  return { street, address_count, has_coords: true, center_lat: lat, center_lng: lng };
+function streetRows(street: string, count: number, lat: number, lng: number) {
+  const rows = [];
+  for (let i = 1; i <= count; i++) {
+    rows.push({ street, property_address: `${i} ${street}`, house_number: null, lat, lng });
+  }
+  return rows;
 }
 
 describe('GET /api/admin/outreach/street-order', () => {
@@ -51,9 +55,9 @@ describe('GET /api/admin/outreach/street-order', () => {
     vi.mocked(marieDB.query)
       .mockResolvedValueOnce({
         rows: [
-          streetRow('Alpha Street', 5, -36.6958, 174.7453),
-          streetRow('Beta Street', 3, -36.6959, 174.7454),
-          streetRow('Gamma Street', 4, -36.6957, 174.7452),
+          ...streetRows('Alpha Street', 5, -36.6958, 174.7453),
+          ...streetRows('Beta Street', 3, -36.6959, 174.7454),
+          ...streetRows('Gamma Street', 4, -36.6957, 174.7452),
         ],
       } as any)
       .mockResolvedValueOnce({
@@ -75,15 +79,15 @@ describe('GET /api/admin/outreach/street-order', () => {
     expect(body.streets[0]).toMatchObject({ street: 'Gamma Street', address_count: 4 });
   });
 
-  it('returns recommended cluster order when no saved order exists', async () => {
+  it('returns recommended greedy order when no saved order exists', async () => {
     mockAuth();
 
     vi.mocked(marieDB.query)
       .mockResolvedValueOnce({
         rows: [
-          streetRow('Alpha Street', 5, -36.6958, 174.7453),
-          streetRow('Beta Street', 3, -36.6962, 174.7456),
-          streetRow('Gamma Street', 4, -36.71, 174.74),
+          ...streetRows('Alpha Street', 5, -36.6958, 174.7453),
+          ...streetRows('Beta Street', 3, -36.6962, 174.7456),
+          ...streetRows('Gamma Street', 4, -36.71, 174.74),
         ],
       } as any)
       .mockResolvedValueOnce({ rows: [] } as any);
@@ -92,7 +96,7 @@ describe('GET /api/admin/outreach/street-order', () => {
     const body = await response.json();
 
     expect(body.hasSavedOrder).toBe(false);
-    // Alpha + Beta are within 500m so they cluster together; Gamma is far away.
+    // Alpha (house 1) starts, then the nearest street Beta, then Gamma.
     expect(body.streets.map((s: { street: string }) => s.street)).toEqual([
       'Alpha Street',
       'Beta Street',

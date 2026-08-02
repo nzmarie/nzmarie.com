@@ -149,4 +149,68 @@ describe('TodayRunSection', () => {
     fireEvent.blur(input);
     expect(onBudgetChange).toHaveBeenCalledWith(30);
   });
+
+  it('renders a start-street dropdown when allStreets are available', () => {
+    render(
+      <TodayRunSection
+        {...baseProps({
+          data: {
+            ...data,
+            allStreets: [
+              { street: 'Alpha Street', count: 5 },
+              { street: 'Beta Street', count: 3 },
+            ],
+            startStreet: 'Alpha Street',
+          },
+        })}
+      />
+    );
+    expect(screen.getByLabelText('Start street')).toBeTruthy();
+    expect(screen.getByText(/Auto \(default: Alpha Street\)/)).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Alpha Street (5)' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Beta Street (3)' })).toBeTruthy();
+  });
+
+  it('calls onStartStreetChange when the start street changes', () => {
+    const onStartStreetChange = vi.fn();
+    render(
+      <TodayRunSection
+        {...baseProps({
+          data: {
+            ...data,
+            allStreets: [
+              { street: 'Alpha Street', count: 5 },
+              { street: 'Beta Street', count: 3 },
+            ],
+            startStreet: 'Alpha Street',
+          },
+          onStartStreetChange,
+        })}
+      />
+    );
+    fireEvent.change(screen.getByLabelText('Start street'), { target: { value: 'Beta Street' } });
+    expect(onStartStreetChange).toHaveBeenCalledWith('Torbay', 'Beta Street');
+  });
+
+  it('disables the start-street dropdown when a manual order is applied', () => {
+    render(
+      <TodayRunSection
+        {...baseProps({
+          data: {
+            ...data,
+            allStreets: [
+              { street: 'Alpha Street', count: 5 },
+              { street: 'Beta Street', count: 3 },
+            ],
+            startStreet: 'Alpha Street',
+            manualOrder: true,
+            manualOrderCount: 2,
+          },
+        })}
+      />
+    );
+    const select = screen.getByLabelText('Start street') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(screen.getAllByText(/Manual order applied/).length).toBeGreaterThan(0);
+  });
 });
