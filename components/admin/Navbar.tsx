@@ -76,7 +76,7 @@ export function AdminNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-3">
           {/* Left: Logo */}
-          <div className="flex items-center">
+          <div className="flex-1 flex items-center">
             <Link
               href="/admin"
               className="text-lg font-semibold text-gray-900 hover:text-gray-700"
@@ -86,7 +86,7 @@ export function AdminNavbar() {
           </div>
 
           {/* Center: Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-1 ml-4">
+          <div className="hidden lg:flex flex-none items-center space-x-1">
             {navLinks.map(link => {
               if (!link.alwaysShow && !superAdmin) return null;
 
@@ -99,7 +99,7 @@ export function AdminNavbar() {
           </div>
 
           {/* Right: User Menu */}
-          <div className="flex items-center space-x-4">
+          <div className="flex-1 flex items-center justify-end space-x-4">
             {/* Mobile/Tablet Menu Button */}
             <button
               className="lg:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100"
