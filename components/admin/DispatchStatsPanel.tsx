@@ -196,6 +196,7 @@ interface ScanLog {
   device_type: string;
   referrer: string;
   is_unique: boolean;
+  visit_count?: number;
   created_at: string;
 }
 
@@ -391,7 +392,7 @@ function CampaignScanLogsPanel() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                              Repeat
+                              Repeat{log.visit_count ? ` \u00d7${log.visit_count}` : ''}
                             </span>
                           )}
                         </td>

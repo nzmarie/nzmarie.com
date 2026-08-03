@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { marieDB } from '@/lib/db';
-import { recordCampaignVisit } from '@/lib/campaign-tracker';
+import { recordCampaignVisit, getClientIp } from '@/lib/campaign-tracker';
 
 export async function GET(request: Request) {
   const redirectUrl = new URL('/', request.url);
@@ -10,10 +10,7 @@ export async function GET(request: Request) {
   redirectUrl.searchParams.set('utm_campaign', 'card_2026');
 
   const userAgent = request.headers.get('user-agent') || 'unknown';
-  const ipAddress =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown';
+  const ipAddress = getClientIp(request);
 
   after(async () => {
     try {

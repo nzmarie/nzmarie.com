@@ -43,6 +43,7 @@ type ScanLogEntry = {
   device_type: string;
   referrer: string;
   is_unique: boolean;
+  visit_count?: number;
   created_at: string;
 };
 
@@ -103,7 +104,7 @@ export default function AnalyticsPage() {
     total_scans: number;
     total_unique: number;
     campaigns: Array<{ campaign_key: string; campaign_name: string; total_pv: number; total_uv: number; last_visited_at: string | null }>;
-    logs: Array<{ id: string; campaign_key: string; visitor_hash: string; ip_address: string; user_agent: string; device_type: string; referrer: string; is_unique: boolean; created_at: string }>;
+    logs: Array<{ id: string; campaign_key: string; visitor_hash: string; ip_address: string; user_agent: string; device_type: string; referrer: string; is_unique: boolean; visit_count?: number; created_at: string }>;
   }>({ total_scans: 0, total_unique: 0, campaigns: [], logs: [] });
 
   const [showScanLogsModal, setShowScanLogsModal] = useState(false);
@@ -854,7 +855,7 @@ export default function AnalyticsPage() {
                             {log.is_unique ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Unique</span>
                             ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Repeat</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Repeat{log.visit_count ? ` \u00d7${log.visit_count}` : ''}</span>
                             )}
                           </td>
                         </tr>

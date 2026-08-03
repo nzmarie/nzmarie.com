@@ -11,6 +11,7 @@ vi.mock('next/server', async (importOriginal) => {
 
 vi.mock('../../lib/campaign-tracker', () => ({
   recordCampaignVisit: vi.fn().mockResolvedValue(undefined),
+  getClientIp: vi.fn(() => '203.0.113.195'),
 }));
 
 describe('GET /torbay route handler', () => {

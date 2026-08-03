@@ -78,6 +78,7 @@ const mockScanLogs = {
       device_type: 'mobile',
       referrer: '',
       is_unique: true,
+      visit_count: 1,
       created_at: '2026-07-25T10:30:00.000Z',
     },
     {
@@ -89,6 +90,7 @@ const mockScanLogs = {
       device_type: 'desktop',
       referrer: '',
       is_unique: false,
+      visit_count: 2,
       created_at: '2026-07-24T08:00:00.000Z',
     },
   ],
@@ -482,7 +484,7 @@ describe('CampaignScanLogsPanel', () => {
       expect(screen.getByText('abcdef123456...')).toBeTruthy();
       expect(screen.getByText('1.2.3.4')).toBeTruthy();
       expect(screen.getByText('Unique')).toBeTruthy();
-      expect(screen.getByText('Repeat')).toBeTruthy();
+      expect(screen.getByText('Repeat \u00d72')).toBeTruthy();
     });
     const fingerprintEl = screen.getByText('abcdef123456...');
     expect(fingerprintEl.closest('td')?.className).toContain('select-text');

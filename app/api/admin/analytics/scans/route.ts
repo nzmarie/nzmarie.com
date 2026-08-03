@@ -46,12 +46,12 @@ export async function GET(request: Request) {
     // Run all 3 queries in parallel instead of sequentially
     // Build logs query with pagination
     const logsQuery = selectedCampaign
-      ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, created_at
+      ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
          FROM campaign_visit_logs
          WHERE campaign_key = $1
          ORDER BY created_at DESC
          LIMIT $2 OFFSET $3`
-      : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, created_at
+      : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
          FROM campaign_visit_logs
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`;
@@ -77,11 +77,11 @@ export async function GET(request: Request) {
     const providedPage = searchParams.has('page') || searchParams.has('limit');
     if (!providedPage) {
       const logsQueryNoLimit = selectedCampaign
-        ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, created_at
+        ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
            FROM campaign_visit_logs
            WHERE campaign_key = $1
            ORDER BY created_at DESC LIMIT 100`
-        : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, created_at
+        : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
            FROM campaign_visit_logs
            ORDER BY created_at DESC LIMIT 100`;
 

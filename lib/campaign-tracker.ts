@@ -45,10 +45,18 @@ export async function ensureCampaignTablesExist(): Promise<void> {
           device_type VARCHAR(20),
           referrer TEXT,
           is_unique BOOLEAN DEFAULT TRUE,
+          visit_count INT NOT NULL DEFAULT 1,
+          first_scanned_at TIMESTAMPTZ,
+          last_scanned_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_visit_logs_campaign_time ON campaign_visit_logs(campaign_key, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_visit_logs_hash_time ON campaign_visit_logs(visitor_hash, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_visit_logs_campaign_visitor ON campaign_visit_logs(campaign_key, visitor_hash);
+
+      ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS visit_count INT NOT NULL DEFAULT 1;
+      ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS first_scanned_at TIMESTAMPTZ;
+      ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ;
     `);
     tablesEnsured = true;
   } catch (err) {
@@ -77,6 +85,15 @@ export function generateVisitorHash(ip: string = '', userAgent: string = ''): st
   return crypto.createHash('sha256').update(`${ip}-${userAgent}`).digest('hex');
 }
 
+export function getClientIp(request: Request): string {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    '127.0.0.1'
+  );
+}
+
 export async function recordCampaignVisit(options: CampaignVisitOptions): Promise<void> {
   const {
     campaignKey,
@@ -90,21 +107,24 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   await ensureCampaignTablesExist();
 
   const visitorHash = generateVisitorHash(ip, userAgent);
-  const anonymizedIp = anonymizeIP(ip);
 
-  const existing = await query<{ count: string }>(
-    `SELECT COUNT(*) as count 
-     FROM campaign_visit_logs 
-     WHERE campaign_key = $1 AND visitor_hash = $2 AND created_at > NOW() - INTERVAL '24 hours'`,
+  const prev = await query<{ cnt: string | number; first_scanned_at: string | Date | null }>(
+    `SELECT COUNT(*)::int AS cnt, MIN(created_at) AS first_scanned_at
+     FROM campaign_visit_logs
+     WHERE campaign_key = $1 AND visitor_hash = $2`,
     [campaignKey, visitorHash]
   );
 
-  const isUnique = parseInt(existing.rows[0]?.count || '0', 10) === 0;
+  const prevRow = prev.rows[0];
+  const prevCount = Number(prevRow?.cnt ?? 0);
+  const isUnique = prevCount === 0;
+  const visitCount = prevCount + 1;
+  const firstScannedAt = prevRow?.first_scanned_at ?? null;
 
   await query(
-    `INSERT INTO campaign_visit_logs (campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [campaignKey, visitorHash, anonymizedIp, userAgent, deviceType, referrer, isUnique]
+    `INSERT INTO campaign_visit_logs (campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, NOW()), NOW())`,
+    [campaignKey, visitorHash, ip, userAgent, deviceType, referrer, isUnique, visitCount, firstScannedAt]
   );
 
   await query(
