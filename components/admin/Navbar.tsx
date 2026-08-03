@@ -63,7 +63,7 @@ export function AdminNavbar() {
           isActive
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-700 hover:text-gray-900'
-        } px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap`}
+        } px-2.5 py-2 text-sm font-medium transition-colors whitespace-nowrap`}
       >
         {children}
       </Link>
@@ -86,7 +86,7 @@ export function AdminNavbar() {
           </div>
 
           {/* Center: Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-1 ml-10">
+          <div className="hidden lg:flex items-center space-x-1 ml-4">
             {navLinks.map(link => {
               if (!link.alwaysShow && !superAdmin) return null;
 
@@ -112,12 +112,7 @@ export function AdminNavbar() {
 
             {/* User Dropdown Menu */}
             <Menu as="div" className="relative">
-              <Menu.Button className="flex items-center space-x-3 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
-                <div className="hidden sm:block text-right">
-                  <div className="text-sm font-medium text-gray-900">
-                    {userName}
-                  </div>
-                </div>
+              <Menu.Button className="flex items-center hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors" aria-label="User menu">
                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                   <span className="text-sm font-medium text-blue-600">
                     {userInitial}
