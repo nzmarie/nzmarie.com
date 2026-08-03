@@ -971,22 +971,42 @@ export default function OutreachPage() {
     setTodayRunRefreshKey((k) => k + 1);
   }, []);
 
+  // Merged effect: restore start street from localStorage and fetch street-clusters
+  // together in a single effect. This avoids a React setState-batching race where
+  // both the old restore effect and the fetch effect fired in the same render cycle
+  // (when todayRunSuburb changed): the fetch saw the stale '' value because
+  // setTodayRunStartStreet() from the restore effect had not been committed yet.
+  // Reading localStorage synchronously inside the same effect that builds the fetch
+  // params guarantees the correct start_street is sent on the very first request.
   useEffect(() => {
     if (!todayRunSuburb) {
       setTodayRunStartStreet('');
-      return;
-    }
-    const stored =
-      window.localStorage.getItem(`today_run_start_street:${todayRunSuburb}`) || '';
-    setTodayRunStartStreet(stored);
-  }, [todayRunSuburb]);
-
-  useEffect(() => {
-    if (activeTab !== 'pending' || sentStatusFilter !== 'unsent' || !todayRunSuburb) {
       setTodayRunData(null);
       setTodayRunError(null);
       return;
     }
+
+    if (activeTab !== 'pending' || sentStatusFilter !== 'unsent') {
+      setTodayRunData(null);
+      setTodayRunError(null);
+      return;
+    }
+
+    // Resolve the effective start street synchronously:
+    // - If state is already up-to-date (user changed the selector), use it.
+    // - On first load for a suburb, state may still be '' while localStorage
+    //   already holds a saved value -- read it directly so the first fetch
+    //   includes the correct start_street param without an extra round-trip.
+    const effectiveStartStreet =
+      todayRunStartStreet ||
+      window.localStorage.getItem(`today_run_start_street:${todayRunSuburb}`) ||
+      '';
+
+    // Keep React state in sync with what we're actually using.
+    if (effectiveStartStreet !== todayRunStartStreet) {
+      setTodayRunStartStreet(effectiveStartStreet);
+    }
+
     let cancelled = false;
     setTodayRunLoading(true);
     setTodayRunError(null);
@@ -997,8 +1017,8 @@ export default function OutreachPage() {
       status: 'pending',
       sent_status: 'unsent',
     });
-    if (todayRunStartStreet) {
-      params.set('start_street', todayRunStartStreet);
+    if (effectiveStartStreet) {
+      params.set('start_street', effectiveStartStreet);
     }
     if (reportQuarterFilter) {
       params.set('report_quarter', reportQuarterFilter);
@@ -1008,10 +1028,11 @@ export default function OutreachPage() {
       .then((json) => {
         if (cancelled) return;
         if (!json.success) throw new Error(json.error || 'Failed to load');
+        // If the saved street no longer exists in the current data, clear it.
         if (
-          todayRunStartStreet &&
+          effectiveStartStreet &&
           Array.isArray(json.allStreets) &&
-          !json.allStreets.some((s: { street: string }) => s.street === todayRunStartStreet)
+          !json.allStreets.some((s: { street: string }) => s.street === effectiveStartStreet)
         ) {
           window.localStorage.removeItem(`today_run_start_street:${todayRunSuburb}`);
           setTodayRunStartStreet('');
