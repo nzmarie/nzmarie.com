@@ -39,6 +39,22 @@ const mockStore = {
       letterDoc: null,
       reports: [],
     },
+    {
+      id: 's3',
+      name: 'Takapuna',
+      introDoc: { id: 'd5', title: 'Takapuna Introduction', status: 'draft' },
+      letterDoc: { id: 'd6', title: 'Takapuna Letter', status: 'draft' },
+      reports: [
+        { id: 'd7', title: 'Takapuna 2026-Q2 Report', quarter: '2026-Q2', status: 'draft', createdAt: '2026-07-01' },
+      ],
+    },
+    {
+      id: 's4',
+      name: 'Bayswater',
+      introDoc: { id: 'd8', title: 'Bayswater Introduction', status: 'draft' },
+      letterDoc: null,
+      reports: [],
+    },
   ],
 };
 
@@ -79,6 +95,18 @@ describe('ReportSidebar', () => {
     expect(document.getElementById('sidebar-North-Shore')).toBeDefined();
     expect(document.getElementById('sidebar-Torbay')).toBeDefined();
     expect(document.getElementById('sidebar-Browns-Bay')).toBeDefined();
+    expect(document.getElementById('sidebar-Takapuna')).toBeDefined();
+    expect(document.getElementById('sidebar-Bayswater')).toBeDefined();
+  });
+
+  it('shows intro, letter and quarterly report docs for newly added suburbs', () => {
+    render(<ReportSidebar />);
+    clickSuburbName('Takapuna');
+    expect(screen.getByText('Takapuna Introduction')).toBeDefined();
+    expect(screen.getByText('Takapuna Letter')).toBeDefined();
+    expect(screen.getByText('Takapuna 2026-Q2 Report')).toBeDefined();
+    clickSuburbName('Bayswater');
+    expect(screen.getByText('Bayswater Introduction')).toBeDefined();
   });
 
   it('lists North Shore before other suburbs', () => {

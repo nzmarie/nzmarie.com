@@ -62,6 +62,15 @@ const DEFAULT_SUBURBS = [
   'Hillcrest',
   'Birkenhead',
   'Hauraki',
+  'Bayswater',
+  'Bayview',
+  'Beach Haven',
+  'Belmont',
+  'Birkdale',
+  'Devonport',
+  'Northcote',
+  'Takapuna',
+  'Totara Vale',
 ];
 
 const SUBURB_URLS: Record<string, string> = {
@@ -91,6 +100,15 @@ const SUBURB_URLS: Record<string, string> = {
   'Hillcrest': 'https://nzmarie.com/hillcrest',
   'Birkenhead': 'https://nzmarie.com/birkenhead',
   'Hauraki': 'https://nzmarie.com/hauraki',
+  'Bayswater': 'https://nzmarie.com/bayswater',
+  'Bayview': 'https://nzmarie.com/bayview',
+  'Beach Haven': 'https://nzmarie.com/beach-haven',
+  'Belmont': 'https://nzmarie.com/belmont',
+  'Birkdale': 'https://nzmarie.com/birkdale',
+  'Devonport': 'https://nzmarie.com/devonport',
+  'Northcote': 'https://nzmarie.com/northcote',
+  'Takapuna': 'https://nzmarie.com/takapuna',
+  'Totara Vale': 'https://nzmarie.com/totara-vale',
 };
 
 const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];

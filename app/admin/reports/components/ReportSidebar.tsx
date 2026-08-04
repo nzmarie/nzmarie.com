@@ -9,7 +9,8 @@ const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview 
   'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay',
   'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe',
   'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
-  'Hillcrest', 'Birkenhead', 'Hauraki'];
+  'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven',
+  'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'];
 
 export default function ReportSidebar() {
   const router = useRouter();
