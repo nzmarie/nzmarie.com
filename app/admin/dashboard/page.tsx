@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 import { SuburbFilter } from "@/components/admin/SuburbFilter";
+import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 
 interface DashboardStats {
   newLeads: number;
@@ -167,6 +168,7 @@ export default function AdminDashboardPage() {
           onChange={setSuburbFilter}
           label="Filter by Suburb"
           showLabel={true}
+          suburbs={[...SUBURB_PRIORITY_ORDER]}
         />
       </div>
 

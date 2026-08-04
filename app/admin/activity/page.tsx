@@ -4,7 +4,8 @@ import { useSession } from 'next-auth/react';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonBookings, SkeletonDownloads } from '@/components/admin/Skeleton';
 import DispatchStatsPanel from '@/components/admin/DispatchStatsPanel';
-import { REGIONS, getCitiesByRegion, getSuburbsByCity, type Region } from '@/lib/geo-data';
+import { REGIONS, getCitiesByRegion, type Region } from '@/lib/geo-data';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
 type BookingStatus = 'new' | 'contacted' | 'scheduled' | 'appraised' | 'converted' | 'lost';
 type BookingPriority = 'high' | 'medium' | 'low';
@@ -100,7 +101,7 @@ function AppraisalsTab() {
   const [page, setPage] = useState(1);
 
   const availableCities = regionFilter ? getCitiesByRegion(regionFilter as Region) : [];
-  const availableSuburbs = cityFilter ? getSuburbsByCity(cityFilter) : [];
+  const availableSuburbs = [...SUBURB_PRIORITY_ORDER];
 
   const handleRegionChange = (value: string) => {
     setRegionFilter(value);

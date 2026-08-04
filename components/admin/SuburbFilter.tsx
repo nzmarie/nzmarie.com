@@ -1,5 +1,6 @@
 import React from 'react';
 import { NZ_SUBURBS } from '@/lib/address-parser';
+import { sortSuburbs } from '@/lib/suburb-order';
 
 interface SuburbFilterProps {
   value: string;
@@ -10,6 +11,7 @@ interface SuburbFilterProps {
   includeAll?: boolean;
   allLabel?: string;
   includeOther?: boolean;
+  suburbs?: string[];
 }
 
 export function SuburbFilter({
@@ -21,10 +23,12 @@ export function SuburbFilter({
   includeAll = true,
   allLabel = 'All Suburbs',
   includeOther = true,
+  suburbs,
 }: SuburbFilterProps) {
   const isFiltered = value && value !== 'all' && value !== '';
 
-  const suburbOptions = includeOther ? [...NZ_SUBURBS, 'Other'] : NZ_SUBURBS;
+  const baseSuburbs = suburbs ? [...suburbs] : sortSuburbs([...NZ_SUBURBS]);
+  const suburbOptions = includeOther ? [...baseSuburbs, 'Other'] : baseSuburbs;
 
   return (
     <div className={`flex flex-wrap items-center gap-3 ${className}`}>
