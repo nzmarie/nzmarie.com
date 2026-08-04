@@ -24,6 +24,15 @@ export const SUBURB_PRIORITY_ORDER = [
   'Hillcrest',
   'Birkenhead',
   'Hauraki',
+  'Bayswater',
+  'Bayview',
+  'Beach Haven',
+  'Belmont',
+  'Birkdale',
+  'Devonport',
+  'Northcote',
+  'Takapuna',
+  'Totara Vale',
 ] as const;
 
 export function sortSuburbs(suburbs: string[]): string[] {

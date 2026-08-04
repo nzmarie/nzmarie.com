@@ -24,8 +24,11 @@ export const CITY_SUBURBS: Record<string, string[]> = {
   "North Shore City": [
     "Albany",
     "Bayview",
+    "Bayswater",
     "Beach Haven",
+    "Belmont",
     "Birkenhead",
+    "Birkdale",
     "Browns Bay",
     "Campbells Bay",
     "Castor Bay",

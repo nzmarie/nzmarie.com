@@ -199,7 +199,7 @@ describe('Admin pages', () => {
     fireEvent.click(pendingTab);
     const listBtn = await screen.findByRole('button', { name: /☰ List/i });
     fireEvent.click(listBtn);
-    const suburbGroup = await screen.findByText(/Takapuna/i);
+    const suburbGroup = await screen.findByText(/Takapuna/i, { selector: 'div' });
     fireEvent.click(suburbGroup);
 
     const checkboxes = screen.getAllByRole('checkbox');

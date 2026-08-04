@@ -98,7 +98,7 @@ describe('Outreach page', () => {
     fireEvent.click(pendingTab);
     const listBtn = await screen.findByRole('button', { name: /☰ List/i });
     fireEvent.click(listBtn);
-    const suburbHeader = await screen.findByText(/Takapuna/i);
+    const suburbHeader = await screen.findByText(/Takapuna/i, { selector: 'div' });
     expect(suburbHeader).toBeTruthy();
 
     expect(await screen.findByText('15 Marine Parade')).toBeTruthy();
@@ -168,7 +168,7 @@ describe('Outreach page', () => {
     fireEvent.click(pendingTab);
     const listBtn = await screen.findByRole('button', { name: /☰ List/i });
     fireEvent.click(listBtn);
-    const suburbHeader = await screen.findByText(/Takapuna/i);
+    const suburbHeader = await screen.findByText(/Takapuna/i, { selector: 'div' });
     expect(suburbHeader).toBeTruthy();
 
     const sentButtons = await screen.findAllByRole('button', { name: /✓ Sent/i });

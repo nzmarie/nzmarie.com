@@ -50,7 +50,7 @@ describe('sortSuburbs', () => {
     expect(SUBURB_PRIORITY_ORDER[0]).toBe('Northcross');
   });
 
-  it('SUBURB_PRIORITY_ORDER contains 25 entries', () => {
-    expect(SUBURB_PRIORITY_ORDER.length).toBe(25);
+  it('SUBURB_PRIORITY_ORDER contains 34 entries', () => {
+    expect(SUBURB_PRIORITY_ORDER.length).toBe(34);
   });
 });
