@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { extractStreetName } from '@/lib/google-maps';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -72,6 +73,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // Derive the street name from the address when the caller didn't supply
+    // one (e.g. the Properties page Like button). Without this, liked records
+    // get street = NULL and are dropped by street-filtered views (Today's Run,
+    // per-street filters) in the outreach page.
+    const derivedStreet =
+      street?.trim() ||
+      extractStreetName(property_address);
+
     const existing = await marieDB.query(
       `SELECT id, status FROM outreach_properties WHERE property_id = $1 LIMIT 1`,
       [property_id]
@@ -88,8 +97,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ liked: false });
       }
       await marieDB.query(
-        `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
-        [current.id]
+        `UPDATE outreach_properties
+         SET status = 'liked', campaign = 'favorites',
+             street = COALESCE(NULLIF(TRIM(street), ''), $2)
+         WHERE id = $1`,
+        [current.id, derivedStreet]
       );
       if (process.env.USE_OUTREACH_MV === 'true') {
         marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
@@ -101,7 +113,7 @@ export async function POST(request: Request) {
     await marieDB.query(
       `INSERT INTO outreach_properties (property_id, property_address, suburb, city, region, street, campaign, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'favorites', 'liked')`,
-      [property_id, property_address.trim(), suburb.trim(), city.trim(), region.trim(), street?.trim() || null]
+      [property_id, property_address.trim(), suburb.trim(), city.trim(), region.trim(), derivedStreet]
     );
 
     if (process.env.USE_OUTREACH_MV === 'true') {

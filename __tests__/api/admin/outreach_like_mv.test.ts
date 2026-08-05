@@ -107,8 +107,11 @@ describe('Outreach Like MV POST /api/admin/outreach/like', () => {
     const data = await response.json();
     expect(data.liked).toBe(true);
     expect(marieDB.query).toHaveBeenCalledWith(
-      `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
-      ['existing-id']
+      `UPDATE outreach_properties
+         SET status = 'liked', campaign = 'favorites',
+             street = COALESCE(NULLIF(TRIM(street), ''), $2)
+         WHERE id = $1`,
+      ['existing-id', 'Test St']
     );
     expect(marieDB.query).toHaveBeenCalledWith(
       'REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched'
@@ -139,8 +142,11 @@ describe('Outreach Like MV POST /api/admin/outreach/like', () => {
     const data = await response.json();
     expect(data.liked).toBe(true);
     expect(marieDB.query).toHaveBeenCalledWith(
-      `UPDATE outreach_properties SET status = 'liked', campaign = 'favorites' WHERE id = $1`,
-      ['existing-id-2']
+      `UPDATE outreach_properties
+         SET status = 'liked', campaign = 'favorites',
+             street = COALESCE(NULLIF(TRIM(street), ''), $2)
+         WHERE id = $1`,
+      ['existing-id-2', 'Test Ave']
     );
   });
 
