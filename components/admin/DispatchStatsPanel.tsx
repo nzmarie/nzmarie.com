@@ -13,6 +13,7 @@ interface Summary {
   interacted_count: number;
   converted_count: number;
   no_junk_mail_count: number;
+  remaining_count: number;
   total_scans_pv: number;
   total_scans_uv: number;
 }
@@ -54,8 +55,12 @@ function formatDateLabel(dateStr: string): string {
 }
 
 function SummaryCards({ summary, bizPv, bizUv }: { summary: Summary; bizPv: number; bizUv: number }) {
-  const totalScans = `${summary.total_scans_pv} / ${summary.total_scans_uv}`;
-  const bizScans = `${bizPv} / ${bizUv}`;
+  const fmt = (n: unknown): number => {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : 0;
+  };
+  const totalScans = `${fmt(summary.total_scans_pv)} / ${fmt(summary.total_scans_uv)}`;
+  const bizScans = `${fmt(bizPv)} / ${fmt(bizUv)}`;
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
       {SUMMARY_CARDS.map(({ key, label, icon, color }) => {
@@ -104,7 +109,10 @@ function CampaignOverview({ summary }: { summary: Summary }) {
   const total = summary.pending_count;
   if (total === 0) return null;
 
-  const remaining = summary.pending_count - summary.sent_count - summary.no_junk_mail_count;
+  // remaining_count is computed server-side as the distinct count of pending
+  // addresses with no send log and no no-junk flag. Fall back to the old
+  // subtraction when the field is absent (older cached responses).
+  const remaining = summary.remaining_count ?? summary.pending_count - summary.sent_count - summary.no_junk_mail_count;
 
   const pieData = [
     { name: 'Sent', value: summary.sent_count },

@@ -154,8 +154,8 @@ export function parseAddressComponents(
  * - "123A Queen Street" → "Queen Street"
  */
 export function extractStreetName(fullAddress: string): string {
-  // Remove leading number and optional unit (e.g., "5 ", "15A ", "123/456 ")
-  let street = fullAddress.replace(/^\d+[A-Za-z]?(?:\/\d+)?\s+/, '');
+  // Remove leading number and optional unit (e.g., "5 ", "15A ", "123/456 ", "-7 ", "-11")
+  let street = fullAddress.replace(/^-?\d+[A-Za-z]?(?:\/\d+)?\s+/, '');
   
   // Take everything before the first comma
   street = street.split(',')[0].trim();

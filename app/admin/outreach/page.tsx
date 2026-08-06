@@ -930,17 +930,17 @@ export default function OutreachPage() {
 
   function extractHouseNumber(address: string): { houseNumber: number; unitNumber: number } {
     const clean = address.trim();
-    const unitMatch = clean.match(/^(\d+)\/(\d+)/);
+    const unitMatch = clean.match(/^-?(\d+)\/(\d+)/);
     if (unitMatch) {
       return { houseNumber: parseInt(unitMatch[2], 10), unitNumber: parseInt(unitMatch[1], 10) };
     }
-    const numMatch = clean.match(/^(\d+)/);
+    const numMatch = clean.match(/^-?(\d+)/);
     return { houseNumber: numMatch ? parseInt(numMatch[1], 10) : 999999, unitNumber: 0 };
   }
 
   function extractStreetName(address: string): string {
-    let s = address.replace(/^\d+\//, '');
-    s = s.replace(/^\d+[A-Za-z]?\s*/, '');
+    let s = address.replace(/^-?\d+\//, '');
+    s = s.replace(/^-?\d+[A-Za-z]?\s*/, '');
     return s.trim() || 'Unknown Street';
   }
 

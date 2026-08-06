@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, useQueryClient, useQuery, keepPreviousData } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
-import { SkeletonProperties, SkeletonPropertyCard } from "@/components/admin/Skeleton";
+import { SkeletonProperties, SkeletonPropertyCard, SkeletonBlock } from "@/components/admin/Skeleton";
 import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
 import { getFixedImageUrl } from "@/lib/google-maps";
 import { PropertyHistoryView } from "@/components/admin/PropertyHistoryView";
@@ -783,6 +783,8 @@ export default function PropertiesPage() {
   const [buildYearPreset, setBuildYearPreset] = useState('all');
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -1078,6 +1080,72 @@ export default function PropertiesPage() {
   const properties: Property[] = isClassic ? (classicData?.properties ?? []) : allInfiniteProperties;
   const displayProperties = properties;
   const [likedPropertyIds, setLikedPropertyIds] = useState<Set<string>>(new Set());
+
+  const extractStreetName = (address: string): string => {
+    let s = address.replace(/^-?\d+\//, '');
+    s = s.replace(/^-?\d+[A-Za-z]?\s*/, '');
+    return s.trim() || 'Unknown Street';
+  };
+
+  const extractHouseNumber = (address: string): { houseNumber: number; unitNumber: number } => {
+    const clean = address.trim();
+    const unitMatch = clean.match(/^-?(\d+)\/(\d+)/);
+    if (unitMatch) {
+      return { houseNumber: parseInt(unitMatch[2], 10), unitNumber: parseInt(unitMatch[1], 10) };
+    }
+    const numMatch = clean.match(/^-?(\d+)/);
+    return { houseNumber: numMatch ? parseInt(numMatch[1], 10) : 999999, unitNumber: 0 };
+  };
+
+  const groupedBySuburb = useMemo(() => {
+    const groups = new Map<string, Map<string, Property[]>>();
+    displayProperties.forEach((item) => {
+      const suburb = item.suburb || 'Unknown';
+      const street = extractStreetName(item.address);
+      if (!groups.has(suburb)) {
+        groups.set(suburb, new Map());
+      }
+      const streetMap = groups.get(suburb)!;
+      if (!streetMap.has(street)) {
+        streetMap.set(street, []);
+      }
+      streetMap.get(street)!.push(item);
+    });
+
+    return Array.from(groups.entries())
+      .map(([suburb, streetMap]) => {
+        const streets = Array.from(streetMap.entries())
+          .map(([street, props]) => ({
+            street,
+            properties: [...props].sort((a, b) => {
+              const ha = extractHouseNumber(a.address);
+              const hb = extractHouseNumber(b.address);
+              if (ha.houseNumber !== hb.houseNumber) return ha.houseNumber - hb.houseNumber;
+              if (ha.unitNumber !== hb.unitNumber) return ha.unitNumber - hb.unitNumber;
+              return a.address.localeCompare(b.address, undefined, { sensitivity: 'base' });
+            }),
+            totalCount: props.length,
+          }))
+          .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }));
+
+        return {
+          suburb,
+          streets,
+          totalCount: streets.reduce((sum, s) => sum + s.totalCount, 0),
+        };
+      })
+      .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
+  }, [displayProperties]);
+  const toggleStreet = (suburb: string, street: string) => {
+    const key = `${suburb}::${street}`;
+    setCollapsedStreets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const totalProperties = isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total || 0);
   const totalPages = Math.max(1, Math.ceil(totalProperties / 18));
 
@@ -1161,7 +1229,7 @@ export default function PropertiesPage() {
     return () => {
       observer.disconnect();
     };
-  }, [isClassic, hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData]);
+  }, [isClassic, hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData, viewMode]);
 
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
   const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'];
@@ -2358,6 +2426,38 @@ export default function PropertiesPage() {
             Classic Pages
           </button>
         </div>
+        <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+          <button
+            onClick={() => setViewMode('card')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: viewMode === 'card' ? '#3b82f6' : 'white',
+              color: viewMode === 'card' ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            Cards
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: viewMode === 'list' ? '#3b82f6' : 'white',
+              color: viewMode === 'list' ? 'white' : '#4a5568',
+              border: 'none',
+              cursor: "pointer",
+              fontSize: "0.9rem",
+              fontWeight: "600",
+              transition: "all 0.2s",
+            }}
+          >
+            List
+          </button>
+        </div>
       </div>
 
       {isClassic && (
@@ -2457,6 +2557,94 @@ export default function PropertiesPage() {
         </div>
       )}
 
+      {viewMode === 'list' ? (
+        <div className="space-y-4" style={{ marginBottom: "32px", opacity: isClassic ? (classicFetching && !isFetchingNextPage ? 0.6 : 1) : (isFetching && !isFetchingNextPage ? 0.6 : 1), transition: "opacity 0.2s ease-in-out" }}>
+          {groupedBySuburb.map(({ suburb, streets, totalCount }) => (
+            <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden" style={{ backgroundColor: 'white' }}>
+              <div className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📂</span>
+                  <div className="text-left">
+                    <div className="font-semibold text-slate-800">{suburb}</div>
+                    <div className="text-xs text-slate-500">
+                      {streets.length} {streets.length === 1 ? 'street' : 'streets'} · {totalCount} {totalCount === 1 ? 'property' : 'properties'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {streets.map(({ street, properties: streetProps }) => {
+                  const streetKey = `${suburb}::${street}`;
+                  const isCollapsed = collapsedStreets.has(streetKey);
+                  return (
+                  <div key={street} className="bg-white">
+                    <button
+                      onClick={() => toggleStreet(suburb, street)}
+                      className="w-full px-4 py-2 border-b border-slate-100 flex items-center justify-between hover:bg-slate-200 transition-colors"
+                      style={{ backgroundColor: isCollapsed ? '#f1f5f9' : '#f8fafc' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">📍</span>
+                        <span className="font-medium text-slate-700">{street}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 font-medium">
+                          {streetProps.length} {streetProps.length === 1 ? 'address' : 'addresses'}
+                        </span>
+                        <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
+                      </div>
+                    </button>
+                    {!isCollapsed && (
+                    <div className="divide-y divide-slate-50">
+                      {streetProps.map((prop) => {
+                        return (
+                        <div key={`${prop.id}-${prop.address}`} className="pl-10 pr-4 py-2.5 hover:bg-blue-50 transition-colors">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="font-medium text-slate-800">
+                              {prop.address}
+                              {extractHouseNumber(prop.address).unitNumber > 0 && ' (Unit)'}
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleToggleLike(prop); }}
+                              style={{
+                                width: '30px', height: '30px', borderRadius: '50%',
+                                background: (showLikedOnly || likedPropertyIds.has(prop.id)) ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+                                border: '1px solid #e2e8f0', cursor: 'pointer', display: 'inline-flex',
+                                alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                              }}
+                              title={(showLikedOnly || likedPropertyIds.has(prop.id)) ? 'Unlike' : 'Like'}
+                            >
+                              {(showLikedOnly || likedPropertyIds.has(prop.id)) ? '\u2764' : '\u2661'}
+                            </button>
+                            <span className="text-xs text-slate-500">
+                              {[(prop.bedrooms != null ? `${prop.bedrooms} bd` : null),
+                                (prop.bathrooms != null ? `${prop.bathrooms} ba` : null),
+                                (prop.garages != null ? `${prop.garages} car` : null),
+                                (prop.land_area ? `${prop.land_area} m²` : null)].filter(Boolean).join(' · ') || '—'}
+                            </span>
+                          </div>
+                        </div>
+                        );
+                      })}
+                    </div>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {(isFetchingNextPage || (classicFetching && isClassic)) && Array.from({ length: 6 }).map((_, i) => (
+            <div key={`skel-row-${i}`} className="border border-slate-200 rounded-lg p-4 animate-pulse" style={{ backgroundColor: 'white' }}>
+              <SkeletonBlock className="h-4 w-48 mb-2" />
+              <SkeletonBlock className="h-4 w-72" />
+            </div>
+          ))}
+          {!isClassic && hasNextPage && !isFetchingNextPage && (
+            <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+          )}
+        </div>
+      ) : (
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
@@ -2481,6 +2669,7 @@ export default function PropertiesPage() {
             <SkeletonPropertyCard key={`skel-${i}`} />
           ))}
       </div>
+      )}
 
       {isClassic && displayProperties.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>

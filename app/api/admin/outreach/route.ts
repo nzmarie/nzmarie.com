@@ -200,9 +200,9 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
         suburb ASC,
         COALESCE(
           NULLIF(TRIM(street), ''),
-          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
+          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^-?\\d+/\\s*', ''), '^-?\\d+[A-Za-z]?\\s*', ''))
         ) ASC,
-        NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
+        NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^-?\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
         created_at ${orderDirection}
     `;
   }

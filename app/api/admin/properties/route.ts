@@ -298,10 +298,10 @@ export async function GET(request: Request) {
   query += ` 
     ORDER BY 
       p.suburb ASC,
-      REGEXP_REPLACE(p.address, '^[0-9/A-Za-z]+\\s+', '') ASC,  -- Street name
+      REGEXP_REPLACE(p.address, '^[-0-9/A-Za-z]+\\s+', '') ASC,  -- Street name
       CASE 
-        WHEN p.address ~ '^[0-9]+/' THEN CAST(REGEXP_REPLACE(p.address, '^([0-9]+)/.*', '\\1') AS INTEGER)
-        WHEN p.address ~ '^[0-9]+[A-Za-z]?' THEN CAST(REGEXP_REPLACE(p.address, '^([0-9]+).*', '\\1') AS INTEGER)
+        WHEN p.address ~ '^-?[0-9]+/' THEN CAST(REGEXP_REPLACE(p.address, '^-?([0-9]+)/.*', '\\1') AS INTEGER)
+        WHEN p.address ~ '^-?[0-9]+[A-Za-z]?' THEN CAST(REGEXP_REPLACE(p.address, '^-?([0-9]+).*', '\\1') AS INTEGER)
         ELSE 999999
       END ASC,  -- Primary house number
       p.address ASC  -- Fallback for exact ordering

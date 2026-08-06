@@ -87,7 +87,7 @@ export async function GET(request: Request) {
     const suburb = campaignParts.length > 2 ? campaignParts.slice(2).join(' ') : campaign;
     const scanKey = suburb.toLowerCase();
 
-    const [dailyResult, pendingDailyResult, statusResult, scanResult, bizScanResult] = await Promise.all([
+    const [dailyResult, pendingDailyResult, statusResult, remainingResult, scanResult, bizScanResult] = await Promise.all([
       marieDB.query(
         `SELECT TO_CHAR(sl.sent_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS send_date,
                 COUNT(*)::int AS total_sent
@@ -119,6 +119,17 @@ export async function GET(request: Request) {
          WHERE last_campaign = $1 AND status IN ('interacted', 'converted')
          GROUP BY status`,
         [campaign]
+      ),
+      marieDB.query(
+        `SELECT COUNT(DISTINCT op.id)::int AS remaining
+         FROM outreach_properties op
+         LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
+         WHERE op.suburb = $1 AND op.status = 'pending'
+           AND COALESCE(p.no_junk_mail, false) = false
+           AND NOT EXISTS (
+             SELECT 1 FROM outreach_send_logs sl WHERE sl.outreach_property_id = op.id
+           )`,
+        [suburb]
       ),
       marieDB.query(
         `SELECT TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS scan_date,
@@ -160,16 +171,21 @@ export async function GET(request: Request) {
       statusMap[row.status] = Number(row.count);
     }
 
+    const toNumber = (v: unknown): number => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
     const daily_scans = scanResult.rows.map((r) => ({
       date: typeof r.scan_date === 'string' ? r.scan_date : (r.scan_date instanceof Date ? r.scan_date.toISOString().slice(0, 10) : String(r.scan_date)),
-      pv: Number(r.pv),
-      uv: Number(r.uv),
+      pv: toNumber(r.pv),
+      uv: toNumber(r.uv),
     }));
 
     const biz_daily_scans = bizScanResult.rows.map((r) => ({
       date: typeof r.scan_date === 'string' ? r.scan_date : (r.scan_date instanceof Date ? r.scan_date.toISOString().slice(0, 10) : String(r.scan_date)),
-      pv: Number(r.pv),
-      uv: Number(r.uv),
+      pv: toNumber(r.pv),
+      uv: toNumber(r.uv),
     }));
 
     const total_scans_pv = daily_scans.reduce((sum, d) => sum + d.pv, 0);
@@ -192,6 +208,7 @@ export async function GET(request: Request) {
         interacted_count: statusMap['interacted'] || 0,
         converted_count: statusMap['converted'] || 0,
         no_junk_mail_count,
+        remaining_count: remainingResult.rows.length > 0 ? Number(remainingResult.rows[0].remaining) : 0,
         total_scans_pv,
         total_scans_uv,
       },
