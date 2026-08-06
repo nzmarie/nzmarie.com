@@ -275,6 +275,18 @@ export default function OutreachPage() {
     };
   }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
 
+  // The "Today's Run" planner auto-selects the first run's streets whenever
+  // "Unsent" mode loads its street-cluster data (sets runStreetFilter to that
+  // run's ~28 streets). Without clearing it, switching back to "All"/"Sent"
+  // would keep filtering the full list to those few streets, showing a wrong
+  // "Displaying X of Y" total. Clear the run street set whenever we leave
+  // "Unsent" so "All" reflects every address (unsent + sent).
+  useEffect(() => {
+    if (sentStatusFilter === 'unsent') return;
+    setRunStreetFilter([]);
+    setStreetFilter('');
+  }, [sentStatusFilter]);
+
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
   const [selectedByTab, setSelectedByTab] = useState<Record<string, Set<string>>>({
@@ -3466,6 +3478,26 @@ function ReportFilterSection({
         📋 Filter by Report
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+        <button
+          onClick={() => {
+            setReportSuburbFilter('');
+            setReportQuarterFilter('');
+            setSuburbFilter('');
+            onClearRunFilter();
+          }}
+          style={{
+            padding: '7px 14px',
+            backgroundColor: reportSuburbFilter === '' ? '#2563eb' : 'white',
+            color: reportSuburbFilter === '' ? 'white' : '#4a5568',
+            border: reportSuburbFilter === '' ? '2px solid #2563eb' : '2px solid #e2e8f0',
+            borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+            fontWeight: reportSuburbFilter === '' ? '600' : '500',
+            transition: 'all 0.2s ease',
+          }}
+          title="Show all addresses (unsent + sent) across all suburbs"
+        >
+          All Suburbs
+        </button>
         {availableReports.length === 0 ? (
           <button onClick={loadReports} disabled={loading}
             style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
@@ -3493,7 +3525,7 @@ function ReportFilterSection({
           </button>
         ))}
         {reportSuburbFilter && (
-          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); onClearRunFilter(); }}
+          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); setSuburbFilter(''); onClearRunFilter(); }}
             style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >✕ Clear</button>
         )}

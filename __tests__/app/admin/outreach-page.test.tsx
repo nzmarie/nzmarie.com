@@ -911,5 +911,80 @@ describe('Outreach page - Card view run ordering', () => {
     }
     expect(h3s.filter((t) => t.includes('Glamorgan Drive'))).toHaveLength(6);
   });
+
+  it('drops the Today Run street filter when switching from Unsent back to All, so the full count is restored', async () => {
+    const clusterStreets = runStreetOrder.map(makeStreet);
+    const outreachListCalls = () =>
+      vi.mocked(global.fetch).mock.calls
+        .map((c) => String(c[0]))
+        .filter((u) => u.includes('/api/admin/outreach?') && !u.includes('/street-clusters'));
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            suburb: 'Torbay',
+            groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }],
+            runs: [{ runId: 1, groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }], totalPending: 3, streetCount: 3 }],
+            totalPending: 3,
+            unclusteredStreets: [],
+            allStreets: runStreetOrder.map((st) => ({ street: st, count: 1 })),
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        // Straße set is a single street; no streets param. This returns the
+        // full "All" list (3 addresses) regardless of a streets filter.
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 'out-b', property_address: '5 Beta Street', street: 'Beta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+              { id: 'out-a', property_address: '3 Alpha Street', street: 'Alpha Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+              { id: 'out-z', property_address: '7 Zeta Street', street: 'Zeta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+            ],
+            pagination: { page: 1, limit: 50, total: 3, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    // While in "Unsent" mode, the auto-selected Today Run streets must be sent
+    // to the outreach list API via the `streets` param.
+    await waitFor(() => {
+      const last = outreachListCalls().pop() || '';
+      expect(last).toContain('streets=');
+    }, { timeout: 3000 });
+
+    const allBtn = (await screen.findAllByRole('button', { name: /^All$/ }))[0];
+    fireEvent.click(allBtn);
+
+    // After switching back to "All", a fresh list fetch must NOT be limited to
+    // the run's streets, so the full unsent + sent count is displayed again.
+    await waitFor(() => {
+      const last = outreachListCalls().pop() || '';
+      expect(last).not.toContain('streets=');
+      expect(last).not.toContain('sent_status=unsent');
+    }, { timeout: 3000 });
+  });
 });
 
