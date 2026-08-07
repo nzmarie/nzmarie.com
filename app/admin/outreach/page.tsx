@@ -1386,7 +1386,7 @@ export default function OutreachPage() {
         </div>
 
         {/* Quick Suburb Filter Buttons */}
-        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
+        {sentStatusFilter === 'all' && (
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
             Quick Filter by Suburb
@@ -3478,26 +3478,6 @@ function ReportFilterSection({
         📋 Filter by Report
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
-        <button
-          onClick={() => {
-            setReportSuburbFilter('');
-            setReportQuarterFilter('');
-            setSuburbFilter('');
-            onClearRunFilter();
-          }}
-          style={{
-            padding: '7px 14px',
-            backgroundColor: reportSuburbFilter === '' ? '#2563eb' : 'white',
-            color: reportSuburbFilter === '' ? 'white' : '#4a5568',
-            border: reportSuburbFilter === '' ? '2px solid #2563eb' : '2px solid #e2e8f0',
-            borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
-            fontWeight: reportSuburbFilter === '' ? '600' : '500',
-            transition: 'all 0.2s ease',
-          }}
-          title="Show all addresses (unsent + sent) across all suburbs"
-        >
-          All Suburbs
-        </button>
         {availableReports.length === 0 ? (
           <button onClick={loadReports} disabled={loading}
             style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
