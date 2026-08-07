@@ -214,7 +214,7 @@ function applyStreetFilters(list: Property[], opts: StreetFilterOpts): Property[
   return result;
 }
 
-const PropertyCard = ({ property, isLiked, onToggleLike }: { 
+const PropertyCard = ({ property, isLiked, onToggleLike }: {
   property: Property;
   isLiked: boolean;
   onToggleLike: (property: Property) => void;
@@ -372,7 +372,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             {property.suburb}
           </div>
         )}
-        
+
         {/* No Junk Toggle */}
         <button
           onClick={(e) => {
@@ -398,8 +398,8 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
                       ...page,
                       properties: Array.isArray(page.properties)
                         ? page.properties.map((p: Record<string, unknown>) =>
-                            p.id === pid ? { ...p, no_junk_mail: newVal } : p
-                          )
+                          p.id === pid ? { ...p, no_junk_mail: newVal } : p
+                        )
                         : page.properties,
                     })),
                   };
@@ -553,7 +553,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             Rented
           </div>
         )}
-        
+
         {/* Years Since Last Sold Badge */}
         {property.last_sold_date && (() => {
           const soldDate = new Date(property.last_sold_date);
@@ -723,7 +723,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             <div style={{ fontWeight: "600", color: "#4a5568", fontSize: "1rem" }}>
               {formatCurrency(property.last_sold_price)}
             </div>
-            
+
             {/* Price Growth Indicator */}
             {property.last_sold_price && property.rv && property.last_sold_price > 0 && property.rv > 0 && (() => {
               const growth = ((property.rv - property.last_sold_price) / property.last_sold_price) * 100;
@@ -751,7 +751,7 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
             <div style={{ fontWeight: "700", color: "#2D3748", fontSize: "1.2rem" }}>
               {formatCurrency(property.rv)}
             </div>
-            
+
             {/* Build Year under RV */}
             {property.build_year && (
               <div style={{
@@ -924,7 +924,11 @@ export default function PropertiesPage() {
   const startStreetRef = useRef('');
   const streetNextOffsetRef = useRef<number | null>(0);
 
-  const streetModeOn = streetModeApplied && !!filters.suburb && !showLikedOnly;
+  // streetModeOn: true only when street mode is active AND a specific street has
+  // been selected. Without a selectedStreet, react-query stays enabled so the
+  // suburb-level list still shows while the user picks a street.
+  // showLikedOnly is intentionally excluded — liked+street works via fetchPageData.
+  const streetModeOn = streetModeApplied && !!filters.suburb && !!selectedStreet;
   const streetQuery = streetSearch.trim().toLowerCase();
 
   useEffect(() => {
@@ -1001,6 +1005,9 @@ export default function PropertiesPage() {
       if (filters.city) params.append('city', filters.city);
       if (filters.region) params.append('region', filters.region);
       if (filters.search) params.append('search', filters.search);
+      // When a street is selected in Filter by Street, pass it through so only
+      // liked properties on that street are returned.
+      if (streetModeApplied && selectedStreet) params.append('street', selectedStreet);
 
       // Delegate last-sold, property-type and market-status filtering to the
       // outreach API (server-side SQL) so liked results are consistent.
@@ -1129,6 +1136,12 @@ export default function PropertiesPage() {
         });
       }
 
+      // Client-side street guard: if a street was selected in "Filter by Street",
+      // ensure only addresses on that street are shown even if the API returned more.
+      if (streetModeApplied && selectedStreet) {
+        mapped = mapped.filter(p => extractStreetName(p.address) === selectedStreet);
+      }
+
       return { properties: mapped, total: result.pagination.total };
     }
 
@@ -1188,7 +1201,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, junkFilter],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, junkFilter, streetModeApplied ? selectedStreet : ''],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -1208,7 +1221,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, junkFilter],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, junkFilter, streetModeApplied ? selectedStreet : ''],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated" && !streetModeOn,
@@ -1243,10 +1256,13 @@ export default function PropertiesPage() {
       lastSoldPreset,
       junkFilter,
     });
-    const all = clientFiltered;
+    // When liked mode is on, further narrow to only properties the user has liked.
+    const afterLiked = showLikedOnly
+      ? clientFiltered.filter((p) => likedPropertyIds.has(p.id))
+      : clientFiltered;
     const filtered = selectedStreet
-      ? all.filter((p) => extractStreetName(p.address) === selectedStreet)
-      : all;
+      ? afterLiked.filter((p) => extractStreetName(p.address) === selectedStreet)
+      : afterLiked;
     streetAllLength = filtered.length;
     if (isClassic) {
       const perPage = 18;
@@ -1346,7 +1362,16 @@ export default function PropertiesPage() {
       const res = await fetch(`/api/admin/properties/street?${params}`);
       const data = await res.json();
       if (data.success) {
-        setAllStreetNames((data.streets ?? []).map((s: { street: string }) => s.street));
+        // Prefer the dedicated allStreetNames field (alphabetically sorted, full list).
+        // Fall back to sorting the streets array for older API responses.
+        let names: string[];
+        if (Array.isArray(data.allStreetNames)) {
+          names = data.allStreetNames.map((s: { street: string }) => s.street);
+        } else {
+          names = (data.streets ?? []).map((s: { street: string }) => s.street);
+          names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+        setAllStreetNames(names);
       }
     } catch {
       // ignore
@@ -1391,11 +1416,11 @@ export default function PropertiesPage() {
     Object.values(streetProgress)
       .filter((e) => e.status === 'completed')
       .sort((a, b) => ((b.completed_at ?? '') < (a.completed_at ?? '') ? -1 : 1)),
-  [streetProgress]);
+    [streetProgress]);
 
   const pendingStreets = useMemo(() =>
     streetItems.filter((s) => streetProgress[s.street]?.status !== 'completed'),
-  [streetItems, streetProgress]);
+    [streetItems, streetProgress]);
 
   const loadStreetAddresses = useCallback(async (street: string) => {
     if (!filters.suburb || !street) return;
@@ -1482,7 +1507,7 @@ export default function PropertiesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ suburb: filters.suburb, start: value }),
-      }).catch(() => {});
+      }).catch(() => { });
       loadStreetAddresses(value);
     } else {
       setStreetAddresses([]);
@@ -1520,7 +1545,9 @@ export default function PropertiesPage() {
     setCurrentPage(1);
   }, [filters, propertyFilter, lastSoldPreset, showLikedOnly]);
 
-  const propertyIds = !showLikedOnly ? properties.map(p => p.id).filter(Boolean).join(',') : '';
+  const propertyIds = !showLikedOnly
+    ? (streetModeOn ? streetAddresses : properties).map(p => p.id).filter(Boolean).join(',')
+    : '';
 
   useEffect(() => {
     if (!propertyIds) return;
@@ -1531,7 +1558,7 @@ export default function PropertiesPage() {
           setLikedPropertyIds(new Set(data.liked_ids));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [propertyIds]);
 
   const handleToggleLike = async (property: Property) => {
@@ -1927,7 +1954,7 @@ export default function PropertiesPage() {
             Displaying {displayProperties.length} of {totalProperties} properties
           </p>
         </div>
-        
+
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "6px" }}>
             Search by Address
@@ -1956,9 +1983,9 @@ export default function PropertiesPage() {
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
             Quick Filter by Suburb
           </label>
-          <div style={{ 
-            display: "flex", 
-            flexWrap: "wrap", 
+          <div style={{
+            display: "flex",
+            flexWrap: "wrap",
             gap: "10px",
             alignItems: "center"
           }}>
@@ -2359,7 +2386,7 @@ export default function PropertiesPage() {
                 </button>
               )}
 
-              </div>
+            </div>
           )}
 
           {filters.suburb && (
@@ -2532,38 +2559,38 @@ export default function PropertiesPage() {
               Market Status
             </label>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-{(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
-                 <button
-                   key={status}
-                   onClick={() => setMarketStatus(status)}
-                   style={{
-                     padding: '8px 18px',
-                     backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
-                     color: marketStatus === status ? 'white' : '#4a5568',
-                     border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
-                     borderRadius: '10px',
-                     cursor: 'pointer',
-                     fontSize: '0.9rem',
-                     fontWeight: marketStatus === status ? '600' : '500',
-                     transition: 'all 0.2s ease',
-                     boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
-                   }}
-                   onMouseEnter={(e) => {
-                     if (marketStatus !== status) {
-                       e.currentTarget.style.backgroundColor = '#f3f4f6';
-                       e.currentTarget.style.borderColor = '#9ca3af';
-                     }
-                   }}
-                   onMouseLeave={(e) => {
-                     if (marketStatus !== status) {
-                       e.currentTarget.style.backgroundColor = 'white';
-                       e.currentTarget.style.borderColor = '#e2e8f0';
-                     }
-                   }}
-                 >
-                   {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
-                 </button>
-               ))}
+              {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setMarketStatus(status)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                    color: marketStatus === status ? 'white' : '#4a5568',
+                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: marketStatus === status ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (marketStatus !== status) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2607,51 +2634,51 @@ export default function PropertiesPage() {
             ))}
             {lastSoldPreset !== 'none' && lastSoldPreset !== 'all' && (
               <>
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
-                Min Years
-              </label>
-              <input
-                type="number"
-                value={filters.last_sold_min_years}
-                onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_min_years", e.target.value); }}
-                min="0"
-                placeholder="0"
-                style={{
-                  width: "90px",
-                  padding: "8px 14px",
-                  border: "2px solid #e2e8f0",
-                  borderRadius: "10px",
-                  fontSize: "0.95rem",
-                  backgroundColor: "white",
-                  color: "#2D3748",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
-                Max Years
-              </label>
-              <input
-                type="number"
-                value={filters.last_sold_max_years}
-                onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_max_years", e.target.value); }}
-                min="0"
-                placeholder="No Max"
-                style={{
-                  width: "90px",
-                  padding: "8px 14px",
-                  border: "2px solid #e2e8f0",
-                  borderRadius: "10px",
-                  fontSize: "0.95rem",
-                  backgroundColor: "white",
-                  color: "#2D3748",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            </>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
+                    Min Years
+                  </label>
+                  <input
+                    type="number"
+                    value={filters.last_sold_min_years}
+                    onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_min_years", e.target.value); }}
+                    min="0"
+                    placeholder="0"
+                    style={{
+                      width: "90px",
+                      padding: "8px 14px",
+                      border: "2px solid #e2e8f0",
+                      borderRadius: "10px",
+                      fontSize: "0.95rem",
+                      backgroundColor: "white",
+                      color: "#2D3748",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "500", color: "#718096", marginBottom: "4px" }}>
+                    Max Years
+                  </label>
+                  <input
+                    type="number"
+                    value={filters.last_sold_max_years}
+                    onChange={(e) => { setLastSoldPreset(''); handleFilterChange("last_sold_max_years", e.target.value); }}
+                    min="0"
+                    placeholder="No Max"
+                    style={{
+                      width: "90px",
+                      padding: "8px 14px",
+                      border: "2px solid #e2e8f0",
+                      borderRadius: "10px",
+                      fontSize: "0.95rem",
+                      backgroundColor: "white",
+                      color: "#2D3748",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -3082,25 +3109,25 @@ export default function PropertiesPage() {
 
           </div>
         )}
-          <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
-            <button
-              onClick={handleClearFilters}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: "#e2e8f0",
-                color: "#4a5568",
-                borderRadius: "10px",
-                border: "none",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "0.9rem",
-                transition: "all 0.2s",
-              }}
-            >
-              Clear All
-            </button>
-          </div>
+        <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+          <button
+            onClick={handleClearFilters}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "#e2e8f0",
+              color: "#4a5568",
+              borderRadius: "10px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "0.9rem",
+              transition: "all 0.2s",
+            }}
+          >
+            Clear All
+          </button>
         </div>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
@@ -3183,8 +3210,8 @@ export default function PropertiesPage() {
               cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≪</button>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             style={{
@@ -3193,8 +3220,8 @@ export default function PropertiesPage() {
               cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >‹</button>
           <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
             Page{' '}
@@ -3241,8 +3268,8 @@ export default function PropertiesPage() {
               cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >›</button>
           <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
             style={{
@@ -3251,8 +3278,8 @@ export default function PropertiesPage() {
               cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≫</button>
         </div>
       )}
@@ -3297,58 +3324,58 @@ export default function PropertiesPage() {
                   const streetKey = `${suburb}::${street}`;
                   const isCollapsed = collapsedStreets.has(streetKey);
                   return (
-                  <div key={street} className="bg-white">
-                    <button
-                      onClick={() => toggleStreet(suburb, street)}
-                      className="w-full px-4 py-2 border-b border-slate-100 flex items-center justify-between hover:bg-slate-200 transition-colors"
-                      style={{ backgroundColor: isCollapsed ? '#f1f5f9' : '#f8fafc' }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">📍</span>
-                        <span className="font-medium text-slate-700">{street}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 font-medium">
-                          {streetProps.length} {streetProps.length === 1 ? 'address' : 'addresses'}
-                        </span>
-                        <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
-                      </div>
-                    </button>
-                    {!isCollapsed && (
-                    <div className="divide-y divide-slate-50">
-                      {streetProps.map((prop) => {
-                        return (
-                        <div key={`${prop.id}-${prop.address}`} className="pl-10 pr-4 py-2.5 hover:bg-blue-50 transition-colors">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <div className="font-medium text-slate-800">
-                              {prop.address}
-                              {extractHouseNumber(prop.address).unitNumber > 0 && ' (Unit)'}
-                            </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleToggleLike(prop); }}
-                              style={{
-                                width: '30px', height: '30px', borderRadius: '50%',
-                                background: (showLikedOnly || likedPropertyIds.has(prop.id)) ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
-                                border: '1px solid #e2e8f0', cursor: 'pointer', display: 'inline-flex',
-                                alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-                              }}
-                              title={(showLikedOnly || likedPropertyIds.has(prop.id)) ? 'Unlike' : 'Like'}
-                            >
-                              {(showLikedOnly || likedPropertyIds.has(prop.id)) ? '\u2764' : '\u2661'}
-                            </button>
-                            <span className="text-xs text-slate-500">
-                              {[(prop.bedrooms != null ? `${prop.bedrooms} bd` : null),
-                                (prop.bathrooms != null ? `${prop.bathrooms} ba` : null),
-                                (prop.garages != null ? `${prop.garages} car` : null),
-                                (prop.land_area ? `${prop.land_area} m²` : null)].filter(Boolean).join(' · ') || '—'}
-                            </span>
-                          </div>
+                    <div key={street} className="bg-white">
+                      <button
+                        onClick={() => toggleStreet(suburb, street)}
+                        className="w-full px-4 py-2 border-b border-slate-100 flex items-center justify-between hover:bg-slate-200 transition-colors"
+                        style={{ backgroundColor: isCollapsed ? '#f1f5f9' : '#f8fafc' }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">📍</span>
+                          <span className="font-medium text-slate-700">{street}</span>
                         </div>
-                        );
-                      })}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 font-medium">
+                            {streetProps.length} {streetProps.length === 1 ? 'address' : 'addresses'}
+                          </span>
+                          <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
+                        </div>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="divide-y divide-slate-50">
+                          {streetProps.map((prop) => {
+                            return (
+                              <div key={`${prop.id}-${prop.address}`} className="pl-10 pr-4 py-2.5 hover:bg-blue-50 transition-colors">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <div className="font-medium text-slate-800">
+                                    {prop.address}
+                                    {extractHouseNumber(prop.address).unitNumber > 0 && ' (Unit)'}
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleToggleLike(prop); }}
+                                    style={{
+                                      width: '30px', height: '30px', borderRadius: '50%',
+                                      background: (showLikedOnly || likedPropertyIds.has(prop.id)) ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+                                      border: '1px solid #e2e8f0', cursor: 'pointer', display: 'inline-flex',
+                                      alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                                    }}
+                                    title={(showLikedOnly || likedPropertyIds.has(prop.id)) ? 'Unlike' : 'Like'}
+                                  >
+                                    {(showLikedOnly || likedPropertyIds.has(prop.id)) ? '\u2764' : '\u2661'}
+                                  </button>
+                                  <span className="text-xs text-slate-500">
+                                    {[(prop.bedrooms != null ? `${prop.bedrooms} bd` : null),
+                                    (prop.bathrooms != null ? `${prop.bathrooms} ba` : null),
+                                    (prop.garages != null ? `${prop.garages} car` : null),
+                                    (prop.land_area ? `${prop.land_area} m²` : null)].filter(Boolean).join(' · ') || '—'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    )}
-                  </div>
                   );
                 })}
               </div>
@@ -3365,30 +3392,30 @@ export default function PropertiesPage() {
           )}
         </div>
       ) : (
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-        gap: "30px",
-        marginBottom: "32px",
-        opacity: isClassic ? (classicFetching && !isFetchingNextPage ? 0.6 : 1) : (isFetching && !isFetchingNextPage ? 0.6 : 1),
-        transition: "opacity 0.2s ease-in-out",
-      }}>
-        {displayProperties.map((property, index) => {
-          const isLast = index === displayProperties.length - 1;
-          return (
-            <div key={`${property.id}-${index}`} ref={(!isClassic && isLast) ? lastPropertyElementRef : null}>
-              <PropertyCard 
-                property={property}
-                isLiked={showLikedOnly || likedPropertyIds.has(property.id)}
-                onToggleLike={handleToggleLike}
-              />
-            </div>
-          );
-        })}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+          gap: "30px",
+          marginBottom: "32px",
+          opacity: isClassic ? (classicFetching && !isFetchingNextPage ? 0.6 : 1) : (isFetching && !isFetchingNextPage ? 0.6 : 1),
+          transition: "opacity 0.2s ease-in-out",
+        }}>
+          {displayProperties.map((property, index) => {
+            const isLast = index === displayProperties.length - 1;
+            return (
+              <div key={`${property.id}-${index}`} ref={(!isClassic && isLast) ? lastPropertyElementRef : null}>
+                <PropertyCard
+                  property={property}
+                  isLiked={showLikedOnly || likedPropertyIds.has(property.id)}
+                  onToggleLike={handleToggleLike}
+                />
+              </div>
+            );
+          })}
           {(isFetchingNextPage || (classicFetching && isClassic)) && Array.from({ length: 18 }).map((_, i) => (
             <SkeletonPropertyCard key={`skel-${i}`} />
           ))}
-      </div>
+        </div>
       )}
 
       {isClassic && displayProperties.length > 0 && (
@@ -3404,8 +3431,8 @@ export default function PropertiesPage() {
               cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≪</button>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             style={{
@@ -3414,8 +3441,8 @@ export default function PropertiesPage() {
               cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >‹</button>
           <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
             Page{' '}
@@ -3462,8 +3489,8 @@ export default function PropertiesPage() {
               cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >›</button>
           <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
             style={{
@@ -3472,8 +3499,8 @@ export default function PropertiesPage() {
               cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600",
               transition: "all 0.15s", lineHeight: "1",
             }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≫</button>
         </div>
       )}

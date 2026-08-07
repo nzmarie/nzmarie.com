@@ -95,6 +95,12 @@ export async function GET(request: Request) {
     const window = streetList.slice(offset, offset + limit);
     const nextOffset = offset + window.length < totalStreets ? offset + window.length : null;
 
+    // allStreetNames is the full list sorted alphabetically, used to populate
+    // the "Start street" dropdown so users can easily find any street by name.
+    const allStreetNames = [...summaries]
+      .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }))
+      .map((s) => ({ street: s.street, count: s.address_count }));
+
     return NextResponse.json({
       success: true,
       suburb,
@@ -106,6 +112,7 @@ export async function GET(request: Request) {
       limit,
       next_offset: nextOffset,
       has_next: nextOffset !== null,
+      allStreetNames,
     });
   } catch (error) {
     console.error('Error fetching property streets:', error);

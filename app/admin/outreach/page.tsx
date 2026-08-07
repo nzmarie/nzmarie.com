@@ -226,7 +226,7 @@ export default function OutreachPage() {
   const [runStreetFilter, setRunStreetFilter] = useState<string[]>([]);
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [lastSoldPreset, setLastSoldPreset] = useState('all');
+  const [lastSoldPreset, setLastSoldPreset] = useState('5-15');
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
   const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
@@ -461,7 +461,7 @@ export default function OutreachPage() {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(outreachPayload),
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // 更新本地列表数据（infinite + classic 两种模式都处理）
@@ -913,11 +913,11 @@ export default function OutreachPage() {
 
   const deleteSelected = async () => {
     if (selected.size === 0) return;
-    
+
     const confirmed = window.confirm(
       `Are you sure you want to delete ${selected.size} address${selected.size === 1 ? '' : 'es'}? This action cannot be undone.`
     );
-    
+
     if (!confirmed) return;
 
     const idsToDelete = new Set(Array.from(selected));
@@ -1064,16 +1064,16 @@ export default function OutreachPage() {
 
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
-    
+
     displayItems.forEach((item) => {
       const suburb = item.suburb || 'Unknown';
       const street = item.street || extractStreetName(item.property_address);
-      
+
       if (!groups.has(suburb)) {
         groups.set(suburb, new Map());
       }
       const streetMap = groups.get(suburb)!;
-      
+
       if (!streetMap.has(street)) {
         streetMap.set(street, []);
       }
@@ -1101,18 +1101,18 @@ export default function OutreachPage() {
             properties: properties.sort((a, b) => {
               const houseA = extractHouseNumber(a.property_address);
               const houseB = extractHouseNumber(b.property_address);
-              
+
               if (houseA.houseNumber !== houseB.houseNumber) {
                 return houseA.houseNumber - houseB.houseNumber;
               }
               if (houseA.unitNumber !== houseB.unitNumber) {
                 return houseA.unitNumber - houseB.unitNumber;
               }
-              
-              const dateCompare = sortOrder === 'asc' 
+
+              const dateCompare = sortOrder === 'asc'
                 ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                 : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-              
+
               return dateCompare;
             }),
             totalCount: properties.length,
@@ -1125,7 +1125,7 @@ export default function OutreachPage() {
             if (ib !== undefined) return 1;
             return a.street.localeCompare(b.street, undefined, { sensitivity: 'base' });
           });
-        
+
         return {
           suburb,
           streets,
@@ -1133,7 +1133,7 @@ export default function OutreachPage() {
         };
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
-    }, [currentContentKey, todayRunData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentContentKey, todayRunData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Card view mirrors the list view's ordering: streets follow the Today's Run
   // cluster order (from street-clusters), then house number within a street.
@@ -1179,7 +1179,7 @@ export default function OutreachPage() {
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
     return items;
-  }, [displayItems, todayRunData, sortOrder]);  
+  }, [displayItems, todayRunData, sortOrder]);
 
   // Restore classic items from the shared per-page cache when switching to
   // classic mode. This avoids a loading flash when the data was already
@@ -1203,7 +1203,7 @@ export default function OutreachPage() {
     <div style={{
       maxWidth: "1400px",
       margin: "0 auto",
-        padding: "8px",
+      padding: "8px",
       "--input-border": "#e2e8f0",
       "--input-bg": "#ffffff",
       "--foreground": "#171717",
@@ -1215,9 +1215,8 @@ export default function OutreachPage() {
     } as React.CSSProperties}>
       {notification && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
-            notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-          }`}
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
         >
           {notification.msg}
         </div>
@@ -1231,7 +1230,7 @@ export default function OutreachPage() {
       {/* Filters */}
       <div style={{
         marginBottom: "32px",
-      padding: "32px",
+        padding: "32px",
         backgroundColor: "white",
         borderRadius: "16px",
         boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
@@ -1387,74 +1386,74 @@ export default function OutreachPage() {
 
         {/* Quick Suburb Filter Buttons */}
         {sentStatusFilter === 'all' && (
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
-            Quick Filter by Suburb
-          </label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setAddressInput('');
-                  setSuburbFilter(prev => prev === s ? '' : s);
-                }}
-                style={{
-                  padding: '10px 18px',
-                  backgroundColor: suburbFilter === s ? '#3b82f6' : 'white',
-                  color: suburbFilter === s ? 'white' : '#4a5568',
-                  border: suburbFilter === s ? '2px solid #3b82f6' : '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: suburbFilter === s ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                  boxShadow: suburbFilter === s ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (suburbFilter !== s) {
-                    e.currentTarget.style.backgroundColor = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (suburbFilter !== s) {
-                    e.currentTarget.style.backgroundColor = 'white';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }
-                }}
-              >
-                {s}
-              </button>
-            ))}
-            {suburbFilter && (
-              <button
-                onClick={() => { setAddressInput(''); setSuburbFilter(''); }}
-                style={{
-                  padding: '10px 18px',
-                  backgroundColor: '#fef2f2',
-                  color: '#dc2626',
-                  border: '2px solid #fecaca',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fee2e2';
-                  e.currentTarget.style.borderColor = '#fca5a5';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fef2f2';
-                  e.currentTarget.style.borderColor = '#fecaca';
-                }}
-              >
-                ✕ Clear
-              </button>
-            )}
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "10px" }}>
+              Quick Filter by Suburb
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+              {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setAddressInput('');
+                    setSuburbFilter(prev => prev === s ? '' : s);
+                  }}
+                  style={{
+                    padding: '10px 18px',
+                    backgroundColor: suburbFilter === s ? '#3b82f6' : 'white',
+                    color: suburbFilter === s ? 'white' : '#4a5568',
+                    border: suburbFilter === s ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: suburbFilter === s ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: suburbFilter === s ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (suburbFilter !== s) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (suburbFilter !== s) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+              {suburbFilter && (
+                <button
+                  onClick={() => { setAddressInput(''); setSuburbFilter(''); }}
+                  style={{
+                    padding: '10px 18px',
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    border: '2px solid #fecaca',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fee2e2';
+                    e.currentTarget.style.borderColor = '#fca5a5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fef2f2';
+                    e.currentTarget.style.borderColor = '#fecaca';
+                  }}
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         <div className="flex flex-wrap gap-3">
@@ -1482,191 +1481,191 @@ export default function OutreachPage() {
 
         {/* Property Type & Market Status */}
         {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
-        <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
-              Property Type
-            </label>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {(['house', 'all', 'townhouse'] as const).map((type) => (
+          <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+                Property Type
+              </label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {(['house', 'all', 'townhouse'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setPropertyFilter(type)}
+                    style={{
+                      padding: '8px 18px',
+                      backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
+                      color: propertyFilter === type ? 'white' : '#4a5568',
+                      border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: propertyFilter === type ? '600' : '500',
+                      transition: 'all 0.2s ease',
+                      boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (propertyFilter !== type) {
+                        e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        e.currentTarget.style.borderColor = '#9ca3af';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (propertyFilter !== type) {
+                        e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.borderColor = '#e2e8f0';
+                      }
+                    }}
+                  >
+                    {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
+                  </button>
+                ))}
                 <button
-                  key={type}
-                  onClick={() => setPropertyFilter(type)}
+                  onClick={() => setJunkFilter(junkFilter === 'no_junk' ? 'all' : 'no_junk')}
                   style={{
                     padding: '8px 18px',
-                    backgroundColor: propertyFilter === type ? '#3b82f6' : 'white',
-                    color: propertyFilter === type ? 'white' : '#4a5568',
-                    border: propertyFilter === type ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                    backgroundColor: junkFilter === 'no_junk' ? '#ef4444' : 'white',
+                    color: junkFilter === 'no_junk' ? 'white' : '#4a5568',
+                    border: junkFilter === 'no_junk' ? '2px solid #ef4444' : '2px solid #e2e8f0',
                     borderRadius: '10px',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
-                    fontWeight: propertyFilter === type ? '600' : '500',
+                    fontWeight: junkFilter === 'no_junk' ? '600' : '500',
                     transition: 'all 0.2s ease',
-                    boxShadow: propertyFilter === type ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                    boxShadow: junkFilter === 'no_junk' ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
+                    whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={(e) => {
-                    if (propertyFilter !== type) {
-                      e.currentTarget.style.backgroundColor = '#f3f4f6';
-                      e.currentTarget.style.borderColor = '#9ca3af';
+                    if (junkFilter !== 'no_junk') {
+                      e.currentTarget.style.backgroundColor = '#fef2f2';
+                      e.currentTarget.style.borderColor = '#fca5a5';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (propertyFilter !== type) {
+                    if (junkFilter !== 'no_junk') {
                       e.currentTarget.style.backgroundColor = 'white';
                       e.currentTarget.style.borderColor = '#e2e8f0';
                     }
                   }}
+                  title="Filter addresses with No Junk Mail"
                 >
-                  {type === 'house' ? 'House' : type === 'all' ? 'All' : 'Townhouse/Unit'}
+                  No Junk
                 </button>
-              ))}
-              <button
-                onClick={() => setJunkFilter(junkFilter === 'no_junk' ? 'all' : 'no_junk')}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: junkFilter === 'no_junk' ? '#ef4444' : 'white',
-                  color: junkFilter === 'no_junk' ? 'white' : '#4a5568',
-                  border: junkFilter === 'no_junk' ? '2px solid #ef4444' : '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: junkFilter === 'no_junk' ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                  boxShadow: junkFilter === 'no_junk' ? '0 4px 12px rgba(239, 68, 68, 0.3)' : 'none',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => {
-                  if (junkFilter !== 'no_junk') {
-                    e.currentTarget.style.backgroundColor = '#fef2f2';
-                    e.currentTarget.style.borderColor = '#fca5a5';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (junkFilter !== 'no_junk') {
-                    e.currentTarget.style.backgroundColor = 'white';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }
-                }}
-                title="Filter addresses with No Junk Mail"
-              >
-                No Junk
-              </button>
-              <button
-                onClick={() => setJunkFilter(junkFilter === 'allow_junk' ? 'all' : 'allow_junk')}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: junkFilter === 'allow_junk' ? '#22c55e' : 'white',
-                  color: junkFilter === 'allow_junk' ? 'white' : '#4a5568',
-                  border: junkFilter === 'allow_junk' ? '2px solid #22c55e' : '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: junkFilter === 'allow_junk' ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                  boxShadow: junkFilter === 'allow_junk' ? '0 4px 12px rgba(34, 197, 94, 0.3)' : 'none',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => {
-                  if (junkFilter !== 'allow_junk') {
-                    e.currentTarget.style.backgroundColor = '#f0fdf4';
-                    e.currentTarget.style.borderColor = '#86efac';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (junkFilter !== 'allow_junk') {
-                    e.currentTarget.style.backgroundColor = 'white';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }
-                }}
-                title="Filter addresses without No Junk Mail"
-              >
-                Allow Junk
-              </button>
-            </div>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
-              Market Status
-            </label>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
                 <button
-                  key={status}
-                  onClick={() => setMarketStatus(status)}
+                  onClick={() => setJunkFilter(junkFilter === 'allow_junk' ? 'all' : 'allow_junk')}
                   style={{
                     padding: '8px 18px',
-                    backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
-                    color: marketStatus === status ? 'white' : '#4a5568',
-                    border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                    backgroundColor: junkFilter === 'allow_junk' ? '#22c55e' : 'white',
+                    color: junkFilter === 'allow_junk' ? 'white' : '#4a5568',
+                    border: junkFilter === 'allow_junk' ? '2px solid #22c55e' : '2px solid #e2e8f0',
                     borderRadius: '10px',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
-                    fontWeight: marketStatus === status ? '600' : '500',
+                    fontWeight: junkFilter === 'allow_junk' ? '600' : '500',
                     transition: 'all 0.2s ease',
-                    boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                    boxShadow: junkFilter === 'allow_junk' ? '0 4px 12px rgba(34, 197, 94, 0.3)' : 'none',
+                    whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={(e) => {
-                    if (marketStatus !== status) {
-                      e.currentTarget.style.backgroundColor = '#f3f4f6';
-                      e.currentTarget.style.borderColor = '#9ca3af';
+                    if (junkFilter !== 'allow_junk') {
+                      e.currentTarget.style.backgroundColor = '#f0fdf4';
+                      e.currentTarget.style.borderColor = '#86efac';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (marketStatus !== status) {
+                    if (junkFilter !== 'allow_junk') {
                       e.currentTarget.style.backgroundColor = 'white';
                       e.currentTarget.style.borderColor = '#e2e8f0';
                     }
                   }}
+                  title="Filter addresses without No Junk Mail"
                 >
-                  {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
+                  Allow Junk
                 </button>
-              ))}
+              </div>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+                Market Status
+              </label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {(['all', 'for_sale', 'for_rent', 'rented', 'never_rented', 'not_listed'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setMarketStatus(status)}
+                    style={{
+                      padding: '8px 18px',
+                      backgroundColor: marketStatus === status ? (status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6') : 'white',
+                      color: marketStatus === status ? 'white' : '#4a5568',
+                      border: marketStatus === status ? `2px solid ${status === 'for_sale' ? '#22c55e' : status === 'for_rent' ? '#8b5cf6' : status === 'rented' ? '#f59e0b' : status === 'never_rented' ? '#0891b2' : status === 'not_listed' ? '#64748b' : '#3b82f6'}` : '2px solid #e2e8f0',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: marketStatus === status ? '600' : '500',
+                      transition: 'all 0.2s ease',
+                      boxShadow: marketStatus === status ? `0 4px 12px ${status === 'for_sale' ? 'rgba(34, 197, 94, 0.3)' : status === 'for_rent' ? 'rgba(139, 92, 246, 0.3)' : status === 'rented' ? 'rgba(245, 158, 11, 0.3)' : status === 'never_rented' ? 'rgba(8, 145, 178, 0.3)' : status === 'not_listed' ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.3)'}` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (marketStatus !== status) {
+                        e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        e.currentTarget.style.borderColor = '#9ca3af';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (marketStatus !== status) {
+                        e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.borderColor = '#e2e8f0';
+                      }
+                    }}
+                  >
+                    {status === 'all' ? 'All' : status === 'for_sale' ? 'For Sale' : status === 'for_rent' ? 'To Rent' : status === 'rented' ? 'Rented' : status === 'never_rented' ? 'Never Rented' : 'Not Listed'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {/* Last Sold */}
         {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
-            Last Sold
-          </label>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
-            {(['all', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
-              <button
-                key={preset}
-                onClick={() => handleLastSoldPreset(preset)}
-                style={{
-                  padding: '8px 18px',
-                  backgroundColor: lastSoldPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
-                  color: lastSoldPreset === preset ? 'white' : '#4a5568',
-                  border: lastSoldPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: lastSoldPreset === preset ? '600' : '500',
-                  transition: 'all 0.2s ease',
-                  boxShadow: lastSoldPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (lastSoldPreset !== preset) {
-                    e.currentTarget.style.backgroundColor = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (lastSoldPreset !== preset) {
-                    e.currentTarget.style.backgroundColor = 'white';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }
-                }}
-              >
-                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
-              </button>
-            ))}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+              Last Sold
+            </label>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
+              {(['all', '5-15', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => handleLastSoldPreset(preset)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: lastSoldPreset === preset ? (preset === '5-15' || preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
+                    color: lastSoldPreset === preset ? 'white' : '#4a5568',
+                    border: lastSoldPreset === preset ? (preset === '5-15' || preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: lastSoldPreset === preset ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                    boxShadow: lastSoldPreset === preset ? (preset === '5-15' || preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (lastSoldPreset !== preset) {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.borderColor = '#9ca3af';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (lastSoldPreset !== preset) {
+                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }
+                  }}
+                >
+                  {preset === 'all' ? 'All' : preset === '5-15' ? '★ 5-15 years' : preset === '5-10' ? '5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
         )}
 
         {/* No Junk Mail filter — always available on mobile, even when a report filter is active */}
@@ -1755,11 +1754,11 @@ export default function OutreachPage() {
             </button>
           )}
           <button
-            onClick={() => { 
-              setAddressInput(''); 
-              setSuburbFilter(''); 
+            onClick={() => {
+              setAddressInput('');
+              setSuburbFilter('');
               setStreetFilter('');
-              setCampaignFilter(''); 
+              setCampaignFilter('');
               setSortOrder('asc');
               setLastSoldPreset('all');
               setPropertyFilter('all');
@@ -1841,13 +1840,13 @@ export default function OutreachPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
             style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≪</button>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >‹</button>
           <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
             Page{' '}
@@ -1878,13 +1877,13 @@ export default function OutreachPage() {
           </span>
           <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >›</button>
           <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
             style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
           >≫</button>
         </div>
       )}
@@ -2002,36 +2001,36 @@ export default function OutreachPage() {
 
       {/* Content */}
 
-        {(loading || (isClassic && classicLoading)) ? (
-          <SkeletonOutreach />
-        ) : displayItems.length === 0 && !loadingMore ? (
-          <div className="p-12 text-center">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
-            <p className="text-gray-500">
-            </p>
-          </div>
-        ) : viewMode === 'card' ? (
-          <>
+      {(loading || (isClassic && classicLoading)) ? (
+        <SkeletonOutreach />
+      ) : displayItems.length === 0 && !loadingMore ? (
+        <div className="p-12 text-center">
+          <div className="text-6xl mb-4">📭</div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Yet</h3>
+          <p className="text-gray-500">
+          </p>
+        </div>
+      ) : viewMode === 'card' ? (
+        <>
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
             gap: "20px",
           }}>
-              {cardOrderedItems.map((prop) => (
-                <div
-                  key={prop.id}
-                  style={{
-                    border: selected.has(prop.id) ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                    borderRadius: '16px',
-                    overflow: 'hidden',
-                    backgroundColor: 'white',
-                    boxShadow: selected.has(prop.id) ? '0 4px 12px rgba(59,130,246,0.2)' : '0 2px 8px rgba(0,0,0,0.06)',
-                    transition: 'all 0.2s ease',
-                    position: 'relative',
-                  }}
-                >
-                  <a href={prop.pv_url || prop.property_url || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+            {cardOrderedItems.map((prop) => (
+              <div
+                key={prop.id}
+                style={{
+                  border: selected.has(prop.id) ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  backgroundColor: 'white',
+                  boxShadow: selected.has(prop.id) ? '0 4px 12px rgba(59,130,246,0.2)' : '0 2px 8px rgba(0,0,0,0.06)',
+                  transition: 'all 0.2s ease',
+                  position: 'relative',
+                }}
+              >
+                <a href={prop.pv_url || prop.property_url || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
                   <div style={{ position: 'relative', height: '220px', backgroundColor: '#f8fafc' }}>
                     {prop.image_url && !prop.image_url.includes('no-photo-available') && !imageErrors.has(prop.id) ? (
                       <Image
@@ -2072,32 +2071,32 @@ export default function OutreachPage() {
                       </div>
                     )}
                     {/* Top-left badges */}
-                      <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(prop.id)}
-                          onChange={() => toggleSelect(prop.id)}
-                          style={{
-                            width: '20px',
-                            height: '20px',
-                            cursor: 'pointer',
-                            accentColor: '#3b82f6',
-                          }}
-                        />
-                        {prop.build_year && (
-                          <div style={{
-                            backgroundColor: 'rgba(59, 130, 246, 0.9)',
-                            color: 'white',
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: '600',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            Built {prop.build_year}
-                          </div>
-                        )}
-                      </div>
+                    <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(prop.id)}
+                        onChange={() => toggleSelect(prop.id)}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          cursor: 'pointer',
+                          accentColor: '#3b82f6',
+                        }}
+                      />
+                      {prop.build_year && (
+                        <div style={{
+                          backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                          color: 'white',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          Built {prop.build_year}
+                        </div>
+                      )}
+                    </div>
                     <div style={{
                       position: 'absolute',
                       bottom: '12px',
@@ -2111,144 +2110,144 @@ export default function OutreachPage() {
                     }}>
                       {prop.suburb}
                     </div>
-                      {/* For Sale Badge */}
-                      {prop.on_market_sale && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '52px',
-                          left: '16px',
-                          backgroundColor: 'rgba(34, 197, 94, 0.9)',
-                          color: 'white',
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                        }}>
-                          For Sale{prop.sale_price ? ` ${prop.sale_price}` : ''}
-                        </div>
+                    {/* For Sale Badge */}
+                    {prop.on_market_sale && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '52px',
+                        left: '16px',
+                        backgroundColor: 'rgba(34, 197, 94, 0.9)',
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}>
+                        For Sale{prop.sale_price ? ` ${prop.sale_price}` : ''}
+                      </div>
+                    )}
+                    {/* For Rent Badge */}
+                    {prop.on_market_rent && (
+                      <div style={{
+                        position: 'absolute',
+                        top: prop.on_market_sale ? '88px' : '52px',
+                        left: '16px',
+                        backgroundColor: 'rgba(139, 92, 246, 0.9)',
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}>
+                        To Rent{prop.rent_price ? ` ${prop.rent_price}` : ''}
+                      </div>
+                    )}
+                    {/* Rented Badge */}
+                    {prop.has_rental_history && (
+                      <div style={{
+                        position: 'absolute',
+                        top: (() => {
+                          let count = 0;
+                          if (prop.on_market_sale) count++;
+                          if (prop.on_market_rent) count++;
+                          return `${52 + count * 36}px`;
+                        })(),
+                        left: '16px',
+                        backgroundColor: 'rgba(245, 158, 11, 0.9)',
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}>
+                        Rented
+                      </div>
+                    )}
+                    {/* Top-right badges: Status badge, No Junk Mail toggle, Unlike button */}
+                    <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
+                      {activeTab !== 'liked' && (
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            border: '1px solid',
+                            whiteSpace: 'nowrap',
+                          }}
+                          className={`${STATUS_COLORS[prop.status]}`}
+                        >
+                          {STATUS_LABELS[prop.status] || prop.status}
+                        </span>
                       )}
-                      {/* For Rent Badge */}
-                      {prop.on_market_rent && (
-                        <div style={{
-                          position: 'absolute',
-                          top: prop.on_market_sale ? '88px' : '52px',
-                          left: '16px',
-                          backgroundColor: 'rgba(139, 92, 246, 0.9)',
-                          color: 'white',
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                        }}>
-                          To Rent{prop.rent_price ? ` ${prop.rent_price}` : ''}
-                        </div>
-                      )}
-                      {/* Rented Badge */}
-                      {prop.has_rental_history && (
-                        <div style={{
-                          position: 'absolute',
-                          top: (() => {
-                            let count = 0;
-                            if (prop.on_market_sale) count++;
-                            if (prop.on_market_rent) count++;
-                            return `${52 + count * 36}px`;
-                          })(),
-                          left: '16px',
-                          backgroundColor: 'rgba(245, 158, 11, 0.9)',
-                          color: 'white',
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                        }}>
-                          Rented
-                        </div>
-                      )}
-                      {/* Top-right badges: Status badge, No Junk Mail toggle, Unlike button */}
-                      <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', alignItems: 'center', zIndex: 2 }}>
-                        {activeTab !== 'liked' && (
-                          <span
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '12px',
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              border: '1px solid',
-                              whiteSpace: 'nowrap',
-                            }}
-                            className={`${STATUS_COLORS[prop.status]}`}
-                          >
-                            {STATUS_LABELS[prop.status] || prop.status}
-                          </span>
-                        )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const pid = prop.joined_property_id;
+                          if (!pid) return;
+                          const newVal = !prop.no_junk_mail;
+                          cacheRef.current.clear();
+                          setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                          setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
+                          fetch(`/api/admin/properties/${pid}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ no_junk_mail: newVal }),
+                          }).catch(() => {
+                            cacheRef.current.clear();
+                            setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                            setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
+                          });
+                        }}
+                        style={{
+                          width: '36px', height: '36px',
+                          borderRadius: '50%',
+                          background: prop.no_junk_mail ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+                          border: 'none',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '1.1rem',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          lineHeight: 1,
+                          cursor: 'pointer',
+                          color: prop.no_junk_mail ? 'white' : '#64748b',
+                          transition: 'all 0.2s ease',
+                        }}
+                        title={prop.no_junk_mail ? 'No Junk - Click to allow' : 'Click to mark No Junk'}
+                      >🚫</button>
+                      {activeTab === 'liked' && (
                         <button
                           onClick={(e) => {
-                            e.stopPropagation();
                             e.preventDefault();
-                            const pid = prop.joined_property_id;
-                            if (!pid) return;
-                            const newVal = !prop.no_junk_mail;
-                            cacheRef.current.clear();
-                            setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
-                            setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: newVal } : item));
-                            fetch(`/api/admin/properties/${pid}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ no_junk_mail: newVal }),
-                            }).catch(() => {
-                              cacheRef.current.clear();
-                              setItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
-                              setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
-                            });
+                            e.stopPropagation();
+                            removeFromLiked(prop);
                           }}
                           style={{
-                            width: '36px', height: '36px',
-                            borderRadius: '50%',
-                            background: prop.no_junk_mail ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.85)',
+                            background: 'rgba(239, 68, 68, 0.9)',
                             border: 'none',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: '50%',
+                            width: '36px',
+                            height: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
                             fontSize: '1.1rem',
                             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            color: 'white',
+                            zIndex: 2,
+                            padding: 0,
                             lineHeight: 1,
-                            cursor: 'pointer',
-                            color: prop.no_junk_mail ? 'white' : '#64748b',
-                            transition: 'all 0.2s ease',
                           }}
-                          title={prop.no_junk_mail ? 'No Junk - Click to allow' : 'Click to mark No Junk'}
-                        >🚫</button>
-                        {activeTab === 'liked' && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              removeFromLiked(prop);
-                            }}
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.9)',
-                              border: 'none',
-                              borderRadius: '50%',
-                              width: '36px',
-                              height: '36px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              fontSize: '1.1rem',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                              color: 'white',
-                              zIndex: 2,
-                              padding: 0,
-                              lineHeight: 1,
-                            }}
-                            title="取消喜欢 / Unlike"
-                          >
-                            ♥
-                          </button>
-                        )}
-                      </div>
+                          title="取消喜欢 / Unlike"
+                        >
+                          ♥
+                        </button>
+                      )}
+                    </div>
                     {prop.last_sold_date && (() => {
                       const sold = new Date(prop.last_sold_date!);
                       if (!isNaN(sold.getTime())) {
@@ -2274,709 +2273,708 @@ export default function OutreachPage() {
                       return null;
                     })()}
                   </div></a>
-                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                        <h3 style={{
-                          margin: 0,
-                          fontSize: '1.15rem',
-                          fontWeight: '700',
-                          color: '#2D3748',
-                          lineHeight: '1.3',
-                          flex: 1,
-                        }}>
-                          {prop.property_address}
-                        </h3>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "12px" }}>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              openEditModal(prop);
-                            }}
-                            style={{
-                              padding: '6px 14px',
-                              backgroundColor: '#f0fdf4',
-                              color: '#16a34a',
-                              border: '1px solid #bbf7d0',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              fontSize: '0.85rem',
-                              whiteSpace: 'nowrap',
-                              transition: 'all 0.2s',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
-                          >
-                            Edit
-                          </button>
-                          <a
-                            href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              fontSize: '0.75rem',
-                              color: '#2563eb',
-                              fontWeight: '600',
-                              textDecoration: 'none',
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              background: '#eff6ff',
-                              border: '1px solid #bfdbfe',
-                              transition: 'all 0.2s',
-                              whiteSpace: 'nowrap',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
-                          >
-                            Street
-                          </a>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>
-                        {prop.suburb}, {prop.city}
-                      </div>
-
-                      {(activeTab === 'pending' || activeTab === 'sent') && prop.latest_send_title && (
-                        <div style={{
-                          fontSize: '0.8rem', color: '#7c3aed', marginBottom: '14px',
-                          padding: '8px 12px', backgroundColor: '#f5f3ff', borderRadius: '8px',
-                          border: '1px solid #ede9fe', display: 'flex', alignItems: 'center', gap: '6px',
-                        }}>
-                          <span>📄</span>
-                          <span style={{ fontWeight: '500' }}>{prop.latest_send_title}</span>
-                          {prop.latest_sent_at && (
-                            <span style={{ color: '#a78bfa', marginLeft: 'auto', fontSize: '0.75rem' }}>
-                              {new Date(prop.latest_sent_at).toLocaleDateString('en-NZ')}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                    {/* Price & RV Section */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginBottom: '16px',
-                      paddingBottom: '16px',
-                      borderBottom: '1px solid #e2e8f0',
+                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <h3 style={{
+                      margin: 0,
+                      fontSize: '1.15rem',
+                      fontWeight: '700',
+                      color: '#2D3748',
+                      lineHeight: '1.3',
+                      flex: 1,
                     }}>
-                      <div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '4px' }}>Last Sold</div>
-                        <div style={{ fontWeight: '700', color: '#2D3748', fontSize: '1rem', marginBottom: '2px' }}>
-                          {prop.last_sold_date ? new Date(prop.last_sold_date).toLocaleDateString('en-NZ', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                        </div>
-                        <div style={{ fontWeight: '600', color: '#4a5568', fontSize: '0.95rem' }}>
-                          {prop.last_sold_price != null
-                            ? new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.last_sold_price)
-                            : 'N/A'}
-                        </div>
-                        {prop.last_sold_price != null && prop.capital_value != null && prop.last_sold_price > 0 && prop.capital_value > 0 && (() => {
-                          const growth = ((prop.capital_value! - prop.last_sold_price!) / prop.last_sold_price!) * 100;
-                          return (
-                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: growth > 0 ? '#16a34a' : '#dc2626', fontWeight: '600' }}>
-                              <span>{growth > 0 ? '↗' : '↘'}</span>
-                              <span> {growth > 0 ? '+' : ''}{growth.toFixed(1)}% since sold</span>
-                            </div>
-                          );
-                        })()}
+                      {prop.property_address}
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", marginLeft: "12px" }}>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openEditModal(prop);
+                        }}
+                        style={{
+                          padding: '6px 14px',
+                          backgroundColor: '#f0fdf4',
+                          color: '#16a34a',
+                          border: '1px solid #bbf7d0',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          fontSize: '0.85rem',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
+                      >
+                        Edit
+                      </button>
+                      <a
+                        href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          fontSize: '0.75rem',
+                          color: '#2563eb',
+                          fontWeight: '600',
+                          textDecoration: 'none',
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
+                          transition: 'all 0.2s',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                      >
+                        Street
+                      </a>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>
+                    {prop.suburb}, {prop.city}
+                  </div>
+
+                  {(activeTab === 'pending' || activeTab === 'sent') && prop.latest_send_title && (
+                    <div style={{
+                      fontSize: '0.8rem', color: '#7c3aed', marginBottom: '14px',
+                      padding: '8px 12px', backgroundColor: '#f5f3ff', borderRadius: '8px',
+                      border: '1px solid #ede9fe', display: 'flex', alignItems: 'center', gap: '6px',
+                    }}>
+                      <span>📄</span>
+                      <span style={{ fontWeight: '500' }}>{prop.latest_send_title}</span>
+                      {prop.latest_sent_at && (
+                        <span style={{ color: '#a78bfa', marginLeft: 'auto', fontSize: '0.75rem' }}>
+                          {new Date(prop.latest_sent_at).toLocaleDateString('en-NZ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Price & RV Section */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    paddingBottom: '16px',
+                    borderBottom: '1px solid #e2e8f0',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '4px' }}>Last Sold</div>
+                      <div style={{ fontWeight: '700', color: '#2D3748', fontSize: '1rem', marginBottom: '2px' }}>
+                        {prop.last_sold_date ? new Date(prop.last_sold_date).toLocaleDateString('en-NZ', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '4px' }}>RV (Rating Value)</div>
-                        <div style={{ fontWeight: '700', color: '#2D3748', fontSize: '1.1rem' }}>
-                          {prop.capital_value != null
-                            ? new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.capital_value)
-                            : 'N/A'}
-                        </div>
-                        {prop.build_year && (
-                          <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>
-                            Built in {prop.build_year}
+                      <div style={{ fontWeight: '600', color: '#4a5568', fontSize: '0.95rem' }}>
+                        {prop.last_sold_price != null
+                          ? new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.last_sold_price)
+                          : 'N/A'}
+                      </div>
+                      {prop.last_sold_price != null && prop.capital_value != null && prop.last_sold_price > 0 && prop.capital_value > 0 && (() => {
+                        const growth = ((prop.capital_value! - prop.last_sold_price!) / prop.last_sold_price!) * 100;
+                        return (
+                          <div style={{ marginTop: '4px', fontSize: '0.75rem', color: growth > 0 ? '#16a34a' : '#dc2626', fontWeight: '600' }}>
+                            <span>{growth > 0 ? '↗' : '↘'}</span>
+                            <span> {growth > 0 ? '+' : ''}{growth.toFixed(1)}% since sold</span>
                           </div>
-                        )}
+                        );
+                      })()}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#718096', marginBottom: '4px' }}>RV (Rating Value)</div>
+                      <div style={{ fontWeight: '700', color: '#2D3748', fontSize: '1.1rem' }}>
+                        {prop.capital_value != null
+                          ? new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.capital_value)
+                          : 'N/A'}
                       </div>
+                      {prop.build_year && (
+                        <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#718096', fontWeight: '500' }}>
+                          Built in {prop.build_year}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Amenities */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-around',
+                    textAlign: 'center',
+                    marginTop: 'auto',
+                  }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                        <FaBed style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
+                        <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
+                          {prop.bedrooms !== null ? prop.bedrooms : '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Beds</div>
                     </div>
 
-                    {/* Amenities */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-around',
-                      textAlign: 'center',
-                      marginTop: 'auto',
-                    }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                          <FaBed style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
-                          <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.bedrooms !== null ? prop.bedrooms : '-'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Beds</div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                        <FaBath style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
+                        <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
+                          {prop.bathrooms !== null ? prop.bathrooms : '-'}
+                        </span>
                       </div>
-
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                          <FaBath style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
-                          <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.bathrooms !== null ? prop.bathrooms : '-'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Baths</div>
-                      </div>
-
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                          <FaCar style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
-                          <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
-                            {prop.car_spaces !== null ? prop.car_spaces : '-'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Cars</div>
-                      </div>
-
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                          <FaRulerCombined style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
-                        </div>
-                        <div style={{ fontWeight: '600', color: '#2D3748', fontSize: '0.9rem', lineHeight: '1.3' }}>
-                          F: {prop.floor_area && prop.floor_area !== '-' ? prop.floor_area : '-'} m²
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#718096', fontWeight: '500', lineHeight: '1.3' }}>
-                          L: {prop.land_area && prop.land_area !== '-' && prop.land_area !== 0 ? prop.land_area : '-'} m²
-                        </div>
-                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Baths</div>
                     </div>
 
-                    {/* Action buttons */}
-                    <div style={{
-                      display: 'flex',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                      borderTop: '1px solid #f1f5f9',
-                      paddingTop: '12px',
-                      marginBottom: '12px',
-                    }}>
-                      {prop.realestate_url && (
-                        <a
-                          href={prop.realestate_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: '#f0fdf4',
-                            color: '#16a34a',
-                            textDecoration: 'none',
-                            fontWeight: '600',
-                            border: '1px solid #bbf7d0',
-                          }}
-                        >
-                          RealEstate
-                        </a>
-                      )}
-                      {activeTab === 'liked' && (
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
-                            try {
-                              const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: 'pending' }),
-                              });
-                              if (!res.ok) throw new Error('Failed');
-                              await res.json();
-                              showNotification('success', 'Moved to Pending');
-                              handleMarkAsSentSuccess();
-                            } catch {
-                              showNotification('error', 'Failed to move to Pending');
-                            }
-                          }}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #bfdbfe',
-                            backgroundColor: '#eff6ff',
-                            color: '#2563eb',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                        >
-                          ⇨ Pending
-                        </button>
-                      )}
-                      {canMarkAsSent && (
-                        <button
-                          onClick={() => openSendModal([prop.id])}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #bfdbfe',
-                            backgroundColor: '#eff6ff',
-                            color: '#2563eb',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                        >
-                          <FaPaperPlane style={{ display: 'inline', marginRight: '4px' }} />
-                          Send Report
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                        <FaCar style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
+                        <span style={{ fontWeight: '600', color: '#2D3748', fontSize: '1.1rem' }}>
+                          {prop.car_spaces !== null ? prop.car_spaces : '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#718096', fontWeight: '500' }}>Cars</div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                        <FaRulerCombined style={{ marginRight: '6px', color: '#718096', fontSize: '1.1rem' }} />
+                      </div>
+                      <div style={{ fontWeight: '600', color: '#2D3748', fontSize: '0.9rem', lineHeight: '1.3' }}>
+                        F: {prop.floor_area && prop.floor_area !== '-' ? prop.floor_area : '-'} m²
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#718096', fontWeight: '500', lineHeight: '1.3' }}>
+                        L: {prop.land_area && prop.land_area !== '-' && prop.land_area !== 0 ? prop.land_area : '-'} m²
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    borderTop: '1px solid #f1f5f9',
+                    paddingTop: '12px',
+                    marginBottom: '12px',
+                  }}>
+                    {prop.realestate_url && (
+                      <a
+                        href={prop.realestate_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         style={{
                           fontSize: '0.75rem',
                           padding: '4px 10px',
                           borderRadius: '6px',
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#f8fafc',
-                          color: '#475569',
-                          cursor: 'pointer',
+                          backgroundColor: '#f0fdf4',
+                          color: '#16a34a',
+                          textDecoration: 'none',
                           fontWeight: '600',
+                          border: '1px solid #bbf7d0',
                         }}
-                        title="View dispatch history"
                       >
-                        <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
-                        {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openConvertModal(prop); }}
-                        style={{
-                          fontSize: '0.75rem',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: '1px solid #c4b5fd',
-                          backgroundColor: '#f5f3ff',
-                          color: '#7c3aed',
-                          cursor: 'pointer',
-                          fontWeight: '600',
-                        }}
-                        title="Convert to Lead"
-                      >
-                        ⇨ Lead
-                      </button>
-                      {activeTab === 'pending' && (
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
-                              try {
-                                const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ status: 'liked' }),
-                                });
-                                if (!res.ok) throw new Error('Failed');
-                                await res.json();
-                                showNotification('success', 'Returned to Liked');
-                                handleMarkAsSentSuccess();
-                              } catch {
-                                showNotification('error', 'Failed to return to Liked');
-                              }
-                            }
-                          }}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #fde68a',
-                            backgroundColor: '#fffbeb',
-                            color: '#d97706',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                        >
-                          ↩ Liked
-                        </button>
-                      )}
-                      {activeTab === 'sent' && (
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
-                            try {
-                              const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: 'pending' }),
-                              });
-                              if (!res.ok) throw new Error('Failed');
-                              await res.json();
-                              showNotification('success', 'Returned to Pending');
-                              handleMarkAsSentSuccess();
-                            } catch {
-                              showNotification('error', 'Failed to return to Pending');
-                            }
-                          }}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #fde68a',
-                            backgroundColor: '#fffbeb',
-                            color: '#d97706',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                        >
-                          ⇨ Pending
-                        </button>
-                        )}
-                      {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`Delete "${prop.property_address}"?`)) {
-                              const itemId = prop.id;
-                              setItems((prev) => prev.filter((item) => item.id !== itemId));
-                              setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
-                              try {
-                                await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
-                                showNotification('success', 'Address deleted');
-                              } catch {
-                                showNotification('error', 'Failed to delete');
-                              }
-                            }
-                          }}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #fecaca',
-                            backgroundColor: '#fef2f2',
-                            color: '#dc2626',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Description */}
-                    {prop.description && (
-                      <div style={{
-                        color: '#4a5568',
-                        fontSize: '0.85rem',
-                        lineHeight: 1.5,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }} title={prop.description}>
-                        {prop.description}
-                      </div>
+                        RealEstate
+                      </a>
                     )}
+                    {activeTab === 'liked' && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
+                          try {
+                            const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'pending' }),
+                            });
+                            if (!res.ok) throw new Error('Failed');
+                            await res.json();
+                            showNotification('success', 'Moved to Pending');
+                            handleMarkAsSentSuccess();
+                          } catch {
+                            showNotification('error', 'Failed to move to Pending');
+                          }
+                        }}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #bfdbfe',
+                          backgroundColor: '#eff6ff',
+                          color: '#2563eb',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        ⇨ Pending
+                      </button>
+                    )}
+                    {canMarkAsSent && (
+                      <button
+                        onClick={() => openSendModal([prop.id])}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #bfdbfe',
+                          backgroundColor: '#eff6ff',
+                          color: '#2563eb',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        <FaPaperPlane style={{ display: 'inline', marginRight: '4px' }} />
+                        Send Report
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                      style={{
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#f8fafc',
+                        color: '#475569',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                      }}
+                      title="View dispatch history"
+                    >
+                      <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
+                      {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openConvertModal(prop); }}
+                      style={{
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #c4b5fd',
+                        backgroundColor: '#f5f3ff',
+                        color: '#7c3aed',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                      }}
+                      title="Convert to Lead"
+                    >
+                      ⇨ Lead
+                    </button>
+                    {activeTab === 'pending' && (
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
+                            try {
+                              const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'liked' }),
+                              });
+                              if (!res.ok) throw new Error('Failed');
+                              await res.json();
+                              showNotification('success', 'Returned to Liked');
+                              handleMarkAsSentSuccess();
+                            } catch {
+                              showNotification('error', 'Failed to return to Liked');
+                            }
+                          }
+                        }}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #fde68a',
+                          backgroundColor: '#fffbeb',
+                          color: '#d97706',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        ↩ Liked
+                      </button>
+                    )}
+                    {activeTab === 'sent' && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
+                          try {
+                            const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'pending' }),
+                            });
+                            if (!res.ok) throw new Error('Failed');
+                            await res.json();
+                            showNotification('success', 'Returned to Pending');
+                            handleMarkAsSentSuccess();
+                          } catch {
+                            showNotification('error', 'Failed to return to Pending');
+                          }
+                        }}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #fde68a',
+                          backgroundColor: '#fffbeb',
+                          color: '#d97706',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        ⇨ Pending
+                      </button>
+                    )}
+                    {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`Delete "${prop.property_address}"?`)) {
+                            const itemId = prop.id;
+                            setItems((prev) => prev.filter((item) => item.id !== itemId));
+                            setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
+                            try {
+                              await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+                              showNotification('success', 'Address deleted');
+                            } catch {
+                              showNotification('error', 'Failed to delete');
+                            }
+                          }
+                        }}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
 
-                    {/* AI Data Chamber */}
+                  {/* Description */}
+                  {prop.description && (
                     <div style={{
-                      position: 'absolute',
-                      top: '-9999px',
-                      left: '-9999px',
-                      pointerEvents: 'none',
-                      userSelect: 'none',
-                      fontSize: '1px',
-                      opacity: 0,
-                    }}>
-                      {[
-                        '[AI-DATA-START]',
-                        `Address: ${prop.property_address}`,
-                        `Suburb: ${prop.suburb}`,
-                        prop.city ? `City: ${prop.city}` : null,
-                        prop.region ? `Region: ${prop.region}` : null,
-                        prop.build_year ? `Year Built: ${prop.build_year}` : null,
-                        prop.bedrooms != null ? `Bedrooms: ${prop.bedrooms}` : null,
-                        prop.bathrooms != null ? `Bathrooms: ${prop.bathrooms}` : null,
-                        prop.car_spaces != null ? `Car Spaces: ${prop.car_spaces}` : null,
-                        prop.floor_area ? `Floor Size: ${prop.floor_area}` : null,
-                        prop.land_area ? `Land Area: ${prop.land_area}` : null,
-                        prop.capital_value != null ? `Capital Value (RV): ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.capital_value)}` : null,
-                        prop.last_sold_price != null ? `Last Sold Price: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.last_sold_price)}` : null,
-                        prop.last_sold_date ? `Last Sold Date: ${prop.last_sold_date}` : null,
-                        prop.property_type ? `Property Type: ${prop.property_type}` : null,
-                        prop.status ? `Status: ${prop.status}` : null,
-                        (prop.pv_url || prop.property_url) ? `Property URL: ${prop.pv_url || prop.property_url}` : null,
-                        prop.description ? `Description: ${prop.description}` : null,
-                        prop.realestate_url ? `RealEstate URL: ${prop.realestate_url}` : null,
-                        prop.property_history ? `Property History: ${prop.property_history}` : 'Property History: []',
-                        prop.has_rental_history != null ? `Has Rental History: ${prop.has_rental_history ? 'Yes' : 'No'}` : null,
-                        prop.is_currently_rented != null ? `Currently Rented: ${prop.is_currently_rented ? 'Yes' : 'No'}` : null,
-                        prop.estimated_value_low != null && prop.estimated_value_high != null
-                          ? `Estimated Value: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_low)} - ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_high)}`
-                          : null,
-                        prop.suburb_median_price != null ? `Suburb Median Price: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.suburb_median_price)}` : null,
-                        prop.suburb_days_on_market != null ? `Suburb Days On Market: ${prop.suburb_days_on_market}` : null,
-                        '[AI-DATA-END]',
-                      ].filter(Boolean).join('\n')}
+                      color: '#4a5568',
+                      fontSize: '0.85rem',
+                      lineHeight: 1.5,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }} title={prop.description}>
+                      {prop.description}
                     </div>
+                  )}
+
+                  {/* AI Data Chamber */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-9999px',
+                    left: '-9999px',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                    fontSize: '1px',
+                    opacity: 0,
+                  }}>
+                    {[
+                      '[AI-DATA-START]',
+                      `Address: ${prop.property_address}`,
+                      `Suburb: ${prop.suburb}`,
+                      prop.city ? `City: ${prop.city}` : null,
+                      prop.region ? `Region: ${prop.region}` : null,
+                      prop.build_year ? `Year Built: ${prop.build_year}` : null,
+                      prop.bedrooms != null ? `Bedrooms: ${prop.bedrooms}` : null,
+                      prop.bathrooms != null ? `Bathrooms: ${prop.bathrooms}` : null,
+                      prop.car_spaces != null ? `Car Spaces: ${prop.car_spaces}` : null,
+                      prop.floor_area ? `Floor Size: ${prop.floor_area}` : null,
+                      prop.land_area ? `Land Area: ${prop.land_area}` : null,
+                      prop.capital_value != null ? `Capital Value (RV): ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.capital_value)}` : null,
+                      prop.last_sold_price != null ? `Last Sold Price: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.last_sold_price)}` : null,
+                      prop.last_sold_date ? `Last Sold Date: ${prop.last_sold_date}` : null,
+                      prop.property_type ? `Property Type: ${prop.property_type}` : null,
+                      prop.status ? `Status: ${prop.status}` : null,
+                      (prop.pv_url || prop.property_url) ? `Property URL: ${prop.pv_url || prop.property_url}` : null,
+                      prop.description ? `Description: ${prop.description}` : null,
+                      prop.realestate_url ? `RealEstate URL: ${prop.realestate_url}` : null,
+                      prop.property_history ? `Property History: ${prop.property_history}` : 'Property History: []',
+                      prop.has_rental_history != null ? `Has Rental History: ${prop.has_rental_history ? 'Yes' : 'No'}` : null,
+                      prop.is_currently_rented != null ? `Currently Rented: ${prop.is_currently_rented ? 'Yes' : 'No'}` : null,
+                      prop.estimated_value_low != null && prop.estimated_value_high != null
+                        ? `Estimated Value: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_low)} - ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.estimated_value_high)}`
+                        : null,
+                      prop.suburb_median_price != null ? `Suburb Median Price: ${new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(prop.suburb_median_price)}` : null,
+                      prop.suburb_days_on_market != null ? `Suburb Days On Market: ${prop.suburb_days_on_market}` : null,
+                      '[AI-DATA-END]',
+                    ].filter(Boolean).join('\n')}
                   </div>
                 </div>
-              ))}
-            </div>
-            {isClassic && displayItems.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
-                <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-                  {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
-                </span>
-                <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
-                <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-                  onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-                  onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-                >≪</button>
-                <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-                  onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-                  onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-                >‹</button>
-                <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
-                  Page{' '}
-                  <input type="number" value={currentPage}
-                    onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
-                    style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-                    min={1} max={totalPages}
-                  />{' '}
-                  of {totalPages}
-                </span>
-                <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-                  onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-                  onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-                >›</button>
-                <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-                  onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-                  onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-                >≫</button>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="space-y-3">
-            {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
-              return (
-                <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
-                  <div className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">📂</span>
-                      <div className="text-left">
-                        <div className="font-semibold text-slate-800">{suburb}</div>
-                        <div className="text-xs text-slate-500">
-                          {streets.length} {streets.length === 1 ? 'street' : 'streets'}
-                        </div>
+            ))}
+          </div>
+          {isClassic && displayItems.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+              <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+                {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+              </span>
+              <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+              <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+                onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+              >≪</button>
+              <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+                onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+              >‹</button>
+              <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+                Page{' '}
+                <input type="number" value={currentPage}
+                  onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
+                  style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                  min={1} max={totalPages}
+                />{' '}
+                of {totalPages}
+              </span>
+              <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+                onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+              >›</button>
+              <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+                onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+                onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+              >≫</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-3">
+          {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
+            return (
+              <div key={suburb} className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📂</span>
+                    <div className="text-left">
+                      <div className="font-semibold text-slate-800">{suburb}</div>
+                      <div className="text-xs text-slate-500">
+                        {streets.length} {streets.length === 1 ? 'street' : 'streets'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-slate-600">
-                        {totalCount} {totalCount === 1 ? 'address' : 'addresses'}
-                      </span>
-                    </div>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-slate-600">
+                      {totalCount} {totalCount === 1 ? 'address' : 'addresses'}
+                    </span>
+                  </div>
+                </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {streets.map(({ street, properties, totalCount: streetTotal }) => {
-                      const streetKey = `${suburb}::${street}`;
-                      const isCollapsed = collapsedStreets.has(streetKey);
-                      return (
-                        <div key={street} className="bg-white">
-                          <button
-                            onClick={() => toggleStreet(suburb, street)}
-                            className="w-full px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={streetTotal > 0 && properties.every(p => selected.has(p.id))}
-                                ref={el => { if (el) { const n = properties.filter(p => selected.has(p.id)).length; el.indeterminate = n > 0 && n < properties.length; } }}
-                                onChange={() => {
-                                  const allSelected = properties.every(p => selected.has(p.id));
-                                  setSelectedByTab((prev) => {
-                                    const next = new Set(prev[activeTab]);
-                                    if (allSelected) {
-                                      properties.forEach(p => next.delete(p.id));
-                                    } else {
-                                      properties.forEach(p => next.add(p.id));
-                                    }
-                                    return { ...prev, [activeTab]: next };
-                                  });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-lg">📍</span>
-                              <span className="font-medium text-slate-700">{street}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500 font-medium">
-                                {streetTotal} {streetTotal === 1 ? 'address' : 'addresses'}
-                              </span>
-                              <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
-                            </div>
-                          </button>
-                          {!isCollapsed && (
-                            <div className="divide-y divide-slate-50">
-                              {properties.map((prop) => {
-                               const actionBtns = (
-                                 <>
-                                 {activeTab === 'liked' && (
-                                   <button
-                                     type="button"
-                                     onClick={async () => {
-                                       if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
-                                       try {
-                                         const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                           method: 'PATCH',
-                                           headers: { 'Content-Type': 'application/json' },
-                                           body: JSON.stringify({ status: 'pending' }),
-                                         });
-                                         if (!res.ok) throw new Error('Failed');
-                                         await res.json();
-                                         showNotification('success', 'Moved to Pending');
-                                         handleMarkAsSentSuccess();
-                                       } catch {
-                                         showNotification('error', 'Failed to move to Pending');
-                                       }
-                                     }}
-                                     className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
-                                     title="Move to Pending"
-                                   >
-                                     ⇨ Pending
-                                   </button>
-                                 )}
-                                 {activeTab === 'pending' && canMarkAsSent && (
-                                   <button
-                                     type="button"
-                                     onClick={async () => {
-                                       if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
-                                       try {
-                                         const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, {
-                                           method: 'PATCH',
-                                         });
-                                         if (!res.ok) throw new Error('Failed to mark as sent');
-                                         await res.json();
-                                         showNotification('success', 'Marked as sent');
-                                         handleMarkAsSentSuccess();
-                                       } catch {
-                                         showNotification('error', 'Failed to mark as sent');
-                                       }
-                                     }}
-                                     className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
-                                     title="Mark this address as sent"
-                                   >
-                                     ✓ Sent
-                                   </button>
-                                 )}
-                                 {activeTab === 'pending' && (
-                                   <button
-                                     type="button"
-                                     onClick={async () => {
-                                       if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
-                                         try {
-                                           const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                             method: 'PATCH',
-                                             headers: { 'Content-Type': 'application/json' },
-                                             body: JSON.stringify({ status: 'liked' }),
-                                           });
-                                           if (!res.ok) throw new Error('Failed');
-                                           await res.json();
-                                           showNotification('success', 'Returned to Liked');
-                                           handleMarkAsSentSuccess();
-                                         } catch {
-                                           showNotification('error', 'Failed to return to Liked');
-                                         }
-                                       }
-                                     }}
-                                     className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
-                                     title="Return to Liked"
-                                   >
-                                     ↩ Liked
-                                   </button>
-                                 )}
-                                 {activeTab === 'sent' && (
-                                   <button
-                                     type="button"
-                                     onClick={async () => {
-                                       if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
-                                       try {
-                                         const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                           method: 'PATCH',
-                                           headers: { 'Content-Type': 'application/json' },
-                                           body: JSON.stringify({ status: 'pending' }),
-                                         });
-                                         if (!res.ok) throw new Error('Failed');
-                                         await res.json();
-                                         showNotification('success', 'Returned to Pending');
-                                         handleMarkAsSentSuccess();
-                                       } catch {
-                                         showNotification('error', 'Failed to return to Pending');
-                                       }
-                                     }}
-                                     className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
-                                     title="Return to Pending"
-                                   >
-                                     ⇨ Pending
-                                   </button>
-                                 )}
-                                   <button
-                                     type="button"
-                                     onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
-                                     className="transition-colors px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded text-xs font-medium border border-slate-200"
-                                     title="View dispatch history"
-                                   >
-                                     <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
-                                     {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
-                                   </button>
-                                   <button
-                                     type="button"
-                                     onClick={() => openConvertModal(prop)}
-                                     className="transition-colors px-3 py-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded text-xs font-medium border border-violet-200"
-                                     title="Convert to Lead"
-                                   >
-                                     ⇨ Lead
-                                   </button>
-                                   {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
-                                   <button
-                                     type="button"
-                                     onClick={async () => {
-                                       if (window.confirm(`Delete "${prop.property_address}"?`)) {
-                                         const itemId = prop.id;
-                                         setItems((prev) => prev.filter((item) => item.id !== itemId));
-                                         setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
-                                         try {
-                                           await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
-                                           showNotification('success', 'Address deleted');
-                                         } catch {
-                                           showNotification('error', 'Failed to delete');
-                                         }
-                                       }
-                                     }}
-                                     className="transition-colors px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
-                                     title="Delete this address"
-                                   >
-                                     🗑️
-                                   </button>
-                                 )}
-                                 <span
-                                   className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                                     STATUS_COLORS[prop.status]
-                                   }`}
-                                 >
-                                   {STATUS_LABELS[prop.status]}
-                                 </span>
-                                 </>
-                               );
-                               return (
-                               <div
-                                 key={prop.id}
-                                 className="pl-10 pr-4 py-3 hover:bg-blue-50 transition-colors group border-l-2 border-slate-100 ml-4"
-                               >
-                                 <div className="flex items-start gap-3">
-                                   <input
-                                     type="checkbox"
-                                     checked={selected.has(prop.id)}
-                                     onChange={() => toggleSelect(prop.id)}
-                                     className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
-                                   />
-                                   <div className="min-w-0 flex-1">
+                <div className="divide-y divide-slate-100">
+                  {streets.map(({ street, properties, totalCount: streetTotal }) => {
+                    const streetKey = `${suburb}::${street}`;
+                    const isCollapsed = collapsedStreets.has(streetKey);
+                    return (
+                      <div key={street} className="bg-white">
+                        <button
+                          onClick={() => toggleStreet(suburb, street)}
+                          className="w-full px-4 py-2 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={streetTotal > 0 && properties.every(p => selected.has(p.id))}
+                              ref={el => { if (el) { const n = properties.filter(p => selected.has(p.id)).length; el.indeterminate = n > 0 && n < properties.length; } }}
+                              onChange={() => {
+                                const allSelected = properties.every(p => selected.has(p.id));
+                                setSelectedByTab((prev) => {
+                                  const next = new Set(prev[activeTab]);
+                                  if (allSelected) {
+                                    properties.forEach(p => next.delete(p.id));
+                                  } else {
+                                    properties.forEach(p => next.add(p.id));
+                                  }
+                                  return { ...prev, [activeTab]: next };
+                                });
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-lg">📍</span>
+                            <span className="font-medium text-slate-700">{street}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-medium">
+                              {streetTotal} {streetTotal === 1 ? 'address' : 'addresses'}
+                            </span>
+                            <span className="text-slate-400">{isCollapsed ? '▶' : '▼'}</span>
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="divide-y divide-slate-50">
+                            {properties.map((prop) => {
+                              const actionBtns = (
+                                <>
+                                  {activeTab === 'liked' && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
+                                        try {
+                                          const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ status: 'pending' }),
+                                          });
+                                          if (!res.ok) throw new Error('Failed');
+                                          await res.json();
+                                          showNotification('success', 'Moved to Pending');
+                                          handleMarkAsSentSuccess();
+                                        } catch {
+                                          showNotification('error', 'Failed to move to Pending');
+                                        }
+                                      }}
+                                      className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
+                                      title="Move to Pending"
+                                    >
+                                      ⇨ Pending
+                                    </button>
+                                  )}
+                                  {activeTab === 'pending' && canMarkAsSent && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!window.confirm(`Mark "${prop.property_address}" as sent?`)) return;
+                                        try {
+                                          const res = await fetch(`/api/admin/outreach/${prop.id}/mark-sent`, {
+                                            method: 'PATCH',
+                                          });
+                                          if (!res.ok) throw new Error('Failed to mark as sent');
+                                          await res.json();
+                                          showNotification('success', 'Marked as sent');
+                                          handleMarkAsSentSuccess();
+                                        } catch {
+                                          showNotification('error', 'Failed to mark as sent');
+                                        }
+                                      }}
+                                      className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
+                                      title="Mark this address as sent"
+                                    >
+                                      ✓ Sent
+                                    </button>
+                                  )}
+                                  {activeTab === 'pending' && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (window.confirm(`Return "${prop.property_address}" to Liked?`)) {
+                                          try {
+                                            const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                              method: 'PATCH',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ status: 'liked' }),
+                                            });
+                                            if (!res.ok) throw new Error('Failed');
+                                            await res.json();
+                                            showNotification('success', 'Returned to Liked');
+                                            handleMarkAsSentSuccess();
+                                          } catch {
+                                            showNotification('error', 'Failed to return to Liked');
+                                          }
+                                        }
+                                      }}
+                                      className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
+                                      title="Return to Liked"
+                                    >
+                                      ↩ Liked
+                                    </button>
+                                  )}
+                                  {activeTab === 'sent' && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!window.confirm(`Return "${prop.property_address}" to Pending?`)) return;
+                                        try {
+                                          const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ status: 'pending' }),
+                                          });
+                                          if (!res.ok) throw new Error('Failed');
+                                          await res.json();
+                                          showNotification('success', 'Returned to Pending');
+                                          handleMarkAsSentSuccess();
+                                        } catch {
+                                          showNotification('error', 'Failed to return to Pending');
+                                        }
+                                      }}
+                                      className="transition-colors px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-xs font-medium"
+                                      title="Return to Pending"
+                                    >
+                                      ⇨ Pending
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => openHistoryDrawer(prop.id, prop.property_address)}
+                                    className="transition-colors px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded text-xs font-medium border border-slate-200"
+                                    title="View dispatch history"
+                                  >
+                                    <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
+                                    {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openConvertModal(prop)}
+                                    className="transition-colors px-3 py-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded text-xs font-medium border border-violet-200"
+                                    title="Convert to Lead"
+                                  >
+                                    ⇨ Lead
+                                  </button>
+                                  {(activeTab === 'pending' || activeTab === 'liked' || activeTab === 'sent') && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (window.confirm(`Delete "${prop.property_address}"?`)) {
+                                          const itemId = prop.id;
+                                          setItems((prev) => prev.filter((item) => item.id !== itemId));
+                                          setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
+                                          try {
+                                            await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+                                            showNotification('success', 'Address deleted');
+                                          } catch {
+                                            showNotification('error', 'Failed to delete');
+                                          }
+                                        }
+                                      }}
+                                      className="transition-colors px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-medium"
+                                      title="Delete this address"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                  <span
+                                    className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[prop.status]
+                                      }`}
+                                  >
+                                    {STATUS_LABELS[prop.status]}
+                                  </span>
+                                </>
+                              );
+                              return (
+                                <div
+                                  key={prop.id}
+                                  className="pl-10 pr-4 py-3 hover:bg-blue-50 transition-colors group border-l-2 border-slate-100 ml-4"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected.has(prop.id)}
+                                      onChange={() => toggleSelect(prop.id)}
+                                      className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                                    />
+                                    <div className="min-w-0 flex-1">
                                       <div className="flex flex-wrap items-center gap-3">
                                         <div className="font-medium text-slate-800 truncate">
                                           {prop.property_address}
@@ -3002,361 +3000,360 @@ export default function OutreachPage() {
                                                 setClassicItems(prev => prev.map(item => item.id === prop.id ? { ...item, no_junk_mail: !newVal } : item));
                                               });
                                             }}
-                                            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors ${
-                                              prop.no_junk_mail
+                                            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors ${prop.no_junk_mail
                                                 ? 'bg-red-500 text-white'
                                                 : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                                            }`}
+                                              }`}
                                             title={prop.no_junk_mail ? 'No Junk Mail - click to allow' : 'Click to mark No Junk Mail'}
                                           >
                                             🚫
                                           </button>
                                         )}
                                         <div className="flex gap-2 shrink-0">
-                                         {(prop.pv_url || prop.property_url) && (
-                                           <a
-                                             href={prop.pv_url || prop.property_url || ''}
-                                             target="_blank"
-                                             rel="noopener noreferrer"
-                                             className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200 font-semibold"
-                                             title="View on PropertyValue"
-                                           >
-                                             PropertyValue
-                                           </a>
-                                         )}
-                                         {prop.realestate_url && (
-                                           <a
-                                             href={prop.realestate_url}
-                                             target="_blank"
-                                             rel="noopener noreferrer"
-                                             className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors border border-green-200 font-semibold"
-                                             title="View on RealEstate"
-                                           >
-                                             RealEstate
-                                           </a>
-                                         )}
-                                       </div>
-                                     </div>
-                                     <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                                       {prop.property_type && (
-                                         <span className="px-2 py-0.5 bg-slate-100 rounded">
-                                           {prop.property_type}
-                                         </span>
-                                       )}
-                                       <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
-                                       <span className="text-slate-400">
-                                         {new Date(prop.created_at).toLocaleTimeString('en-NZ', { 
-                                           hour: '2-digit', 
-                                           minute: '2-digit' 
-                                         })}
-                                       </span>
-                                     </div>
-                                   </div>
-                                 </div>
-                                 <div className="flex flex-wrap items-center gap-2 mt-1.5 lg:mt-0.5">
-                                   {actionBtns}
-                                 </div>
-                               </div>
+                                          {(prop.pv_url || prop.property_url) && (
+                                            <a
+                                              href={prop.pv_url || prop.property_url || ''}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200 font-semibold"
+                                              title="View on PropertyValue"
+                                            >
+                                              PropertyValue
+                                            </a>
+                                          )}
+                                          {prop.realestate_url && (
+                                            <a
+                                              href={prop.realestate_url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors border border-green-200 font-semibold"
+                                              title="View on RealEstate"
+                                            >
+                                              RealEstate
+                                            </a>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                                        {prop.property_type && (
+                                          <span className="px-2 py-0.5 bg-slate-100 rounded">
+                                            {prop.property_type}
+                                          </span>
+                                        )}
+                                        <span>Added {new Date(prop.created_at).toLocaleDateString('en-NZ')}</span>
+                                        <span className="text-slate-400">
+                                          {new Date(prop.created_at).toLocaleTimeString('en-NZ', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1.5 lg:mt-0.5">
+                                    {actionBtns}
+                                  </div>
+                                </div>
                               );
-                             })}
-                           </div>
+                            })}
+                          </div>
                         )}
                       </div>
                     );
                   })}
-                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-        {isClassic && displayItems.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
-            <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-              {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
-            </span>
-            <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
-            <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-              onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-              onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-            >≪</button>
-            <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-              onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-              onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-            >‹</button>
-            <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
-              Page{' '}
-              <input type="number" value={currentPage}
-                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
-                style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-                min={1} max={totalPages}
-              />{' '}
-              of {totalPages}
-            </span>
-            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-              onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-              onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-            >›</button>
-            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
-              onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}}
-              onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}}
-            >≫</button>
-          </div>
-        )}
-        {!isClassic && hasMore && !loading && !loadingMore && (
-          <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
-        )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {isClassic && displayItems.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
+          <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
+            {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+          </span>
+          <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+          >≪</button>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage > 1) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+          >‹</button>
+          <span style={{ fontSize: "0.9rem", fontWeight: "500", color: "#4a5568", whiteSpace: "nowrap" }}>
+            Page{' '}
+            <input type="number" value={currentPage}
+              onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value, 10); if (!isNaN(v) && v >= 1 && v <= totalPages) { setCurrentPage(v); } } }}
+              style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.9rem", fontWeight: "600", color: "#2D3748", textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              min={1} max={totalPages}
+            />{' '}
+            of {totalPages}
+          </span>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+          >›</button>
+          <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage >= totalPages ? '#f8fafc' : 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#4a5568', cursor: currentPage >= totalPages ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
+            onMouseEnter={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; } }}
+            onMouseLeave={(e) => { if (currentPage < totalPages) { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+          >≫</button>
+        </div>
+      )}
+      {!isClassic && hasMore && !loading && !loadingMore && (
+        <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
+      )}
 
-        {!isClassic && loadingMore && (
+      {!isClassic && loadingMore && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
+          gap: viewMode === 'card' ? '20px' : '0',
+        }}>
+          {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+            viewMode === 'card' ? (
+              <SkeletonOutreachCard key={`skel-${i}`} />
+            ) : (
+              <SkeletonOutreachListRow key={`skel-${i}`} />
+            )
+          ))}
+        </div>
+      )}
+
+      {!isClassic && !hasMore && displayItems.length > 0 && !loadingMore && (
+        <div style={{
+          textAlign: 'center',
+          padding: '30px',
+          color: '#718096',
+          fontSize: '0.95rem',
+          fontWeight: '500',
+        }}>
+          You&apos;ve reached the end! No more addresses to load.
+        </div>
+      )}
+
+      {editingProperty && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
-            gap: viewMode === 'card' ? '20px' : '0',
-          }}>
-            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-              viewMode === 'card' ? (
-                <SkeletonOutreachCard key={`skel-${i}`} />
-              ) : (
-                <SkeletonOutreachListRow key={`skel-${i}`} />
-              )
-            ))}
-          </div>
-        )}
-
-        {!isClassic && !hasMore && displayItems.length > 0 && !loadingMore && (
+            position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          }} onClick={() => setEditingProperty(null)} />
           <div style={{
-            textAlign: 'center',
-            padding: '30px',
-            color: '#718096',
-            fontSize: '0.95rem',
-            fontWeight: '500',
+            position: 'relative', backgroundColor: 'white', borderRadius: '16px',
+            padding: '32px', maxWidth: '700px', width: '95%', maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
           }}>
-            You&apos;ve reached the end! No more addresses to load.
-          </div>
-        )}
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2D3748', marginBottom: '8px' }}>
+              Edit Property
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '24px' }}>
+              {editingProperty.property_address} — edits are saved to the linked Properties record
+            </p>
 
-        {editingProperty && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <div style={{
-              position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            }} onClick={() => setEditingProperty(null)} />
-            <div style={{
-              position: 'relative', backgroundColor: 'white', borderRadius: '16px',
-              padding: '32px', maxWidth: '700px', width: '95%', maxHeight: '90vh',
-              overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-            }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2D3748', marginBottom: '8px' }}>
-                Edit Property
-              </h2>
-              <p style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '24px' }}>
-                {editingProperty.property_address} — edits are saved to the linked Properties record
-              </p>
-
-              {/* Send History */}
-              {sendHistoryLoading ? (
-                <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ height: '20px', width: '120px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '12px', animation: 'pulse 2s infinite' }} />
-                  <div style={{ height: '60px', backgroundColor: '#e2e8f0', borderRadius: '8px', animation: 'pulse 2s infinite' }} />
-                </div>
-              ) : sendHistory.length > 0 ? (
-                <div style={{ marginBottom: '24px' }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#7c3aed', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>📋</span> Dispatch History
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {sendHistory.map((log) => (
-                      <div key={log.log_id} style={{
-                        padding: '12px 14px', backgroundColor: '#f5f3ff', borderRadius: '10px',
-                        border: '1px solid #ede9fe',
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#7c3aed', backgroundColor: '#ede9fe', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                              {log.campaign_key}
-                            </span>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#2D3748', marginTop: '4px' }}>
-                              {log.report_title}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#a78bfa', whiteSpace: 'nowrap' }}>
-                            {new Date(log.sent_at).toLocaleDateString('en-NZ')}
+            {/* Send History */}
+            {sendHistoryLoading ? (
+              <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ height: '20px', width: '120px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '12px', animation: 'pulse 2s infinite' }} />
+                <div style={{ height: '60px', backgroundColor: '#e2e8f0', borderRadius: '8px', animation: 'pulse 2s infinite' }} />
+              </div>
+            ) : sendHistory.length > 0 ? (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#7c3aed', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📋</span> Dispatch History
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {sendHistory.map((log) => (
+                    <div key={log.log_id} style={{
+                      padding: '12px 14px', backgroundColor: '#f5f3ff', borderRadius: '10px',
+                      border: '1px solid #ede9fe',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#7c3aed', backgroundColor: '#ede9fe', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                            {log.campaign_key}
+                          </span>
+                          <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#2D3748', marginTop: '4px' }}>
+                            {log.report_title}
                           </div>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#718096', marginTop: '6px', display: 'flex', gap: '12px' }}>
-                          <span>By: {log.sent_by}</span>
-                          {log.scan_count > 0 && <span>📷 Scanned: {log.scan_count}</span>}
+                        <div style={{ fontSize: '0.75rem', color: '#a78bfa', whiteSpace: 'nowrap' }}>
+                          {new Date(log.sent_at).toLocaleDateString('en-NZ')}
                         </div>
-                          {log.notes && (
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
-                              &ldquo;{log.notes}&rdquo;
-                            </div>
-                          )}
                       </div>
-                    ))}
-                  </div>
+                      <div style={{ fontSize: '0.75rem', color: '#718096', marginTop: '6px', display: 'flex', gap: '12px' }}>
+                        <span>By: {log.sent_by}</span>
+                        {log.scan_count > 0 && <span>📷 Scanned: {log.scan_count}</span>}
+                      </div>
+                      {log.notes && (
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
+                          &ldquo;{log.notes}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                {[
-                  { key: 'address', label: 'Address', type: 'text' },
-                  { key: 'suburb', label: 'Suburb', type: 'text' },
-                  { key: 'city', label: 'City', type: 'text' },
-                  { key: 'region', label: 'Region', type: 'text' },
-                  { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
-                  { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
-                  { key: 'car_spaces', label: 'Car Spaces', type: 'number' },
-                  { key: 'year_built', label: 'Year Built', type: 'number' },
-                  { key: 'floor_size', label: 'Floor Size (m²)', type: 'text' },
-                  { key: 'land_area', label: 'Land Area', type: 'text' },
-                  { key: 'last_sold_price', label: 'Last Sold Price', type: 'number' },
-                  { key: 'last_sold_date', label: 'Last Sold Date', type: 'date' },
-                  { key: 'capital_value', label: 'Capital Value (RV)', type: 'number' },
-                  { key: 'property_url', label: 'Property URL', type: 'text' },
-                  { key: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
-                ].map(field => (
-                  <div key={field.key}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
-                      {field.label}
-                    </label>
-                    <input
-                      type={field.type}
-                      value={editFormData[field.key]?.toString() || ''}
-                      onChange={e => handleEditFieldChange(field.key, e.target.value)}
-                      style={{
-                        width: '100%', padding: '10px 12px',
-                        border: '2px solid #e2e8f0', borderRadius: '8px',
-                        fontSize: '0.9rem', color: '#2D3748',
-                      }}
-                    />
-                  </div>
-                ))}
-                <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {[
+                { key: 'address', label: 'Address', type: 'text' },
+                { key: 'suburb', label: 'Suburb', type: 'text' },
+                { key: 'city', label: 'City', type: 'text' },
+                { key: 'region', label: 'Region', type: 'text' },
+                { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
+                { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
+                { key: 'car_spaces', label: 'Car Spaces', type: 'number' },
+                { key: 'year_built', label: 'Year Built', type: 'number' },
+                { key: 'floor_size', label: 'Floor Size (m²)', type: 'text' },
+                { key: 'land_area', label: 'Land Area', type: 'text' },
+                { key: 'last_sold_price', label: 'Last Sold Price', type: 'number' },
+                { key: 'last_sold_date', label: 'Last Sold Date', type: 'date' },
+                { key: 'capital_value', label: 'Capital Value (RV)', type: 'number' },
+                { key: 'property_url', label: 'Property URL', type: 'text' },
+                { key: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
+              ].map(field => (
+                <div key={field.key}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
-                    Description
+                    {field.label}
                   </label>
-                  <textarea
-                    value={editFormData.description?.toString() || ''}
-                    onChange={e => handleEditFieldChange('description', e.target.value)}
-                    rows={3}
+                  <input
+                    type={field.type}
+                    value={editFormData[field.key]?.toString() || ''}
+                    onChange={e => handleEditFieldChange(field.key, e.target.value)}
                     style={{
                       width: '100%', padding: '10px 12px',
                       border: '2px solid #e2e8f0', borderRadius: '8px',
-                      fontSize: '0.9rem', color: '#2D3748', resize: 'vertical',
+                      fontSize: '0.9rem', color: '#2D3748',
                     }}
                   />
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
-                    Property History
-                  </label>
-                  <PropertyHistoryView raw={editFormData.property_history?.toString() || ''} />
-                </div>
+              ))}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                  Description
+                </label>
+                <textarea
+                  value={editFormData.description?.toString() || ''}
+                  onChange={e => handleEditFieldChange('description', e.target.value)}
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '10px 12px',
+                    border: '2px solid #e2e8f0', borderRadius: '8px',
+                    fontSize: '0.9rem', color: '#2D3748', resize: 'vertical',
+                  }}
+                />
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setEditingProperty(null)}
-                  style={{
-                    padding: '12px 24px', backgroundColor: '#f3f4f6', color: '#4a5568',
-                    borderRadius: '10px', border: 'none', cursor: 'pointer',
-                    fontWeight: '600', fontSize: '0.95rem',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  disabled={saving}
-                  style={{
-                    padding: '12px 24px', backgroundColor: saving ? '#9ca3af' : '#3b82f6',
-                    color: 'white', borderRadius: '10px', border: 'none',
-                    cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem',
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>
+                  Property History
+                </label>
+                <PropertyHistoryView raw={editFormData.property_history?.toString() || ''} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditingProperty(null)}
+                style={{
+                  padding: '12px 24px', backgroundColor: '#f3f4f6', color: '#4a5568',
+                  borderRadius: '10px', border: 'none', cursor: 'pointer',
+                  fontWeight: '600', fontSize: '0.95rem',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                style={{
+                  padding: '12px 24px', backgroundColor: saving ? '#9ca3af' : '#3b82f6',
+                  color: 'white', borderRadius: '10px', border: 'none',
+                  cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.95rem',
+                }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert to Lead Modal */}
+      {convertModalOpen && convertingProperty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConvertModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold">Convert to Lead</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{convertingProperty.property_address}</p>
+              </div>
+              <button onClick={() => setConvertModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Owner Email</label>
+                <input type="email" value={convertForm.owner_email}
+                  onChange={e => setConvertForm(p => ({ ...p, owner_email: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="owner@example.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Owner Phone</label>
+                <input type="text" value={convertForm.owner_phone}
+                  onChange={e => setConvertForm(p => ({ ...p, owner_phone: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="021 123 4567" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Summary</label>
+                <input type="text" value={convertForm.summary}
+                  onChange={e => setConvertForm(p => ({ ...p, summary: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="e.g., Called owner, interested in selling" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Notes (pre-filled from outreach)</label>
+                <textarea value={convertForm.notes}
+                  onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))}
+                  rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div className="pt-2 flex items-center justify-end space-x-3">
+                <button onClick={() => setConvertModalOpen(false)} className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+                <button onClick={handleConvertToLead} disabled={converting}
+                  className="px-5 py-2.5 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
+                  {converting ? 'Converting...' : 'Create Lead'}
                 </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Convert to Lead Modal */}
-        {convertModalOpen && convertingProperty && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConvertModalOpen(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-semibold">Convert to Lead</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{convertingProperty.property_address}</p>
-                </div>
-                <button onClick={() => setConvertModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">✕</button>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Owner Email</label>
-                  <input type="email" value={convertForm.owner_email}
-                    onChange={e => setConvertForm(p => ({ ...p, owner_email: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="owner@example.com" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Owner Phone</label>
-                  <input type="text" value={convertForm.owner_phone}
-                    onChange={e => setConvertForm(p => ({ ...p, owner_phone: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="021 123 4567" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Summary</label>
-                  <input type="text" value={convertForm.summary}
-                    onChange={e => setConvertForm(p => ({ ...p, summary: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="e.g., Called owner, interested in selling" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Notes (pre-filled from outreach)</label>
-                  <textarea value={convertForm.notes}
-                    onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))}
-                    rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                </div>
-                <div className="pt-2 flex items-center justify-end space-x-3">
-                  <button onClick={() => setConvertModalOpen(false)} className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-slate-800">Cancel</button>
-                  <button onClick={handleConvertToLead} disabled={converting}
-                    className="px-5 py-2.5 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
-                    {converting ? 'Converting...' : 'Create Lead'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+      <SendReportModal
+        isOpen={sendModalOpen}
+        onClose={() => setSendModalOpen(false)}
+        selectedIds={sendTargetIds}
+        suburb={sendTargetSuburb}
+        onSuccess={() => {
+          showNotification('success', 'Report dispatch logged successfully');
+          clearSelected();
+          cacheRef.current.clear();
+          if (isClassic) {
+            setCurrentPage(currentPage);
+          } else {
+            fetchItems();
+          }
+        }}
+      />
 
-        <SendReportModal
-          isOpen={sendModalOpen}
-          onClose={() => setSendModalOpen(false)}
-          selectedIds={sendTargetIds}
-          suburb={sendTargetSuburb}
-          onSuccess={() => {
-            showNotification('success', 'Report dispatch logged successfully');
-            clearSelected();
-            cacheRef.current.clear();
-            if (isClassic) {
-              setCurrentPage(currentPage);
-            } else {
-              fetchItems();
-            }
-          }}
-        />
-
-        <DispatchHistoryDrawer
-          isOpen={historyDrawerOpen}
-          onClose={() => setHistoryDrawerOpen(false)}
-          propertyId={historyTargetId}
-          propertyAddress={historyTargetAddress}
-        />
+      <DispatchHistoryDrawer
+        isOpen={historyDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
+        propertyId={historyTargetId}
+        propertyAddress={historyTargetAddress}
+      />
     </div>
   );
 }
