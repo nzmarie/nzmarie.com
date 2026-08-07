@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseHouseNumber, orderStreetsGreedily, OrderableStreet } from '../../lib/street-ordering';
+import { parseHouseNumber, orderStreetsGreedily, extractStreetNameFromAddress, OrderableStreet } from '../../lib/street-ordering';
 
 function street(name: string, house: number | null, lat: number, lng: number): OrderableStreet {
   return {
@@ -24,6 +24,33 @@ describe('parseHouseNumber', () => {
   it('returns null for addresses without a leading number', () => {
     expect(parseHouseNumber('Flat 3/5 X Street')).toBeNull();
     expect(parseHouseNumber('')).toBeNull();
+  });
+});
+
+describe('extractStreetNameFromAddress', () => {
+  it('strips plain house numbers and units', () => {
+    expect(extractStreetNameFromAddress('100 Showgrounds Road')).toBe('Showgrounds Road');
+    expect(extractStreetNameFromAddress('12A King Street')).toBe('King Street');
+  });
+
+  it('handles unit ranges and multiple house-number tokens', () => {
+    expect(extractStreetNameFromAddress('2a/1 Rock Road')).toBe('Rock Road');
+    expect(extractStreetNameFromAddress('1/3-5 Rock Isle Road')).toBe('Rock Isle Road');
+    expect(extractStreetNameFromAddress('1/10 12 Moa Street')).toBe('Moa Street');
+    expect(extractStreetNameFromAddress('1/1 5 Gleanor Avenue')).toBe('Gleanor Avenue');
+    expect(extractStreetNameFromAddress('1 10A Baird Street')).toBe('Baird Street');
+  });
+
+  it('returns Unknown Street for unit-only numbers, not a street', () => {
+    expect(extractStreetNameFromAddress('1/22a')).toBe('Unknown Street');
+    expect(extractStreetNameFromAddress('3/2a')).toBe('Unknown Street');
+    expect(extractStreetNameFromAddress('5/2a')).toBe('Unknown Street');
+    expect(extractStreetNameFromAddress('1/1')).toBe('Unknown Street');
+    expect(extractStreetNameFromAddress('2/10 12')).toBe('Unknown Street');
+  });
+
+  it('returns the address when there is no leading house number', () => {
+    expect(extractStreetNameFromAddress('Marine Parade')).toBe('Marine Parade');
   });
 });
 

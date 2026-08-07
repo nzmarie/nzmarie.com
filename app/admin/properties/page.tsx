@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, useQueryClient, useQuery, keepPreviousData } from "@tanstack/react-query";
@@ -15,6 +15,8 @@ import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { SkeletonProperties, SkeletonPropertyCard, SkeletonBlock } from "@/components/admin/Skeleton";
 import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
+import { extractStreetNameFromAddress } from "@/lib/street-ordering";
+import type { StreetProgressEntry } from "@/lib/street-progress";
 import { getFixedImageUrl } from "@/lib/google-maps";
 import { PropertyHistoryView } from "@/components/admin/PropertyHistoryView";
 
@@ -91,6 +93,125 @@ interface Filters {
   max_land_area: string;
   market_premium: string;
   search: string;
+}
+
+type StreetFilterOpts = {
+  filters: Filters;
+  propertyFilter: 'house' | 'all' | 'townhouse';
+  marketFilter: 'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed';
+  lastSoldPreset: string;
+  junkFilter: 'all' | 'no_junk' | 'allow_junk';
+};
+
+function applyStreetFilters(list: Property[], opts: StreetFilterOpts): Property[] {
+  let result = list;
+  if (opts.propertyFilter === 'house') {
+    result = result.filter((p) => !(p.address || '').includes('/'));
+  } else if (opts.propertyFilter === 'townhouse') {
+    result = result.filter((p) => (p.address || '').includes('/'));
+  }
+
+  if (opts.marketFilter === 'for_sale') {
+    result = result.filter((p) => p.on_market_sale);
+  } else if (opts.marketFilter === 'for_rent') {
+    result = result.filter((p) => p.on_market_rent);
+  } else if (opts.marketFilter === 'rented') {
+    result = result.filter((p) => p.has_rental_history === true);
+  } else if (opts.marketFilter === 'never_rented') {
+    result = result.filter((p) => p.has_rental_history === false);
+  } else if (opts.marketFilter === 'not_listed') {
+    result = result.filter((p) => !p.on_market_sale && !p.on_market_rent);
+  }
+
+  const nowMs = Date.now();
+  const minYears = parseInt(opts.filters.last_sold_min_years || '');
+  const maxYears = parseInt(opts.filters.last_sold_max_years || '');
+  if (opts.lastSoldPreset === 'none') {
+    result = result.filter((p) => !p.last_sold_date);
+  } else if (minYears > 0 || maxYears > 0) {
+    result = result.filter((p) => {
+      const sold = new Date(p.last_sold_date || '');
+      if (Number.isNaN(sold.getTime())) return false;
+      const yearMs = 365.25 * 24 * 3600 * 1000;
+      if (minYears > 0 && sold.getTime() > nowMs - minYears * yearMs) return false;
+      if (maxYears > 0 && sold.getTime() < nowMs - maxYears * yearMs) return false;
+      return true;
+    });
+  }
+
+  if (opts.filters.build_year_min) {
+    const min = parseInt(opts.filters.build_year_min);
+    result = result.filter((p) => p.build_year !== null && p.build_year >= min);
+  }
+  if (opts.filters.build_year_max) {
+    const max = parseInt(opts.filters.build_year_max);
+    result = result.filter((p) => p.build_year !== null && p.build_year <= max);
+  }
+  if (opts.filters.min_bedrooms) {
+    const min = parseInt(opts.filters.min_bedrooms);
+    result = result.filter((p) => p.bedrooms !== null && p.bedrooms >= min);
+  }
+  if (opts.filters.max_bedrooms) {
+    const max = parseInt(opts.filters.max_bedrooms);
+    result = result.filter((p) => p.bedrooms !== null && p.bedrooms <= max);
+  }
+  if (opts.filters.min_bathrooms) {
+    const min = parseInt(opts.filters.min_bathrooms);
+    result = result.filter((p) => p.bathrooms !== null && p.bathrooms >= min);
+  }
+  if (opts.filters.max_bathrooms) {
+    const max = parseInt(opts.filters.max_bathrooms);
+    result = result.filter((p) => p.bathrooms !== null && p.bathrooms <= max);
+  }
+  if (opts.filters.min_car_spaces) {
+    const min = parseInt(opts.filters.min_car_spaces);
+    result = result.filter((p) => p.garages !== null && p.garages >= min);
+  }
+  if (opts.filters.max_car_spaces) {
+    const max = parseInt(opts.filters.max_car_spaces);
+    result = result.filter((p) => p.garages !== null && p.garages <= max);
+  }
+  if (opts.filters.rv_min) {
+    const min = parseInt(opts.filters.rv_min);
+    result = result.filter((p) => p.rv !== null && p.rv >= min);
+  }
+  if (opts.filters.rv_max) {
+    const max = parseInt(opts.filters.rv_max);
+    result = result.filter((p) => p.rv !== null && p.rv <= max);
+  }
+  if (opts.filters.min_floor_area) {
+    const min = parseFloat(opts.filters.min_floor_area);
+    result = result.filter((p) => {
+      const fa = p.floor_area ? parseFloat(p.floor_area) : null;
+      return fa !== null && !Number.isNaN(fa) && fa >= min;
+    });
+  }
+  if (opts.filters.min_land_area) {
+    const min = parseFloat(opts.filters.min_land_area);
+    result = result.filter((p) => {
+      const la = !p.land_area || p.land_area === '-' ? NaN : (typeof p.land_area === 'string' ? parseFloat(p.land_area) : (p.land_area as number));
+      return !Number.isNaN(la) && la >= min;
+    });
+  }
+  if (opts.filters.max_land_area) {
+    const max = parseFloat(opts.filters.max_land_area);
+    result = result.filter((p) => {
+      const la = !p.land_area || p.land_area === '-' ? NaN : (typeof p.land_area === 'string' ? parseFloat(p.land_area) : (p.land_area as number));
+      return !Number.isNaN(la) && la <= max;
+    });
+  }
+  if (opts.filters.market_premium) {
+    const threshold = parseFloat(opts.filters.market_premium) / 100.0;
+    result = result.filter((p) => {
+      if (!p.last_sold_price || !p.rv || p.rv <= 0) return false;
+      return p.last_sold_price / p.rv > threshold;
+    });
+  }
+  if (opts.junkFilter === 'no_junk') {
+    result = result.filter((p) => p.no_junk_mail === true);
+  }
+
+  return result;
 }
 
 const PropertyCard = ({ property, isLiked, onToggleLike }: { 
@@ -756,7 +877,7 @@ export default function PropertiesPage() {
     city: "North Shore City",
     suburb: "Northcross",
     last_sold_min_years: "5",
-    last_sold_max_years: "10",
+    last_sold_max_years: "15",
     build_year_min: "",
     build_year_max: "",
     min_bedrooms: "",
@@ -779,12 +900,32 @@ export default function PropertiesPage() {
   const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [lastSoldPreset, setLastSoldPreset] = useState('5-10');
+  const [lastSoldPreset, setLastSoldPreset] = useState('5-15');
   const [buildYearPreset, setBuildYearPreset] = useState('all');
   const [paginationMode, setPaginationMode] = useState<'infinite' | 'classic'>('infinite');
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
+  const [streetModeApplied, setStreetModeApplied] = useState(false);
+  const [selectedStreet, setSelectedStreet] = useState('');
+  const [startStreet, setStartStreet] = useState('');
+  const [streetListExpanded, setStreetListExpanded] = useState(false);
+  const [streetSearch, setStreetSearch] = useState('');
+  const [streetItems, setStreetItems] = useState<Array<{ street: string; count: number }>>([]);
+  const [allStreetNames, setAllStreetNames] = useState<string[]>([]);
+  const [streetSegment, setStreetSegment] = useState<'pending' | 'done'>('pending');
+  const [streetProgress, setStreetProgress] = useState<Record<string, StreetProgressEntry>>({});
+  const [streetTotal, setStreetTotal] = useState(0);
+  const [streetNextOffset, setStreetNextOffset] = useState<number | null>(0);
+  const [streetLoading, setStreetLoading] = useState(false);
+  const [streetAddresses, setStreetAddresses] = useState<Property[]>([]);
+  const [streetAddressLoading, setStreetAddressLoading] = useState(false);
+  const streetStartHydrated = useRef(false);
+  const startStreetRef = useRef('');
+  const streetNextOffsetRef = useRef<number | null>(0);
+
+  const streetModeOn = streetModeApplied && !!filters.suburb && !showLikedOnly;
+  const streetQuery = streetSearch.trim().toLowerCase();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -1057,7 +1198,7 @@ export default function PropertiesPage() {
       return undefined;
     },
     placeholderData: keepPreviousData,
-    enabled: paginationMode === 'infinite' && status === "authenticated",
+    enabled: paginationMode === 'infinite' && status === "authenticated" && !streetModeOn,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -1070,7 +1211,7 @@ export default function PropertiesPage() {
     queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, junkFilter],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
-    enabled: paginationMode === 'classic' && status === "authenticated",
+    enabled: paginationMode === 'classic' && status === "authenticated" && !streetModeOn,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1078,14 +1219,11 @@ export default function PropertiesPage() {
   const propertiesData = infiniteData as { pages: { properties: Property[]; total: number }[] } | undefined;
   const allInfiniteProperties: Property[] = propertiesData ? propertiesData.pages.flatMap((page) => page.properties) : [];
   const properties: Property[] = isClassic ? (classicData?.properties ?? []) : allInfiniteProperties;
-  const displayProperties = properties;
+  let displayProperties: Property[] = properties;
+  let streetAllLength = 0;
   const [likedPropertyIds, setLikedPropertyIds] = useState<Set<string>>(new Set());
 
-  const extractStreetName = (address: string): string => {
-    let s = address.replace(/^-?\d+\//, '');
-    s = s.replace(/^-?\d+[A-Za-z]?\s*/, '');
-    return s.trim() || 'Unknown Street';
-  };
+  const extractStreetName = (address: string): string => extractStreetNameFromAddress(address);
 
   const extractHouseNumber = (address: string): { houseNumber: number; unitNumber: number } => {
     const clean = address.trim();
@@ -1096,6 +1234,28 @@ export default function PropertiesPage() {
     const numMatch = clean.match(/^-?(\d+)/);
     return { houseNumber: numMatch ? parseInt(numMatch[1], 10) : 999999, unitNumber: 0 };
   };
+
+  if (streetModeOn) {
+    const clientFiltered = applyStreetFilters(streetAddresses, {
+      filters,
+      propertyFilter,
+      marketFilter: marketStatus,
+      lastSoldPreset,
+      junkFilter,
+    });
+    const all = clientFiltered;
+    const filtered = selectedStreet
+      ? all.filter((p) => extractStreetName(p.address) === selectedStreet)
+      : all;
+    streetAllLength = filtered.length;
+    if (isClassic) {
+      const perPage = 18;
+      const start = (currentPage - 1) * perPage;
+      displayProperties = filtered.slice(start, start + perPage);
+    } else {
+      displayProperties = filtered;
+    }
+  }
 
   const groupedBySuburb = useMemo(() => {
     const groups = new Map<string, Map<string, Property[]>>();
@@ -1146,7 +1306,208 @@ export default function PropertiesPage() {
     });
   };
 
-  const totalProperties = isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total || 0);
+  const loadStreetList = useCallback(async (mode: 'reset' | 'append', explicitStart?: string) => {
+    if (!filters.suburb) return;
+    const start = explicitStart !== undefined ? explicitStart : startStreetRef.current;
+    setStreetLoading(true);
+    const offset = mode === 'append' && streetNextOffsetRef.current != null ? streetNextOffsetRef.current : 0;
+    const params = new URLSearchParams({ suburb: filters.suburb, limit: '11' });
+    if (start) params.set('start', start);
+    if (offset > 0) params.set('offset', offset.toString());
+    try {
+      const res = await fetch(`/api/admin/properties/street?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        if (mode === 'append') {
+          setStreetItems((prev) => [...prev, ...(data.streets ?? [])]);
+        } else {
+          setStreetItems(data.streets ?? []);
+        }
+        setStreetTotal(data.totalStreets ?? 0);
+        streetNextOffsetRef.current = data.next_offset ?? null;
+        setStreetNextOffset(streetNextOffsetRef.current);
+        if (!streetStartHydrated.current && data.saved_start) {
+          streetStartHydrated.current = true;
+          startStreetRef.current = data.saved_start;
+          setStartStreet(data.saved_start);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setStreetLoading(false);
+    }
+  }, [filters.suburb]);
+
+  const loadAllStreets = useCallback(async () => {
+    if (!filters.suburb) return;
+    const params = new URLSearchParams({ suburb: filters.suburb, limit: '500' });
+    try {
+      const res = await fetch(`/api/admin/properties/street?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setAllStreetNames((data.streets ?? []).map((s: { street: string }) => s.street));
+      }
+    } catch {
+      // ignore
+    }
+  }, [filters.suburb]);
+
+  const loadStreetProgress = useCallback(async () => {
+    if (!filters.suburb) return;
+    try {
+      const res = await fetch(`/api/admin/properties/street/progress?suburb=${encodeURIComponent(filters.suburb)}`);
+      const data = await res.json();
+      if (data.success && data.progress) {
+        setStreetProgress(data.progress);
+      }
+    } catch {
+      // ignore
+    }
+  }, [filters.suburb]);
+
+  const saveStreetProgress = useCallback(async (street: string, status: 'in_progress' | 'completed', likedCount?: number) => {
+    if (!filters.suburb || !street) return;
+    try {
+      const res = await fetch('/api/admin/properties/street/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: filters.suburb, street, status, liked_count: likedCount }),
+      });
+      const data = await res.json();
+      if (data.success && data.entry) {
+        setStreetProgress((prev) => ({ ...prev, [street]: data.entry }));
+      }
+    } catch {
+      // ignore
+    }
+  }, [filters.suburb]);
+
+  const undoStreetComplete = useCallback((street: string) => {
+    saveStreetProgress(street, 'in_progress');
+  }, [saveStreetProgress]);
+
+  const completedStreets = useMemo(() =>
+    Object.values(streetProgress)
+      .filter((e) => e.status === 'completed')
+      .sort((a, b) => ((b.completed_at ?? '') < (a.completed_at ?? '') ? -1 : 1)),
+  [streetProgress]);
+
+  const pendingStreets = useMemo(() =>
+    streetItems.filter((s) => streetProgress[s.street]?.status !== 'completed'),
+  [streetItems, streetProgress]);
+
+  const loadStreetAddresses = useCallback(async (street: string) => {
+    if (!filters.suburb || !street) return;
+    setStreetAddressLoading(true);
+    setStreetAddresses([]);
+    const params = new URLSearchParams({ suburb: filters.suburb, street, limit: '3000', skip_count: 'true' });
+    try {
+      const res = await fetch(`/api/admin/properties?${params}`);
+      const data = await res.json();
+      if (data.success) setStreetAddresses((data.properties as Property[]) ?? []);
+    } catch {
+      // ignore
+    } finally {
+      setStreetAddressLoading(false);
+    }
+  }, [filters.suburb]);
+
+  const markStreetComplete = useCallback((street: string) => {
+    if (!street) return;
+    const likedCount = streetAddresses.filter((a) => likedPropertyIds.has(a.id)).length;
+    saveStreetProgress(street, 'completed', likedCount);
+    // auto advance to the next pending street in the walking route
+    const idx = streetItems.findIndex((s) => s.street === street);
+    let nextIdx = idx + 1;
+    while (nextIdx < streetItems.length && streetProgress[streetItems[nextIdx].street]?.status === 'completed') {
+      nextIdx++;
+    }
+    if (nextIdx < streetItems.length) {
+      const next = streetItems[nextIdx].street;
+      setSelectedStreet(next);
+      loadStreetAddresses(next);
+    } else {
+      loadStreetList('append');
+      setSelectedStreet('');
+    }
+  }, [saveStreetProgress, streetItems, streetProgress, streetAddresses, likedPropertyIds, loadStreetAddresses, loadStreetList]);
+
+  useEffect(() => {
+    setSelectedStreet('');
+    setStreetListExpanded(!!(filters.suburb && streetModeApplied));
+    streetStartHydrated.current = false;
+    startStreetRef.current = '';
+    setStartStreet('');
+    streetNextOffsetRef.current = 0;
+    setStreetNextOffset(0);
+    setStreetItems([]);
+    setStreetAddresses([]);
+    setAllStreetNames([]);
+    setStreetProgress({});
+    if (filters.suburb && streetModeApplied) {
+      loadAllStreets();
+      loadStreetProgress();
+      loadStreetList('reset');
+    }
+    if (!filters.suburb) {
+      setStreetModeApplied(false);
+    }
+  }, [filters.suburb, streetModeApplied, loadAllStreets, loadStreetProgress, loadStreetList]);
+
+  const handleApplyStreet = () => {
+    const next = !streetModeApplied;
+    streetStartHydrated.current = false;
+    startStreetRef.current = '';
+    streetNextOffsetRef.current = 0;
+    setStreetModeApplied(next);
+    setSelectedStreet('');
+    setStartStreet('');
+    setStreetListExpanded(!!next);
+    setStreetItems([]);
+    setStreetNextOffset(0);
+    setStreetAddresses([]);
+    setCurrentPage(1);
+    if (next) loadStreetList('reset');
+  };
+
+  const handleStartStreetChange = (value: string) => {
+    startStreetRef.current = value;
+    streetNextOffsetRef.current = 0;
+    setStartStreet(value);
+    setSelectedStreet(value);
+    streetStartHydrated.current = true;
+    if (value) {
+      fetch('/api/admin/properties/street', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: filters.suburb, start: value }),
+      }).catch(() => {});
+      loadStreetAddresses(value);
+    } else {
+      setStreetAddresses([]);
+    }
+    setStreetListExpanded(true);
+    loadStreetList('reset', value);
+  };
+
+  const toggleStreetList = () => {
+    const expand = !streetListExpanded;
+    setStreetListExpanded(expand);
+    if (expand && streetItems.length === 0) loadStreetList('reset');
+  };
+
+  const toggleStreetSelection = (street: string) => {
+    const next = selectedStreet === street ? '' : street;
+    setSelectedStreet(next);
+    if (next) {
+      loadStreetAddresses(next);
+    } else {
+      setStreetAddresses([]);
+    }
+  };
+
+  const totalProperties = streetModeOn ? streetAllLength : (isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total || 0));
   const totalPages = Math.max(1, Math.ceil(totalProperties / 18));
 
   useEffect(() => {
@@ -1268,6 +1629,9 @@ export default function PropertiesPage() {
   const handleLastSoldPreset = (preset: string) => {
     setLastSoldPreset(preset);
     switch (preset) {
+      case '5-15':
+        setFilters((prev) => ({ ...prev, last_sold_min_years: '5', last_sold_max_years: '15' }));
+        break;
       case '5-10':
         setFilters((prev) => ({ ...prev, last_sold_min_years: '5', last_sold_max_years: '10' }));
         break;
@@ -1317,7 +1681,7 @@ export default function PropertiesPage() {
   const handleClearFilters = () => {
     setAddressInput("");
     setShowLikedOnly(false);
-    setLastSoldPreset('5-10');
+    setLastSoldPreset('5-15');
     setBuildYearPreset('all');
     setMarketStatus('all');
     setFilters({
@@ -1325,7 +1689,7 @@ export default function PropertiesPage() {
       city: "North Shore City",
       suburb: "Northcross",
       last_sold_min_years: "5",
-      last_sold_max_years: "10",
+      last_sold_max_years: "15",
       build_year_min: "",
       build_year_max: "",
       min_bedrooms: "",
@@ -1598,7 +1962,7 @@ export default function PropertiesPage() {
             gap: "10px",
             alignItems: "center"
           }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((suburb) => (
+            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].filter((s) => !streetModeApplied || s === filters.suburb).map((suburb) => (
               <button
                 key={suburb}
                 onClick={() => {
@@ -1667,6 +2031,356 @@ export default function PropertiesPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Filter by Street */}
+        <div style={{ marginBottom: "20px", padding: "16px", border: "1px solid #e2e8f0", borderRadius: "12px", backgroundColor: streetModeApplied ? "#f0f9ff" : "#f8fafc" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <label style={{ fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", display: "flex", alignItems: "center", gap: "6px" }}>
+              🗺️ Filter by Street
+            </label>
+            {filters.suburb && (
+              <button
+                onClick={handleApplyStreet}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: streetModeApplied ? '#3b82f6' : 'white',
+                  color: streetModeApplied ? 'white' : '#4a5568',
+                  border: streetModeApplied ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: streetModeApplied ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {streetModeApplied ? '\u2713 Applied (click to cancel)' : 'Apply'}
+              </button>
+            )}
+          </div>
+
+          {filters.suburb && !streetModeApplied && (
+            <p style={{ fontSize: "0.8rem", color: "#64748b", margin: 0 }}>
+              Pick a start street below to order addresses by walking route for <strong>{filters.suburb}</strong>, then press the button to begin.
+            </p>
+          )}
+
+          {streetModeApplied && filters.suburb && (
+            <div style={{ marginTop: "12px" }}>
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                  Start street
+                </label>
+                <select
+                  value={startStreet}
+                  onChange={(e) => handleStartStreetChange(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                    fontSize: "0.85rem",
+                    color: "#334155",
+                    backgroundColor: "white",
+                  }}
+                >
+                  <option value="">Auto (first available)</option>
+                  {allStreetNames.map((name) => (
+                    <option key={name} value={name}>{name}{streetProgress[name]?.status === 'completed' ? ' \u2713' : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+                <button
+                  onClick={() => setStreetSegment('pending')}
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: streetSegment === 'pending' ? '#3b82f6' : 'white',
+                    color: streetSegment === 'pending' ? 'white' : '#334155',
+                    border: streetSegment === 'pending' ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Pending ({pendingStreets.length})
+                </button>
+                <button
+                  onClick={() => setStreetSegment('done')}
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: streetSegment === 'done' ? '#10b981' : 'white',
+                    color: streetSegment === 'done' ? 'white' : '#334155',
+                    border: streetSegment === 'done' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Completed ({completedStreets.length})
+                </button>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  onClick={toggleStreetList}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: streetListExpanded ? '#3b82f6' : 'white',
+                    color: streetListExpanded ? 'white' : '#334155',
+                    border: streetListExpanded ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {streetListExpanded
+                    ? `Collapse streets (${streetTotal}) \u25b4`
+                    : `Expand streets (${streetTotal}) \u25be`}
+                </button>
+                {selectedStreet && (
+                  <button
+                    onClick={() => toggleStreetSelection(selectedStreet)}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#fef2f2',
+                      color: '#dc2626',
+                      border: '1px solid #fecaca',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: '500',
+                    }}
+                  >
+                    Clear selected street
+                  </button>
+                )}
+              </div>
+
+              {streetListExpanded && (
+                <>
+                  <input
+                    type="text"
+                    value={streetSearch}
+                    placeholder="Search streets..."
+                    onChange={(e) => setStreetSearch(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      marginBottom: "8px",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      fontSize: "0.85rem",
+                      color: "#334155",
+                      backgroundColor: "white",
+                    }}
+                  />
+                  {streetSegment === 'done' ? (
+                    completedStreets.length === 0 ? (
+                      <p style={{ margin: 0, color: "#64748b", fontSize: "0.8rem" }}>
+                        No completed streets yet. Mark a street complete to see it here.
+                      </p>
+                    ) : (
+                      completedStreets.map((e, i) => (
+                        <div
+                          key={e.street}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "8px 12px",
+                            marginBottom: "6px",
+                            backgroundColor: i % 2 ? '#f8fafc' : '#ffffff',
+                            color: '#334155',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <span><span style={{ color: '#10b981' }}>{'\u2713'}</span> {e.street}</span>
+                          <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            {e.liked_count > 0 && (
+                              <span style={{ fontSize: "0.8rem", opacity: 0.9 }}>
+                                {e.liked_count} liked
+                              </span>
+                            )}
+                            <button
+                              onClick={() => undoStreetComplete(e.street)}
+                              style={{
+                                padding: '4px 10px',
+                                backgroundColor: '#fef2f2',
+                                color: '#dc2626',
+                                border: '1px solid #fecaca',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                              }}
+                            >
+                              Undo
+                            </button>
+                          </span>
+                        </div>
+                      ))
+                    )
+                  ) : streetLoading && streetItems.length === 0 ? (
+                    <div>
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            height: "38px",
+                            marginBottom: "6px",
+                            borderRadius: "8px",
+                            background: "linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%)",
+                            backgroundSize: "400% 100%",
+                            animation: "shimmer 1.4s ease infinite",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : pendingStreets.filter((s) => !streetQuery || s.street.toLowerCase().includes(streetQuery)).length === 0 ? (
+                    <p style={{ margin: 0, color: "#64748b", fontSize: "0.8rem" }}>
+                      {streetLoading ? 'Loading streets...' : 'No streets found for this suburb yet.'}
+                    </p>
+                  ) : (
+                    pendingStreets
+                      .filter((s) => !streetQuery || s.street.toLowerCase().includes(streetQuery))
+                      .map((s, i) => (
+                        <div
+                          key={s.street}
+                          onClick={() => toggleStreetSelection(s.street)}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "8px 12px",
+                            marginBottom: "6px",
+                            backgroundColor: selectedStreet === s.street ? '#3b82f6' : (i % 2 ? '#f8fafc' : '#ffffff'),
+                            color: selectedStreet === s.street ? '#ffffff' : '#334155',
+                            border: selectedStreet === s.street ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: selectedStreet === s.street ? '600' : '400',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>{i + 1}. {s.street}</span>
+                          <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontSize: "0.8rem", opacity: 0.9 }}>
+                              {s.count} {s.count === 1 ? 'address' : 'addresses'}
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); markStreetComplete(s.street); }}
+                              style={{
+                                padding: '4px 10px',
+                                backgroundColor: '#ecfdf5',
+                                color: '#047857',
+                                border: '1px solid #a7f3d0',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                              }}
+                            >
+                              {'\u2713 Done'}
+                            </button>
+                          </span>
+                        </div>
+                      ))
+                  )}
+                  {streetLoading && streetItems.length > 0 && (
+                    <p style={{ marginTop: "8px", textAlign: "center", color: "#64748b", fontSize: "0.8rem" }}>
+                      Loading more streets...
+                    </p>
+                  )}
+                  {!streetLoading && !streetQuery && streetNextOffset != null && (
+                    <button
+                      onClick={() => loadStreetList('append')}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        marginTop: "6px",
+                        backgroundColor: "#eff6ff",
+                        color: "#1d4ed8",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                      }}
+                    >
+                      Show more streets
+                    </button>
+                  )}
+                </>
+              )}
+
+              {selectedStreet && (
+                <p style={{ margin: "10px 0 0", color: "#334155", fontSize: "0.8rem" }}>
+                  {streetAddressLoading
+                    ? `Loading addresses for ${selectedStreet}...`
+                    : `${streetAddresses.length} ${streetAddresses.length === 1 ? 'address' : 'addresses'} on ${selectedStreet}`}
+                </p>
+              )}
+
+              {selectedStreet && !streetAddressLoading && streetProgress[selectedStreet]?.status === 'completed' && (
+                <p style={{ margin: "6px 0 0", color: "#047857", fontSize: "0.8rem" }}>
+                  {'\u2713'} This street is completed.
+                </p>
+              )}
+
+              {selectedStreet && !streetAddressLoading && (
+                <button
+                  onClick={() => markStreetComplete(selectedStreet)}
+                  style={{
+                    width: "100%",
+                    padding: '9px 14px',
+                    marginTop: '10px',
+                    backgroundColor: streetProgress[selectedStreet]?.status === 'completed' ? '#10b981' : '#047857',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {'\u2713'} Complete this street & go to the next {'\u2192'}
+                </button>
+              )}
+
+              </div>
+          )}
+
+          {filters.suburb && (
+            <button
+              onClick={handleApplyStreet}
+              style={{
+                padding: '8px 18px',
+                marginTop: '12px',
+                backgroundColor: streetModeApplied ? '#3b82f6' : 'white',
+                color: streetModeApplied ? 'white' : '#4a5568',
+                border: streetModeApplied ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: streetModeApplied ? '600' : '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {streetModeApplied ? '\u2713 Applied by street (click to cancel)' : 'Apply'}
+            </button>
+          )}
         </div>
 
         <div style={{ marginBottom: "20px" }}>
@@ -1859,21 +2573,21 @@ export default function PropertiesPage() {
             Last Sold
           </label>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-end" }}>
-            {(['all', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
+            {(['all', '5-15', '5-10', '3-5', '0-3', '10-15', '15+', 'none'] as const).map((preset) => (
               <button
                 key={preset}
                 onClick={() => handleLastSoldPreset(preset)}
                 style={{
                   padding: '8px 18px',
-                  backgroundColor: lastSoldPreset === preset ? (preset === '5-10' ? '#f59e0b' : '#3b82f6') : 'white',
+                  backgroundColor: lastSoldPreset === preset ? (preset === '5-15' ? '#f59e0b' : '#3b82f6') : 'white',
                   color: lastSoldPreset === preset ? 'white' : '#4a5568',
-                  border: lastSoldPreset === preset ? (preset === '5-10' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
+                  border: lastSoldPreset === preset ? (preset === '5-15' ? '2px solid #f59e0b' : '2px solid #3b82f6') : '2px solid #e2e8f0',
                   borderRadius: '10px',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
                   fontWeight: lastSoldPreset === preset ? '600' : '500',
                   transition: 'all 0.2s ease',
-                  boxShadow: lastSoldPreset === preset ? (preset === '5-10' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
+                  boxShadow: lastSoldPreset === preset ? (preset === '5-15' ? '0 4px 12px rgba(245, 158, 11, 0.4)' : '0 4px 12px rgba(59, 130, 246, 0.3)') : 'none',
                 }}
                 onMouseEnter={(e) => {
                   if (lastSoldPreset !== preset) {
@@ -1888,7 +2602,7 @@ export default function PropertiesPage() {
                   }
                 }}
               >
-                {preset === 'all' ? 'All' : preset === '5-10' ? '★ 5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
+                {preset === 'all' ? 'All' : preset === '5-15' ? '★ 5-15 years' : preset === '5-10' ? '5-10 years' : preset === '3-5' ? '3-5 years' : preset === '0-3' ? '0-3 years' : preset === '10-15' ? '10-15 years' : preset === '15+' ? '15+ years' : 'No Last Sold'}
               </button>
             ))}
             {lastSoldPreset !== 'none' && lastSoldPreset !== 'all' && (
@@ -2554,6 +3268,12 @@ export default function PropertiesPage() {
           textAlign: "center"
         }}>
           Error loading properties: {error?.message || "Unknown error occurred"}
+        </div>
+      )}
+
+      {streetModeOn && !selectedStreet && (
+        <div style={{ padding: "16px", marginBottom: "24px", backgroundColor: "#eff6ff", border: "1px dashed #93c5fd", borderRadius: "8px", color: "#1e40af", textAlign: "center" }}>
+          Select a street from the <strong>Filter by Street</strong> panel to see its addresses ordered by walking route.
         </div>
       )}
 

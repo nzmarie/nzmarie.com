@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   const marketStatus = searchParams.get('market_status');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
+  const skipCount = searchParams.get('skip_count') === 'true';
   const offset = (page - 1) * limit;
 
   let query = `
@@ -117,6 +118,14 @@ export async function GET(request: Request) {
   if (suburb) {
     query += ` AND LOWER(p.suburb) = LOWER($${paramIndex})`;
     params.push(suburb);
+    paramIndex++;
+  }
+
+  const street = searchParams.get('street');
+  if (street) {
+    const prefix = `('^[0-9]+[A-Za-z]?([-/][0-9]+[A-Za-z]?)*[[:space:]]+|^[0-9]+[0-9A-Za-z]*[[:space:]]')`;
+    query += ` AND TRIM(REGEXP_REPLACE(REGEXP_REPLACE(RTRIM(REGEXP_REPLACE(p.address, '\\\\d{7,}$', '')), ${prefix}, '', 'g'), ${prefix}, '', 'g')) = $${paramIndex}`;
+    params.push(street);
     paramIndex++;
   }
 
@@ -282,16 +291,19 @@ export async function GET(request: Request) {
   }
 
   // Get total count — avoid expensive JOINs when filters only touch properties table
-  const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
-  let countQuery: string;
-  if (needsJoinForCount) {
-    countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
-  } else {
-    const wherePos = query.indexOf('WHERE 1=1');
-    countQuery = 'SELECT COUNT(*) as total FROM properties p ' + query.substring(wherePos);
+  let total = 0;
+  if (!skipCount) {
+    const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
+    let countQuery: string;
+    if (needsJoinForCount) {
+      countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
+    } else {
+      const wherePos = query.indexOf('WHERE 1=1');
+      countQuery = 'SELECT COUNT(*) as total FROM properties p ' + query.substring(wherePos);
+    }
+    const countResult = await marieQuery<{ total: string }>(countQuery, params);
+    total = parseInt(countResult.rows[0]?.total || '0');
   }
-  const countResult = await marieQuery<{ total: string }>(countQuery, params);
-  const total = parseInt(countResult.rows[0]?.total || '0');
 
   // Add smart sorting: by suburb, then by street name, then by house number (numeric)
   // For addresses like "1/2 Barker Rise", we extract the first number (1) for sorting
@@ -418,10 +430,10 @@ export async function GET(request: Request) {
       success: true,
       properties,
       pagination: {
-        total,
+        total: skipCount ? result.rows.length : total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: skipCount ? Math.ceil(result.rows.length / limit) : Math.ceil(total / limit),
       },
     });
   } catch (error: unknown) {

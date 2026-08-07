@@ -15,6 +15,37 @@ export function parseHouseNumber(address: string): number | null {
   return num ? parseInt(num[1], 10) : null;
 }
 
+export function extractStreetNameFromAddress(address: string): string {
+  let s = (address || '').trim();
+
+  // Remove trailing bare numbers that are clearly rubbish (e.g. stray coordinates).
+  s = s.replace(/\s+[0-9]+$/, '');
+
+  // Strip a leading unit + house-number prefix, e.g. "1/12A ", "1/3-5 ", "12B ".
+  s = s.replace(/^[0-9]+[A-Za-z]?(?:[-/][0-9]+[A-Za-z]?)*\s+/, '');
+
+  // Some addresses put the real house number one token in ("1 10A Baird Street"),
+  // so drop a leading numeric token that still remains.
+  s = s.replace(/^[0-9]+[0-9A-Za-z]*\s*/, '').trim();
+
+  // A real street name is alphabetic text. Numbers-only or unit-only strings like
+  // "5/2a", "1/1", "12" are house numbers, not streets.
+  if (!/[A-Za-z]{2}/.test(s)) {
+    return 'Unknown Street';
+  }
+  // Street names never contain a unit separator like "2/10 12".
+  // A street never contains a unit separator like "2/5 12".
+  if (/\d+\/\d+/.test(s)) {
+    return 'Unknown Street';
+  }
+
+  return s.trim() || 'Unknown Street';
+}
+
+export function extractStreetPrefixSql(): string {
+  return `(^[0-9]+[A-Za-z]?([-/][0-9]+[A-Za-z]?)*[[:space:]]+|^[0-9]+[0-9A-Za-z]*[[:space:]])`;
+}
+
 export function orderStreetsGreedily(streets: OrderableStreet[], startStreet?: string): string[] {
   const anchored = streets.filter((s) => s.anchorLat != null && s.anchorLng != null);
   const noAnchor = streets

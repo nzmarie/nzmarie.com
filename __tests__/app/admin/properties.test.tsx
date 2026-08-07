@@ -29,7 +29,7 @@ const defaultProperties = [
     garages: 2,
     rv: 1200000,
     last_sold_price: 1150000,
-    last_sold_date: '2023-01-15',
+    last_sold_date: '2018-05-10',
     build_year: 1990,
     floor_area: '220',
     land_area: '801',
@@ -110,7 +110,31 @@ const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
     hasNextPage: false,
     fetchNextPage: vi.fn(),
   }));
-  const uq = vi.fn(() => ({ data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false }));
+  const uq = vi.fn((...args: any[]) => {
+    const key = (Array.isArray(args[0]) ? args[0] : args[0] && args[0].queryKey) || [];
+    const flatKey = JSON.stringify(key);
+    if (flatKey.includes('street-addresses')) {
+      return { data: defaultProperties, isLoading: false, isFetching: false };
+    }
+    if (flatKey.includes('street-list')) {
+      return {
+        data: {
+          streets: [
+            { street: 'Marine Parade', count: 1 },
+            { street: 'East Coast Road', count: 1 },
+            { street: 'Sunrise Avenue', count: 1 },
+          ],
+          totalStreets: 3,
+          start: null,
+          saved_start: null,
+          has_next: false,
+        },
+        isLoading: false,
+        isFetching: false,
+      };
+    }
+    return { data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false };
+  });
   return { mockUseInfiniteQuery: iq, mockUseQuery: uq };
 });
 
@@ -170,9 +194,32 @@ function triggerIntersection(isIntersecting: boolean) {
 }
 
 const mockLikeFetch = () => {
-  (global.fetch as any).mockResolvedValue({
-    ok: true,
-    json: async () => ({ liked_ids: [] }),
+  (global.fetch as any).mockImplementation((url: string, init?: RequestInit) => {
+    if (typeof url === 'string' && String(url).startsWith('/api/admin/properties/street')) {
+      if (init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          streets: [
+            { street: 'Marine Parade', count: 1 },
+            { street: 'East Coast Road', count: 1 },
+            { street: 'Sunrise Avenue', count: 1 },
+          ],
+          totalStreets: 3,
+          start: null,
+          saved_start: null,
+          next_offset: null,
+          has_next: false,
+        }),
+      });
+    }
+    if (typeof url === 'string' && url.startsWith('/api/admin/properties')) {
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, properties: defaultProperties, total: 45 }) });
+    }
+    return Promise.resolve({ ok: true, json: async () => ({ liked_ids: [] }) });
   });
 };
 
@@ -181,6 +228,41 @@ const mockLikeFetchOnce = () => {
     ok: true,
     json: async () => ({ liked_ids: [] }),
   });
+};
+
+const installStreetTestQueries = () => {
+  mockUseQuery.mockImplementation((...args: any[]) => {
+    const key = (Array.isArray(args[0]) ? args[0] : args[0] && args[0].queryKey) || [];
+    const flatKey = JSON.stringify(key);
+    if (flatKey.includes('street-addresses')) {
+      return { data: defaultProperties, isLoading: false, isFetching: false };
+    }
+    if (flatKey.includes('street-list')) {
+      return {
+        data: {
+          streets: [
+            { street: 'Marine Parade', count: 1 },
+            { street: 'East Coast Road', count: 1 },
+            { street: 'Sunrise Avenue', count: 1 },
+          ],
+          totalStreets: 3,
+          start: null,
+          saved_start: null,
+          has_next: false,
+        },
+        isLoading: false,
+        isFetching: false,
+      };
+    }
+    return { data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false };
+  });
+  mockUseInfiniteQuery.mockImplementation(() => ({
+    data: { pages: [{ properties: defaultProperties, total: 45 }] },
+    isLoading: false,
+    isFetchingNextPage: false,
+    hasNextPage: false,
+    fetchNextPage: vi.fn(),
+  }));
 };
 
 describe('Properties Page', () => {
@@ -339,12 +421,12 @@ describe('Properties Page', () => {
     fireEvent.click(notListedBtn);
   });
 
-  it('renders Last Sold preset buttons with 5-10 years selected by default', async () => {
+  it('renders Last Sold preset buttons with 5-15 years selected by default', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
-    const stars = screen.getAllByText('★ 5-10 years');
-    expect(stars.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('★ 5-15 years')).toBeDefined();
+    expect(screen.getByText('5-10 years')).toBeDefined();
     expect(screen.getByText('3-5 years')).toBeDefined();
     expect(screen.getByText('0-3 years')).toBeDefined();
     expect(screen.getByText('10-15 years')).toBeDefined();
@@ -358,7 +440,7 @@ describe('Properties Page', () => {
     fireEvent.click(screen.getByText('3-5 years'));
     fireEvent.click(screen.getByText('0-3 years'));
     fireEvent.click(screen.getByText('15+ years'));
-    fireEvent.click(screen.getAllByText('★ 5-10 years')[0]);
+    fireEvent.click(screen.getByText('★ 5-15 years'));
   });
 
   it('renders custom Min Years and Max Years inputs for Last Sold', async () => {
@@ -1017,8 +1099,7 @@ describe('Properties Page - Built Year Filter', () => {
     const allBtns = screen.getAllByText('All');
     expect(allBtns.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('< 5 years')).toBeDefined();
-    const stars2 = screen.getAllByText('★ 5-10 years');
-    expect(stars2.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('★ 5-10 years')).toBeDefined();
     expect(screen.getByText('10-20 years')).toBeDefined();
     expect(screen.getByText('20+ years')).toBeDefined();
   });
@@ -1028,7 +1109,7 @@ describe('Properties Page - Built Year Filter', () => {
     render(<PropertiesPage />);
 
     fireEvent.click(screen.getByText('< 5 years'));
-    fireEvent.click(screen.getAllByText('★ 5-10 years')[1]);
+    fireEvent.click(screen.getByText('★ 5-10 years'));
     fireEvent.click(screen.getByText('10-20 years'));
     fireEvent.click(screen.getByText('20+ years'));
   });
@@ -1205,10 +1286,7 @@ describe('Properties Page - Extended Advanced Filters', () => {
 describe('Properties Page — Address Search Resets Filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ liked_ids: [] }),
-    });
+    mockLikeFetch();
   });
 
   afterEach(() => {
@@ -1362,6 +1440,95 @@ describe('Properties Page — Address Search Resets Filters', () => {
         expect.any(Function)
       );
       expect(mockInvalidateQueries).not.toHaveBeenCalled();
+    });
+  });
+
+  it('renders Filter by Street with an Apply button when a suburb is selected', async () => {
+    installStreetTestQueries();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('🗺️ Filter by Street')).toBeDefined();
+    });
+    expect(screen.getAllByText('Apply')[0]).toBeDefined();
+  });
+
+  it('applying street mode hides other suburb buttons and expands the street list', async () => {
+    installStreetTestQueries();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('🗺️ Filter by Street')).toBeDefined();
+    });
+    expect(screen.getByText('Oteha')).toBeDefined();
+
+    fireEvent.click(screen.getAllByText('Apply')[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('\u2713 Applied by street (click to cancel)')).toBeDefined();
+    });
+    expect(screen.queryByText('Oteha')).toBeNull();
+    expect(screen.getByText(/Collapse streets \(3\)/)).toBeDefined();
+
+    await waitFor(() => {
+      expect(screen.getByText('1. Marine Parade')).toBeDefined();
+      expect(screen.getByText('2. East Coast Road')).toBeDefined();
+    });
+  });
+
+  it('clicking a street shows only that street addresses and cancelling restores all suburbs', async () => {
+    installStreetTestQueries();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Apply')[0]).toBeDefined();
+    });
+    fireEvent.click(screen.getAllByText('Apply')[0]);
+    await waitFor(async () => {
+      expect(screen.getByText('1. Marine Parade')).toBeDefined();
+    });
+    fireEvent.click(await screen.findByText('1. Marine Parade'));
+
+    await waitFor(() => {
+      expect(screen.getByText('15 Marine Parade')).toBeDefined();
+    });
+    expect(screen.queryByText('42 Sunrise Avenue')).toBeNull();
+    expect(screen.getByText(/Displaying 1 of 1 properties/)).toBeDefined();
+
+    fireEvent.click(screen.getByText('\u2713 Applied by street (click to cancel)'));
+    await waitFor(() => {
+      expect(screen.getByText('Oteha')).toBeDefined();
+    });
+  });
+
+  it('saves the selected start street via POST', async () => {
+    installStreetTestQueries();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Apply')[0]).toBeDefined();
+    });
+    fireEvent.click(screen.getAllByText('Apply')[0]);
+    await waitFor(() => {
+      expect(screen.getByText('Collapse streets (3) \u25b4')).toBeDefined();
+    });
+
+    (global.fetch as any).mockClear();
+
+    const select = screen.getByDisplayValue('Auto (first available)') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'Marine Parade' } });
+
+    await waitFor(() => {
+      const calls = (global.fetch as any).mock.calls;
+      const postCall = calls.find((c: any[]) =>
+        typeof c[0] === 'string' && c[0].startsWith('/api/admin/properties/street') && c[1]?.method === 'POST'
+      );
+      expect(postCall).toBeDefined();
+      expect(JSON.parse(postCall[1].body)).toEqual({ suburb: 'Northcross', start: 'Marine Parade' });
     });
   });
 });
