@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from '@/app/api/admin/properties/street/route';
+import { clearCache as clearSuburbanStreetCache } from '@/lib/suburb-street-cache';
 import { auth } from '@/lib/auth';
 import { query } from '@/lib/db';
 
@@ -8,7 +9,7 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 vi.mock('@/lib/db', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] }),
+  query: vi.fn(),
 }));
 
 vi.mock('@/lib/permissions', () => ({
@@ -30,6 +31,8 @@ function addressRows(street: string, count: number, lat: number, lng: number) {
 describe('GET /api/admin/properties/street', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+    clearSuburbanStreetCache();
   });
 
   it('returns 401 for unauthenticated users', async () => {
@@ -59,7 +62,7 @@ describe('GET /api/admin/properties/street', () => {
       } as any)
       .mockResolvedValueOnce({ rows: [] } as any);
 
-    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=Torbay'));
+    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=OrderTown'));
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -84,7 +87,7 @@ describe('GET /api/admin/properties/street', () => {
       } as any)
       .mockResolvedValueOnce({ rows: [{ setting_value: 'Beta Street' }] } as any);
 
-    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=Torbay'));
+    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=SavedStartTown'));
     const body = await response.json();
 
     expect(body.saved_start).toBe('Beta Street');
@@ -96,7 +99,7 @@ describe('GET /api/admin/properties/street', () => {
     mockAuth();
     vi.mocked(query).mockRejectedValueOnce(new Error('boom'));
 
-    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=Torbay'));
+    const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=ErrorTown'));
     expect(response.status).toBe(500);
   });
 });
@@ -104,6 +107,8 @@ describe('GET /api/admin/properties/street', () => {
 describe('POST /api/admin/properties/street', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+    clearSuburbanStreetCache();
   });
 
   it('saves the start street for the suburb', async () => {

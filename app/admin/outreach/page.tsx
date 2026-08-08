@@ -19,6 +19,7 @@ import {
   FaHistory,
   FaPaperPlane,
 } from 'react-icons/fa';
+import { aggregateLikedStreets, filterLikedItemsByStreet, extractStreetFromLikedItem } from '@/lib/liked-street-filter';
 
 interface OutreachProperty {
   id: string;
@@ -221,7 +222,7 @@ export default function OutreachPage() {
 
   const [addressInput, setAddressInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [suburbFilter, setSuburbFilter] = useState('');
+  const [suburbFilter, setSuburbFilter] = useState('Northcross');
   const [streetFilter, setStreetFilter] = useState('');
   const [runStreetFilter, setRunStreetFilter] = useState<string[]>([]);
   const [campaignFilter, setCampaignFilter] = useState('');
@@ -230,6 +231,12 @@ export default function OutreachPage() {
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
   const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
+
+  const [likedStreetModeApplied, setLikedStreetModeApplied] = useState(false);
+  const [likedSelectedStreet, setLikedSelectedStreet] = useState('');
+  const [likedStreetSearch, setLikedStreetSearch] = useState('');
+  const [likedStreetsVisible, setLikedStreetsVisible] = useState(5);
+  const [likedStartStreet, setLikedStartStreet] = useState('');
 
   const [reportSuburbFilter, setReportSuburbFilter] = useState('');
   const [reportQuarterFilter, setReportQuarterFilter] = useState('');
@@ -273,7 +280,7 @@ export default function OutreachPage() {
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStartStreet]);
 
   // The "Today's Run" planner auto-selects the first run's streets whenever
   // "Unsent" mode loads its street-cluster data (sets runStreetFilter to that
@@ -515,6 +522,36 @@ export default function OutreachPage() {
     return Array.from(streets).sort();
   }, [displayItems]);
 
+  const likedStreetsSummary = useMemo(() => {
+    if (activeTab !== 'liked' || !likedStreetModeApplied) return [];
+    return aggregateLikedStreets(displayItems, likedStreetSearch);
+  }, [displayItems, activeTab, likedStreetModeApplied, likedStreetSearch]);
+
+  const filteredLikedItems = useMemo(() => {
+    if (activeTab !== 'liked' || !likedStreetModeApplied || !likedSelectedStreet) return null;
+    return filterLikedItemsByStreet(displayItems, likedSelectedStreet);
+  }, [displayItems, activeTab, likedStreetModeApplied, likedSelectedStreet]);
+
+  const likedStreetTotalCount = likedStreetModeApplied && likedSelectedStreet
+    ? likedStreetsSummary.find((s) => s.street === likedSelectedStreet)?.count ?? 0
+    : displayPagination?.total || 0;
+  const likedStreetDisplayCount = likedStreetModeApplied && likedSelectedStreet
+    ? filteredLikedItems?.length ?? 0
+    : displayItems.length;
+
+  // Streets ordered around the Start street (alphabetical, wrapping): the
+  // chosen/previous start street becomes the first street, followed by the
+  // rest alphabetically. With no start street selected the plain alphabetical
+  // order is used, so the first (alphabetically-first) street shows first.
+  const likedStreetsOrdered = useMemo(() => {
+    if (likedStreetsSummary.length === 0) return [];
+    const idx = likedStartStreet
+      ? likedStreetsSummary.findIndex((s) => s.street === likedStartStreet)
+      : 0;
+    const start = idx === -1 ? 0 : idx;
+    return [...likedStreetsSummary.slice(start), ...likedStreetsSummary.slice(0, start)];
+  }, [likedStreetsSummary, likedStartStreet]);
+
   const pageRef = useRef(1);
   const hasMoreRef = useRef(true);
   const loadingMoreRef = useRef(false);
@@ -536,9 +573,10 @@ export default function OutreachPage() {
       debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset,
       reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
       sentDateFilter.join(','),
+      likedStreetModeApplied ? `start:${likedStartStreet}` : '',
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
@@ -557,7 +595,12 @@ export default function OutreachPage() {
     // streets. Using PAGE_SIZE (18) here would cut off later streets because
     // the API sorts alphabetically, so geographic-first streets like
     // "Glamorgan Drive" would never appear on page 1 when A-C streets fill it.
-    const effectiveLimit = runStreetFilter.length > 0 ? 500 : PAGE_SIZE;
+    // When the Liked street planner is active we load the whole suburb's liked
+    // set so the Start street selector and street list see EVERY street.
+    const effectiveLimit =
+      activeTab === 'liked' && likedStreetModeApplied ? 1000
+        : runStreetFilter.length > 0 ? 500
+          : PAGE_SIZE;
 
     const params = new URLSearchParams({
       status: activeTab,
@@ -567,7 +610,10 @@ export default function OutreachPage() {
     });
     const effectiveSuburb = reportSuburbFilter || suburbFilter;
     if (effectiveSuburb) params.set('suburb', effectiveSuburb);
-    if (streetFilter) params.set('street', streetFilter);
+    // When liked street planner is active, don't send street= to the API.
+    // The planner needs ALL streets for the suburb to populate the dropdown;
+    // per-street display is handled client-side via likedSelectedStreet.
+    if (streetFilter && !(activeTab === 'liked' && likedStreetModeApplied)) params.set('street', streetFilter);
     if (runStreetFilter.length > 0) params.set('streets', runStreetFilter.join(','));
     if (campaignFilter) params.set('campaign', campaignFilter);
     if (debouncedSearch) params.set('search', debouncedSearch);
@@ -591,6 +637,7 @@ export default function OutreachPage() {
     if (reportQuarterFilter) params.set('report_quarter', reportQuarterFilter);
     if (sortMode === 'time') params.set('sort_mode', 'time');
     if (activeTab === 'sent' && sentDateFilter.length > 0) params.set('sent_dates', sentDateFilter.join(','));
+    if (activeTab === 'liked' && likedStreetModeApplied && likedStartStreet) params.set('start_street', likedStartStreet);
 
     const res = await fetch(`/api/admin/outreach?${params}`, { signal: controller.signal });
     if (controller.signal.aborted) {
@@ -607,7 +654,7 @@ export default function OutreachPage() {
       pagination: data.pagination ?? null,
       effectiveLimit,
     };
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -950,12 +997,6 @@ export default function OutreachPage() {
     return { houseNumber: numMatch ? parseInt(numMatch[1], 10) : 999999, unitNumber: 0 };
   }
 
-  function extractStreetName(address: string): string {
-    let s = address.replace(/^-?\d+\//, '');
-    s = s.replace(/^-?\d+[A-Za-z]?\s*/, '');
-    return s.trim() || 'Unknown Street';
-  }
-
   const currentContentKey = useMemo(() => {
     return displayItems.map((i) => i.id).join(',') + '|' + sortOrder;
   }, [displayItems, sortOrder]);
@@ -1063,11 +1104,12 @@ export default function OutreachPage() {
   }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
 
   const groupedBySuburb = useMemo(() => {
+    const sourceItems = filteredLikedItems ?? displayItems;
     const groups = new Map<string, Map<string, OutreachProperty[]>>();
 
-    displayItems.forEach((item) => {
+    sourceItems.forEach((item) => {
       const suburb = item.suburb || 'Unknown';
-      const street = item.street || extractStreetName(item.property_address);
+      const street = item.street || extractStreetFromLikedItem(item);
 
       if (!groups.has(suburb)) {
         groups.set(suburb, new Map());
@@ -1133,12 +1175,12 @@ export default function OutreachPage() {
         };
       })
       .sort((a, b) => a.suburb.localeCompare(b.suburb, undefined, { sensitivity: 'base' }));
-  }, [currentContentKey, todayRunData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentContentKey, todayRunData, filteredLikedItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Card view mirrors the list view's ordering: streets follow the Today's Run
   // cluster order (from street-clusters), then house number within a street.
   const cardOrderedItems = useMemo(() => {
-    const items = [...displayItems];
+    const items = [...(filteredLikedItems ?? displayItems)];
     const clusterOrder = new Map<string, number>();
     if (todayRunData && todayRunData.suburb) {
       todayRunData.groups.forEach((g) => {
@@ -1155,8 +1197,8 @@ export default function OutreachPage() {
       const suburbCmp = suburbA.localeCompare(suburbB, undefined, { sensitivity: 'base' });
       if (suburbCmp !== 0) return suburbCmp;
 
-      const streetA = a.street || extractStreetName(a.property_address);
-      const streetB = b.street || extractStreetName(b.property_address);
+      const streetA = a.street || extractStreetFromLikedItem(a);
+      const streetB = b.street || extractStreetFromLikedItem(b);
       const ia = clusterOrder.get(streetA);
       const ib = clusterOrder.get(streetB);
       if (ia !== undefined && ib !== undefined) {
@@ -1179,7 +1221,7 @@ export default function OutreachPage() {
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
     return items;
-  }, [displayItems, todayRunData, sortOrder]);
+  }, [displayItems, filteredLikedItems, todayRunData, sortOrder]);
 
   // Restore classic items from the shared per-page cache when switching to
   // classic mode. This avoids a loading flash when the data was already
@@ -1251,7 +1293,7 @@ export default function OutreachPage() {
             {(['liked', 'pending', 'sent'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); setRunStreetFilter([]); setStreetFilter(''); }}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); setRunStreetFilter([]); setStreetFilter(''); if (tab !== 'liked') { setLikedStreetModeApplied(false); setLikedSelectedStreet(''); setLikedStreetSearch(''); setLikedStartStreet(''); } }}
                 style={{
                   padding: '8px 18px',
                   backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
@@ -1391,7 +1433,7 @@ export default function OutreachPage() {
               Quick Filter by Suburb
             </label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-              {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((s) => (
+              {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Long Bay', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].filter((s) => !likedStreetModeApplied || suburbFilter === s || reportSuburbFilter === s).map((s) => (
                 <button
                   key={s}
                   onClick={() => {
@@ -1456,6 +1498,260 @@ export default function OutreachPage() {
           </div>
         )}
 
+        {activeTab === 'liked' && (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: likedStreetModeApplied ? '12px' : '0' }}>
+              <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#4a5568' }}>🗺️ Filter by Street</span>
+              <button
+                onClick={() => {
+                  const next = !likedStreetModeApplied;
+                  if (next) {
+                    const effectiveSub = reportSuburbFilter || suburbFilter;
+                    if (!effectiveSub) {
+                      showNotification('error', 'Please select a suburb first before applying street filter.');
+                      return;
+                    }
+                    const summary = aggregateLikedStreets(displayItems, '');
+                    const firstStreet = summary[0]?.street || '';
+                    setLikedSelectedStreet(firstStreet);
+                    // Do NOT call setStreetFilter here — the API must return all streets
+                    // for the suburb so the dropdown can show every street. Per-street
+                    // display is done client-side via likedSelectedStreet.
+                    setLastSoldPreset('all');
+                    setPropertyFilter('house');
+                    setLikedStreetSearch('');
+                    setLikedStreetsVisible(5);
+                    let storedStart = '';
+                    try { storedStart = window.localStorage.getItem(`liked_start_street:${effectiveSub}`) || ''; } catch { /* ignore */ }
+                    setLikedStartStreet(storedStart);
+                    // Pre-select the start street so the street list highlights it
+                    // and cards/list immediately show that street's addresses.
+                    if (storedStart) setLikedSelectedStreet(storedStart);
+                  } else {
+                    setLikedSelectedStreet('');
+                    setLikedStreetSearch('');
+                    setStreetFilter('');
+                    setLikedStreetsVisible(5);
+                    setLikedStartStreet('');
+                  }
+                  setLikedStreetModeApplied(next);
+                }}
+                style={{
+                  padding: '6px 16px',
+                  backgroundColor: likedStreetModeApplied ? '#ec4899' : 'white',
+                  color: likedStreetModeApplied ? 'white' : '#4a5568',
+                  border: likedStreetModeApplied ? '2px solid #ec4899' : '2px solid #e2e8f0',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!likedStreetModeApplied) {
+                    e.currentTarget.style.backgroundColor = '#fdf2f8';
+                    e.currentTarget.style.borderColor = '#f9a8d4';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!likedStreetModeApplied) {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                  }
+                }}
+              >
+                {likedStreetModeApplied ? '✔ By Street (click to cancel)' : 'Apply'}
+              </button>
+              {likedStreetModeApplied && likedSelectedStreet && (
+                <span style={{ fontSize: '0.8rem', color: '#ec4899', fontWeight: '600' }}>
+                  → {likedSelectedStreet}
+                </span>
+              )}
+            </div>
+
+            {likedStreetModeApplied && (
+              <div style={{
+                border: '1px solid #fce7f3',
+                borderRadius: '12px',
+                backgroundColor: '#fdf2f8',
+                padding: '16px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#be185d' }}>
+                    Streets in Liked ({likedStreetsSummary.length} street{likedStreetsSummary.length !== 1 ? 's' : ''} · {displayItems.length} address{displayItems.length !== 1 ? 'es' : ''})
+                  </span>
+                  {likedSelectedStreet && (
+                    <button
+                      onClick={() => {
+                        setLikedSelectedStreet('');
+                        setStreetFilter('');
+                        setLikedStartStreet('');
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        backgroundColor: '#fee2e2',
+                        color: '#dc2626',
+                        border: '1px solid #fecaca',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.78rem',
+                        fontWeight: '600',
+                      }}
+                    >
+                      × Clear Filter
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#be185d', fontWeight: '600', marginBottom: '6px' }}>
+                    Start street
+                  </label>
+                  <select
+                    aria-label="Start street"
+                    value={likedStartStreet}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLikedStartStreet(v);
+                      // Also select this street so the list highlights it and
+                      // cards/list show only its addresses.
+                      setLikedSelectedStreet(v);
+                      const sub = reportSuburbFilter || suburbFilter;
+                      if (sub) {
+                        try { window.localStorage.setItem(`liked_start_street:${sub}`, v); } catch { /* ignore */ }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '7px 12px',
+                      border: '1px solid #f9a8d4',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      backgroundColor: 'white',
+                      boxSizing: 'border-box',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">Auto (default)</option>
+                    {likedStreetsSummary.map(({ street, count }) => (
+                      <option key={street} value={street}>{street} ({count})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {likedStreetsSummary.length > 8 && (
+                  <input
+                    type="text"
+                    value={likedStreetSearch}
+                    onChange={(e) => { setLikedStreetSearch(e.target.value); setLikedStreetsVisible(5); }}
+                    placeholder="Search streets..."
+                    style={{
+                      width: '100%',
+                      padding: '7px 12px',
+                      border: '1px solid #f9a8d4',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      marginBottom: '10px',
+                      outline: 'none',
+                      backgroundColor: 'white',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                )}
+
+                {likedStreetsSummary.length === 0 ? (
+                  <div style={{ fontSize: '0.85rem', color: '#9ca3af', textAlign: 'center', padding: '12px 0' }}>
+                    No streets found
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {likedStreetsOrdered.slice(0, likedStreetsVisible).map(({ street, count }) => (
+                      <button
+                        key={street}
+                        onClick={() => {
+                          const nextStreet = likedSelectedStreet === street ? '' : street;
+                          setLikedSelectedStreet(nextStreet);
+                          // Client-side filtering only — do NOT set streetFilter here,
+                          // as that would send street= to the API and collapse the dataset.
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 14px',
+                          backgroundColor: likedSelectedStreet === street ? '#ec4899' : 'white',
+                          color: likedSelectedStreet === street ? 'white' : '#374151',
+                          border: likedSelectedStreet === street ? '1px solid #ec4899' : '1px solid #fce7f3',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.875rem',
+                          fontWeight: likedSelectedStreet === street ? '600' : '400',
+                          textAlign: 'left',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (likedSelectedStreet !== street) {
+                            e.currentTarget.style.backgroundColor = '#fdf2f8';
+                            e.currentTarget.style.borderColor = '#f9a8d4';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (likedSelectedStreet !== street) {
+                            e.currentTarget.style.backgroundColor = 'white';
+                            e.currentTarget.style.borderColor = '#fce7f3';
+                          }
+                        }}
+                      >
+                        <span>{street}</span>
+                        <span style={{
+                          fontSize: '0.78rem',
+                          fontWeight: '600',
+                          backgroundColor: likedSelectedStreet === street ? 'rgba(255,255,255,0.25)' : '#fce7f3',
+                          color: likedSelectedStreet === street ? 'white' : '#be185d',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                        }}>
+                          {count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {likedStreetsOrdered.length > likedStreetsVisible && (
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      onClick={() => setLikedStreetsVisible((v) => v + 5)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 14px',
+                        backgroundColor: '#fce7f3',
+                        color: '#be185d',
+                        border: '1px solid #f9a8d4',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: '600',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ec4899';
+                        e.currentTarget.style.color = 'white';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fce7f3';
+                        e.currentTarget.style.color = '#be185d';
+                      }}
+                    >
+                      ↧ More streets ({Math.min(5, likedStreetsOrdered.length - likedStreetsVisible)} more)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3">
           <select
             value={sortOrder}
@@ -1468,7 +1764,13 @@ export default function OutreachPage() {
 
           <select
             value={streetFilter}
-            onChange={(e) => { setStreetFilter(e.target.value); }}
+            onChange={(e) => {
+              const val = e.target.value;
+              setStreetFilter(val);
+              if (activeTab === 'liked') {
+                setLikedSelectedStreet(val);
+              }
+            }}
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={availableStreets.length === 0}
           >
@@ -1770,6 +2072,11 @@ export default function OutreachPage() {
               setSortMode('address');
               setRunStreetFilter([]);
               setStreetFilter('');
+              setLikedStreetModeApplied(false);
+              setLikedSelectedStreet('');
+              setLikedStreetSearch('');
+              setLikedStreetsVisible(5);
+              setLikedStartStreet('');
             }}
             className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200 transition-colors"
           >
@@ -1780,9 +2087,9 @@ export default function OutreachPage() {
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
-          {isClassic
+          {isClassic && !(likedStreetModeApplied && likedSelectedStreet)
             ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
-            : `Displaying 1 to ${displayItems.length} of ${displayPagination?.total || 0} properties`}
+            : `Displaying 1 to ${likedStreetDisplayCount} of ${likedStreetTotalCount} properties`}
         </span>
         <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
           <button
@@ -3001,8 +3308,8 @@ export default function OutreachPage() {
                                               });
                                             }}
                                             className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors ${prop.no_junk_mail
-                                                ? 'bg-red-500 text-white'
-                                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                              ? 'bg-red-500 text-white'
+                                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                                               }`}
                                             title={prop.no_junk_mail ? 'No Junk Mail - click to allow' : 'Click to mark No Junk Mail'}
                                           >

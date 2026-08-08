@@ -50,6 +50,7 @@ describe('Outreach page', () => {
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
+    window.localStorage.clear();
   });
 
   it('renders pending address row and shows mark as sent button', async () => {
@@ -985,6 +986,317 @@ describe('Outreach page - Card view run ordering', () => {
       expect(last).not.toContain('streets=');
       expect(last).not.toContain('sent_status=unsent');
     }, { timeout: 3000 });
+  });
+
+  describe('Filter by Street', () => {
+    const streetMemFetch = () => {
+      (global.fetch as any) = vi.fn((url: RequestInfo) => {
+        const s = String(url || '');
+        if (s.includes('/api/admin/pdf/reports')) {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        }
+        if (s.includes('/api/admin/outreach/default-report')) {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
+        });
+      });
+    };
+
+    const quickSection = () =>
+      within(screen.getByText('Quick Filter by Suburb').closest('div') as HTMLElement);
+
+    it('prompts for a suburb and does not enable street mode when Apply is clicked without one', async () => {
+      streetMemFetch();
+      render(<OutreachPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('🗺️ Filter by Street')).toBeDefined();
+      });
+      // Northcross is the default suburb on first load; clear it so none is selected.
+      const quick = quickSection();
+      fireEvent.click(quick.getByRole('button', { name: 'Northcross' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Please select a suburb first before applying street filter.')).toBeDefined();
+      });
+      expect(screen.queryByRole('button', { name: /By Street \(click to cancel\)/ })).toBeNull();
+    });
+
+    it('hides other suburbs in Quick Filter by Suburb after Apply with a suburb selected', async () => {
+      streetMemFetch();
+      render(<OutreachPage />);
+
+      const quick = quickSection();
+      await waitFor(() => {
+        expect(quick.getByRole('button', { name: 'Oteha' })).toBeDefined();
+      });
+      quick.getByRole('button', { name: 'Oteha' }).click();
+      fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /By Street \(click to cancel\)/ })).toBeDefined();
+      });
+      expect(quick.getByRole('button', { name: 'Oteha' })).toBeDefined();
+      expect(quick.queryByRole('button', { name: 'Albany' })).toBeNull();
+      expect(quick.queryByRole('button', { name: 'Northcross' })).toBeNull();
+    });
+
+    it('restores other suburbs in Quick Filter by Suburb after cancelling street mode', async () => {
+      streetMemFetch();
+      render(<OutreachPage />);
+
+      const quick = quickSection();
+      await waitFor(() => {
+        expect(quick.getByRole('button', { name: 'Oteha' })).toBeDefined();
+      });
+      quick.getByRole('button', { name: 'Oteha' }).click();
+      fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /By Street \(click to cancel\)/ })).toBeDefined();
+      });
+      expect(quick.queryByRole('button', { name: 'Albany' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /By Street \(click to cancel\)/ }));
+      await waitFor(() => {
+        expect(quick.getByRole('button', { name: 'Albany' })).toBeDefined();
+        expect(quick.getByRole('button', { name: 'Northcross' })).toBeDefined();
+      });
+    });
+
+    describe('new street flow', () => {
+      const streetItem = (id: string, address: string) => ({
+        id,
+        property_address: address,
+        suburb: 'Takapuna',
+        city: 'Auckland',
+        region: 'North Shore',
+        status: 'liked',
+        created_at: '2026-07-01T10:00:00Z',
+        no_junk_mail: false,
+      });
+
+      const likedFetch = (data: ReturnType<typeof streetItem>[]) => {
+        (global.fetch as any) = vi.fn((url: RequestInfo) => {
+          const s = String(url || '');
+          if (s.includes('/api/admin/pdf/reports')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+          }
+          if (s.includes('/api/admin/outreach/default-report')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, data, pagination: { page: 1, limit: 50, total: data.length, totalPages: 1 } }),
+          });
+        });
+      };
+
+      const applyStreetMode = async () => {
+        const quick = quickSection();
+        await waitFor(() => {
+          expect(quick.getByRole('button', { name: 'Oteha' })).toBeDefined();
+        });
+        quick.getByRole('button', { name: 'Oteha' }).click();
+        fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: /By Street \(click to cancel\)/ })).toBeDefined();
+        });
+      };
+
+      const panelSection = () =>
+        within(screen.getByText(/Streets in Liked/).parentElement!.parentElement as HTMLElement);
+
+      const STREETS = [
+        '5 Alpha Road',
+        '12 Alpha Road',
+        '9 Bravo Road',
+        '3 Charlie Drive',
+        '7 Delta Drive',
+        '4 Echo Lane',
+        '8 Foxtrot Way',
+        '2 Golf Avenue',
+        '11 Hotel Close',
+        '6 Iris Grove',
+        '1 Kilo Terrace',
+        '10 Lima Boulevard',
+        '14 Mike Court',
+      ];
+
+      it('shows only 5 streets and reveals 5 more with each More streets click', async () => {
+        likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        const panel = panelSection();
+        await waitFor(() => {
+          expect(panel.getByRole('button', { name: /Alpha Road/ })).toBeDefined();
+        });
+        expect(panel.getByRole('button', { name: /Bravo Road/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Charlie Drive/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Delta Drive/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Echo Lane/ })).toBeDefined();
+        expect(panel.queryByRole('button', { name: /Foxtrot Way/ })).toBeNull();
+        expect(panel.getByRole('button', { name: /More streets/ })).toBeDefined();
+
+        fireEvent.click(panel.getByRole('button', { name: /More streets/ }));
+        await waitFor(() => {
+          expect(panel.getByRole('button', { name: /Foxtrot Way/ })).toBeDefined();
+          expect(panel.getByRole('button', { name: /Kilo Terrace/ })).toBeDefined();
+          expect(panel.queryByRole('button', { name: /Lima Boulevard/ })).toBeNull();
+          expect(panel.getByRole('button', { name: /More streets/ })).toBeDefined();
+        });
+
+        fireEvent.click(panel.getByRole('button', { name: /More streets/ }));
+        await waitFor(() => {
+          expect(panel.getByRole('button', { name: /Mike Court/ })).toBeDefined();
+          expect(panel.queryByRole('button', { name: /More streets/ })).toBeNull();
+        });
+      });
+
+      it('auto-selects the first street, sets Last Sold to All and Property Type to House on Apply', async () => {
+        const calls: string[] = [];
+        likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
+        (global.fetch as any) = vi.fn((url: RequestInfo) => {
+          const s = String(url || '');
+          calls.push(s);
+          if (s.includes('/api/admin/pdf/reports')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+          }
+          if (s.includes('/api/admin/outreach/default-report')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, data: STREETS.map((addr) => streetItem(`st-${addr}`, addr)), pagination: { page: 1, limit: 50, total: STREETS.length, totalPages: 1 } }),
+          });
+        });
+
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        const panel = panelSection();
+        // First street auto-selected → Clear Filter button appears.
+        expect(panel.getByRole('button', { name: /Clear Filter/ })).toBeDefined();
+        // Other streets remain visible for the next selection (req 4).
+        expect(panel.getByRole('button', { name: /Bravo Road/ })).toBeDefined();
+
+        // Refetched liked list carries Last Sold = all (no last_sold param)
+        // and Property Type = House (standalone_only=true) after Apply.
+        await waitFor(() => {
+          const likedCalls = calls.filter((c) => c.includes('/api/admin/outreach?') && c.includes('status=liked'));
+          const last = likedCalls[likedCalls.length - 1] || '';
+          expect(last).toContain('standalone_only=true');
+          expect(last).not.toMatch(/last_sold=/);
+        }, { timeout: 3000 });
+      });
+
+      it('shows the addresses and a counter that match the auto-selected street', async () => {
+        likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        await waitFor(() => {
+          expect(screen.getAllByText(/Displaying 1 to 2 of 2 properties/).length).toBeGreaterThanOrEqual(1);
+        });
+        // The displayed list shows only the selected street's addresses.
+        expect(screen.getByText('5 Alpha Road')).toBeDefined();
+        expect(screen.getByText('12 Alpha Road')).toBeDefined();
+        expect(screen.queryByText('9 Bravo Road')).toBeNull();
+      });
+
+      it('lists all liked streets alphabetically in Start street and re-fetches from the chosen street', async () => {
+        const calls: string[] = [];
+        (global.fetch as any) = vi.fn((url: RequestInfo) => {
+          const s = String(url || '');
+          calls.push(s);
+          if (s.includes('/api/admin/pdf/reports')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+          }
+          if (s.includes('/api/admin/outreach/default-report')) {
+            return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, data: STREETS.map((addr) => streetItem(`st-${addr}`, addr)), pagination: { page: 1, limit: 50, total: STREETS.length, totalPages: 1 } }),
+          });
+        });
+
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        const panel = panelSection();
+        const startSelect = panel.getByRole('combobox', { name: 'Start street' }) as HTMLSelectElement;
+        expect(startSelect).toBeDefined();
+        // All streets listed in alphabetical order inside the selector.
+        expect(startSelect.textContent).toContain('Alpha Road');
+        expect(startSelect.textContent).toContain('Mike Court');
+        fireEvent.change(startSelect, { target: { value: 'Foxtrot Way' } });
+
+        await waitFor(() => {
+          const likedCalls = calls.filter((c) => c.includes('/api/admin/outreach?') && c.includes('status=liked'));
+          const last = likedCalls[likedCalls.length - 1] || '';
+          expect(last).toContain('start_street=Foxtrot+Way');
+        }, { timeout: 3000 });
+      });
+
+      it('shows the first five streets anchored on the selected Start street, wrapping alphabetically', async () => {
+        window.localStorage.clear();
+        likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        const panel = panelSection();
+        // Default: no Start street selected → first five streets are alphabetical.
+        expect(panel.getByRole('button', { name: /Alpha Road/ })).toBeDefined();
+        expect(panel.queryByRole('button', { name: /Foxtrot Way/ })).toBeNull();
+
+        // Select 'Foxtrot Way' as the Start street.
+        const startSelect = panel.getByRole('combobox', { name: 'Start street' }) as HTMLSelectElement;
+        fireEvent.change(startSelect, { target: { value: 'Foxtrot Way' } });
+
+        await waitFor(() => {
+          expect(panel.getByRole('button', { name: /Foxtrot Way/ })).toBeDefined();
+        });
+        // Window now starts at Foxtrot: Foxtrot/Golf/Hotel/Iris/Kilo, Alpha hidden.
+        expect(panel.getByRole('button', { name: /Golf Avenue/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Hotel Close/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Iris Grove/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /Kilo Terrace/ })).toBeDefined();
+        expect(panel.queryByRole('button', { name: /Alpha Road/ })).toBeNull();
+      });
+
+      it('persists the selected Start street for later visits', async () => {
+        window.localStorage.clear();
+        likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
+        render(<OutreachPage />);
+        await applyStreetMode();
+
+        const panel = panelSection();
+        const startSelect = panel.getByRole('combobox', { name: 'Start street' }) as HTMLSelectElement;
+        expect(startSelect.value).toBe('');
+        fireEvent.change(startSelect, { target: { value: 'Golf Avenue' } });
+
+        await waitFor(() => {
+          expect(window.localStorage.getItem('liked_start_street:Oteha')).toBe('Golf Avenue');
+        });
+
+        // Re-applying (e.g. after cancelling) restores the previous choice.
+        fireEvent.click(screen.getByRole('button', { name: /By Street \(click to cancel\)/ }));
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: 'Apply' })).toBeDefined();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() => {
+          const restored = panelSection().getByRole('combobox', { name: 'Start street' }) as HTMLSelectElement;
+          expect(restored.value).toBe('Golf Avenue');
+        });
+      });
+    });
   });
 });
 

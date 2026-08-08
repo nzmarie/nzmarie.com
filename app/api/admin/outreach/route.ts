@@ -61,6 +61,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortOrder = searchParams.get('sortOrder') || 'asc';
   const sortMode = searchParams.get('sort_mode');
+  const startStreet = searchParams.get('start_street')?.trim() || '';
 
   const { page, limit, offset } = paginationParams(searchParams);
 
@@ -99,8 +100,8 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     params.push(suburb);
   }
   if (street) {
-    conditions.push(`street ILIKE $${params.length + 1}`);
-    params.push(street);
+    conditions.push(`(street ILIKE $${params.length + 1} OR property_address ILIKE $${params.length + 2})`);
+    params.push(street, `%${street}%`);
   }
   if (streets.length > 0) {
     const placeholders = streets.map((_, i) => `$${params.length + 1 + i}`).join(', ');
@@ -195,18 +196,23 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   if (sortMode === 'time') {
     orderClause = `ORDER BY latest_sent_at ${orderDirection} NULLS LAST`;
   } else {
+    const streetSortExpr = `COALESCE(
+        NULLIF(TRIM(street), ''),
+        TRIM(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^-?\\d+/\\s*', ''), '^-?\\d+[A-Za-z]?\\s*', ''))
+      )`;
     orderClause = `
       ORDER BY
         suburb ASC,
-        COALESCE(
-          NULLIF(TRIM(street), ''),
-          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^-?\\d+/\\s*', ''), '^-?\\d+[A-Za-z]?\\s*', ''))
-        ) ASC,
+        ${startStreet ? `(CASE WHEN ${streetSortExpr} >= $${params.length + 1} THEN 0 ELSE 1 END) ASC,` : ''}
+        ${streetSortExpr} ASC,
         NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(property_address, '^-?\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
         created_at ${orderDirection}
     `;
   }
 
+  if (startStreet) {
+    params.push(startStreet);
+  }
   params.push(limit, offset);
 
   const cardFields = `
@@ -276,6 +282,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const reportQuarter = searchParams.get('report_quarter');
   const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortMode = searchParams.get('sort_mode');
+  const startStreet = searchParams.get('start_street')?.trim() || '';
 
   let query = `
     SELECT
@@ -359,8 +366,9 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     params.push(suburb);
   }
   if (street) {
-    query += ` AND op.street ILIKE $${idx++}`;
-    params.push(street);
+    query += ` AND (op.street ILIKE $${idx} OR op.property_address ILIKE $${idx + 1})`;
+    params.push(street, `%${street}%`);
+    idx += 2;
   }
   if (streets.length > 0) {
     const placeholders = streets.map(() => `$${idx++}`).join(', ');
@@ -463,17 +471,27 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     query += ` ORDER BY ls.sent_at ${orderDirection} NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limit, offset);
   } else {
+    const streetSortExpr = `COALESCE(
+        NULLIF(TRIM(op.street), ''),
+        TRIM(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
+      )`;
+    const startCmp = startStreet
+      ? `(CASE WHEN ${streetSortExpr} >= $${idx} THEN 0 ELSE 1 END) ASC,`
+      : '';
+    const limitIdx = idx + (startStreet ? 1 : 0);
     query += `
       ORDER BY
+        ${startCmp}
         op.suburb ASC,
-        COALESCE(
-          NULLIF(TRIM(op.street), ''),
-          TRIM(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '^\\d+[A-Za-z]?\\s*', ''))
-        ) ASC,
+        ${streetSortExpr} ASC,
         NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(op.property_address, '^\\d+/\\s*', ''), '\\D.*', ''), '')::INTEGER ASC NULLS LAST,
         op.created_at ${orderDirection}
-      LIMIT $${idx++} OFFSET $${idx++}
+      LIMIT $${limitIdx} OFFSET $${limitIdx + 1}
     `;
+    if (startStreet) {
+      params.push(startStreet);
+      idx++;
+    }
     params.push(limit, offset);
   }
 

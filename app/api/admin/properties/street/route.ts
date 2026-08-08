@@ -4,6 +4,8 @@ import { query } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { extractStreetNameFromAddress, parseHouseNumber, orderStreetsGreedily } from '@/lib/street-ordering';
 import { buildStreetSummaries, toOrderable } from '@/lib/outreach-streets';
+import { getFromCache, setInCache, deleteFromCache } from '@/lib/suburb-street-cache';
+import type { StreetSummary } from '@/lib/outreach-streets';
 
 const STREET_PREFIX = 'properties_start_street:';
 const DEFAULT_STREET_LIMIT = 20;
@@ -13,6 +15,42 @@ interface StreetRow {
   address: string;
   lat: string | null;
   lng: string | null;
+}
+
+async function getSuburbSummaries(suburb: string): Promise<{ summaries: StreetSummary[]; alphaFirst: string }> {
+  const cached = getFromCache(suburb);
+  if (cached) return cached;
+
+  const result = await query<StreetRow>(
+    `SELECT RTRIM(REGEXP_REPLACE(p.address, '\\d{7,}$', '')) AS address,
+            p.latitude AS lat,
+            p.longitude AS lng
+     FROM properties p
+     WHERE LOWER(p.suburb) = LOWER($1)
+     ORDER BY p.address ASC`,
+    [suburb]
+  );
+
+  const rows = (result.rows || [])
+    .map((r) => ({
+      street: extractStreetNameFromAddress(r.address),
+      house_number: parseHouseNumber(r.address),
+      property_address: r.address,
+      lat: r.lat != null && r.lng != null ? r.lat : null,
+      lng: r.lat != null && r.lng != null ? r.lng : null,
+    }))
+    .filter((r) => r.street !== 'Unknown Street');
+
+  const summaries = buildStreetSummaries(rows, suburb);
+
+  const alphaFirst =
+    summaries.length > 0
+      ? [...summaries].sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }))[0].street
+      : '';
+
+  setInCache(suburb, summaries, alphaFirst);
+
+  return { summaries, alphaFirst };
 }
 
 async function fetchSavedStart(suburb: string): Promise<string> {
@@ -50,34 +88,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await query<StreetRow>(
-      `SELECT RTRIM(REGEXP_REPLACE(p.address, '\\d{7,}$', '')) AS address,
-              p.latitude AS lat,
-              p.longitude AS lng
-       FROM properties p
-       WHERE LOWER(p.suburb) = LOWER($1)
-       ORDER BY p.address ASC`,
-      [suburb]
-    );
+    const [{ summaries, alphaFirst }, savedStart] = await Promise.all([
+      getSuburbSummaries(suburb),
+      fetchSavedStart(suburb),
+    ]);
 
-    const rows = (result.rows || [])
-      .map((r) => ({
-        street: extractStreetNameFromAddress(r.address),
-        house_number: parseHouseNumber(r.address),
-        property_address: r.address,
-        lat: r.lat != null && r.lng != null ? r.lat : null,
-        lng: r.lat != null && r.lng != null ? r.lng : null,
-      }))
-      .filter((r) => r.street !== 'Unknown Street');
-
-    const summaries = buildStreetSummaries(rows, suburb);
-
-    const alphaFirst =
-      summaries.length > 0
-        ? [...summaries].sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }))[0].street
-        : '';
-
-    const savedStart = await fetchSavedStart(suburb);
     const start = requestedStart || savedStart || alphaFirst;
 
     const orderedNames = orderStreetsGreedily(summaries.map(toOrderable), start || undefined);
@@ -92,11 +107,9 @@ export async function GET(request: Request) {
     }
 
     const totalStreets = streetList.length;
-    const window = streetList.slice(offset, offset + limit);
-    const nextOffset = offset + window.length < totalStreets ? offset + window.length : null;
+    const windowSlice = streetList.slice(offset, offset + limit);
+    const nextOffset = offset + windowSlice.length < totalStreets ? offset + windowSlice.length : null;
 
-    // allStreetNames is the full list sorted alphabetically, used to populate
-    // the "Start street" dropdown so users can easily find any street by name.
     const allStreetNames = [...summaries]
       .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }))
       .map((s) => ({ street: s.street, count: s.address_count }));
@@ -107,7 +120,7 @@ export async function GET(request: Request) {
       start: start || null,
       saved_start: savedStart || null,
       totalStreets,
-      streets: window,
+      streets: windowSlice,
       offset,
       limit,
       next_offset: nextOffset,
@@ -152,6 +165,7 @@ export async function POST(request: Request) {
        DO UPDATE SET setting_value = $2, updated_at = NOW(), updated_by = $3`,
       [`${STREET_PREFIX}${suburb}`, start, session.user.email]
     );
+    deleteFromCache(suburb);
     return NextResponse.json({ success: true, suburb, start });
   } catch (error) {
     console.error('Error saving start street:', error);
