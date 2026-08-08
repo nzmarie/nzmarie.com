@@ -120,7 +120,7 @@ function applyStreetFilters(list: Property[], opts: StreetFilterOpts): Property[
   } else if (opts.marketFilter === 'never_rented') {
     result = result.filter((p) => p.has_rental_history === false);
   } else if (opts.marketFilter === 'not_listed') {
-    result = result.filter((p) => !p.on_market_sale && !p.on_market_rent);
+    result = result.filter((p) => !p.on_market_sale && !p.on_market_rent && p.has_rental_history === false);
   }
 
   const nowMs = Date.now();

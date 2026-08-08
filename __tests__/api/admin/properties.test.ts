@@ -150,7 +150,7 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     expect(hasRerIdFilter).toBe(true);
   });
 
-  it('filters not_listed via SQL AND re.id IS NULL AND rer.id IS NULL', async () => {
+  it('filters not_listed via SQL AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ total: '1' }] })
       .mockResolvedValueOnce({ rows: [makeDefaultRow()] });
@@ -161,7 +161,9 @@ describe('GET /api/admin/properties — market status JOIN', () => {
 
     const sqlCalls = mockQuery.mock.calls as Array<[string, unknown[]]>;
     const queries = sqlCalls.map(c => c[0]);
-    const hasNotListedFilter = queries.some(q => q.includes('AND re.id IS NULL AND rer.id IS NULL'));
+    const hasNotListedFilter = queries.some(q =>
+      q.includes('AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false')
+    );
     expect(hasNotListedFilter).toBe(true);
   });
 
@@ -256,7 +258,7 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
     const countSql = calls[0][0];
     expect(countSql).toContain('LEFT JOIN real_estate');
-    expect(countSql).toContain('AND re.id IS NULL AND rer.id IS NULL');
+    expect(countSql).toContain('AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false');
   });
 
   it('uses parameterized date for last_sold_min_years', async () => {

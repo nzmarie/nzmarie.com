@@ -145,12 +145,12 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   } else if (marketStatus === 'never_rented') {
     conditions.push('has_rental_history = false');
   } else if (marketStatus === 'not_listed') {
-    conditions.push('on_market_sale = false AND on_market_rent = false');
+    conditions.push('on_market_sale = false AND on_market_rent = false AND has_rental_history = false');
   }
   if (noJunkMail === 'true') {
-      conditions.push('no_junk_mail = true');
-    } else if (noJunkMail === 'false') {
-      conditions.push('(no_junk_mail = false OR no_junk_mail IS NULL)');
+    conditions.push('no_junk_mail = true');
+  } else if (noJunkMail === 'false') {
+    conditions.push('(no_junk_mail = false OR no_junk_mail IS NULL)');
   }
 
   if (sentStatus === 'sent') {
@@ -413,7 +413,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   } else if (marketStatus === 'never_rented') {
     query += ` AND p.has_rental_history = false`;
   } else if (marketStatus === 'not_listed') {
-    query += ` AND re.id IS NULL AND rer.id IS NULL`;
+    query += ` AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false`;
   }
   if (noJunkMail === 'true') {
     query += ` AND p.no_junk_mail = true`;

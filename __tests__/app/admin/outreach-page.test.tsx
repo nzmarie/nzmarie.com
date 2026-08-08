@@ -1141,20 +1141,20 @@ describe('Outreach page - Card view run ordering', () => {
         expect(panel.getByRole('button', { name: /Delta Drive/ })).toBeDefined();
         expect(panel.getByRole('button', { name: /Echo Lane/ })).toBeDefined();
         expect(panel.queryByRole('button', { name: /Foxtrot Way/ })).toBeNull();
-        expect(panel.getByRole('button', { name: /More streets/ })).toBeDefined();
+        expect(panel.getByRole('button', { name: /More streets/i })).toBeDefined();
 
-        fireEvent.click(panel.getByRole('button', { name: /More streets/ }));
+        fireEvent.click(panel.getByRole('button', { name: /More streets/i }));
         await waitFor(() => {
           expect(panel.getByRole('button', { name: /Foxtrot Way/ })).toBeDefined();
           expect(panel.getByRole('button', { name: /Kilo Terrace/ })).toBeDefined();
           expect(panel.queryByRole('button', { name: /Lima Boulevard/ })).toBeNull();
-          expect(panel.getByRole('button', { name: /More streets/ })).toBeDefined();
+          expect(panel.getByRole('button', { name: /More streets/i })).toBeDefined();
         });
 
-        fireEvent.click(panel.getByRole('button', { name: /More streets/ }));
+        fireEvent.click(panel.getByRole('button', { name: /More streets/i }));
         await waitFor(() => {
           expect(panel.getByRole('button', { name: /Mike Court/ })).toBeDefined();
-          expect(panel.queryByRole('button', { name: /More streets/ })).toBeNull();
+          expect(panel.queryByRole('button', { name: /More streets/i })).toBeNull();
         });
       });
 

@@ -5,7 +5,7 @@ import { isAdmin } from '@/lib/permissions';
 
 export async function GET(request: Request) {
   const session = await auth();
-  
+
   if (!session?.user?.email || !isAdmin(session.user.email)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -287,7 +287,7 @@ export async function GET(request: Request) {
   } else if (marketStatus === 'never_rented') {
     query += ` AND p.has_rental_history = false`;
   } else if (marketStatus === 'not_listed') {
-    query += ` AND re.id IS NULL AND rer.id IS NULL`;
+    query += ` AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false`;
   }
 
   // Get total count — avoid expensive JOINs when filters only touch properties table
