@@ -565,10 +565,12 @@ export default function OutreachPage() {
     return Array.from(streets).sort();
   }, [displayItems]);
 
+  // Always compute the street summary when on the liked tab so the list is
+  // ready the instant Apply is clicked (no re-fetch race condition).
   const likedStreetsSummary = useMemo(() => {
-    if (activeTab !== 'liked' || !likedStreetModeApplied) return [];
+    if (activeTab !== 'liked') return [];
     return aggregateLikedStreets(displayItems, likedStreetSearch);
-  }, [displayItems, activeTab, likedStreetModeApplied, likedStreetSearch]);
+  }, [displayItems, activeTab, likedStreetSearch]);
 
   const filteredLikedItems = useMemo(() => {
     if (activeTab !== 'liked' || !likedStreetModeApplied || !likedSelectedStreet) return null;
@@ -1554,12 +1556,13 @@ export default function OutreachPage() {
                       showNotification('error', 'Please select a suburb first before applying street filter.');
                       return;
                     }
-                    // Derive initial selected street from already-loaded items
+                    // Derive initial selected street from already-loaded items.
+                    // NOTE: do NOT mutate propertyFilter / lastSoldPreset here —
+                    // those changes trigger the debounce re-fetch which clears
+                    // displayItems before likedStreetsSummary can be read.
                     const summary = aggregateLikedStreets(displayItems, '');
                     const firstStreet = summary[0]?.street || '';
                     setLikedSelectedStreet(firstStreet);
-                    setLastSoldPreset('all');
-                    setPropertyFilter('house');
                     setLikedStreetSearch('');
                     setLikedStreetsVisible(5);
                     // Load all liked streets for this suburb from the API

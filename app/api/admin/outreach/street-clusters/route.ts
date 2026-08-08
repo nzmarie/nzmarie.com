@@ -6,6 +6,11 @@ import { buildOutreachFilter } from '@/lib/outreach-filter';
 import { buildStreetSummaries, toOrderable, AddressRow } from '@/lib/outreach-streets';
 import { orderStreetsGreedily } from '@/lib/street-ordering';
 import { splitOrderedStreets, StreetPoint } from '@/lib/street-clustering';
+import {
+  streetClustersKey,
+  getStreetClustersFromCache,
+  setStreetClustersInCache,
+} from '@/lib/redis';
 
 const STREET_ORDER_KEY_PREFIX = 'outreach_street_order:';
 
@@ -67,6 +72,17 @@ export async function GET(request: Request) {
   try {
     await marieDB.ensureOutreachTablesExist?.();
 
+    // ── Cache lookup (Upstash, TTL 30 min) ────────────────────────────────────
+    // start_street is intentionally excluded from the key: changing the start
+    // only reorders the existing streets, it doesn't change pending counts.
+    // We still serve cached data but it will be reordered client-side if needed.
+    const cacheKey = streetClustersKey(suburb, status, sentStatus, reportQuarter ?? null, budget);
+    const cached = await getStreetClustersFromCache<object>(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
+    // ── Cache miss — compute from DB ──────────────────────────────────────────
     const { sql: where, params } = buildOutreachFilter({
       suburb,
       status,
@@ -137,7 +153,7 @@ export async function GET(request: Request) {
 
     const noAnchorStreets = summaries.filter((s) => s.anchorLat == null || s.anchorLng == null);
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       radius,
       budget,
@@ -159,7 +175,12 @@ export async function GET(request: Request) {
         .sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' })),
       manualOrder: validOrder.length > 0,
       manualOrderCount: validOrder.length,
-    });
+    };
+
+    // Write to cache asynchronously — don't block the response
+    setStreetClustersInCache(cacheKey, responsePayload).catch(() => { });
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
     console.error('Error fetching street clusters:', error);
     return NextResponse.json({ error: 'Failed to fetch street clusters' }, { status: 500 });

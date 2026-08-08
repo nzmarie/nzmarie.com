@@ -226,13 +226,12 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     on_market_rent, rent_listing_status, rent_price,
     realestate_url,
     latest_send_title, latest_sent_at, latest_campaign,
-    latest_send_quarter, latest_send_year, latest_send_report_suburb,
-    COUNT(*) OVER() as total_count
+    latest_send_quarter, latest_send_year, latest_send_report_suburb
   `;
 
-  const selectClause = view === 'card' ? cardFields : '*, COUNT(*) OVER() as total_count';
+  const selectClause = view === 'card' ? cardFields : '*';
 
-  const query = `
+  const dataQuery = `
     SELECT ${selectClause}
     FROM outreach_enriched
     ${whereClause}
@@ -240,8 +239,20 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `;
 
-  const result = await marieDB.query(query, params);
-  const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
+  const result = await marieDB.query(dataQuery, params);
+
+  // Only compute total on the first page (offset === 0).  Subsequent pages
+  // reuse the total the frontend already received from page 1, saving a full
+  // table scan on every infinite-scroll load.
+  let total = 0;
+  if (offset === 0) {
+    const countParams = params.slice(0, params.length - 2); // strip LIMIT / OFFSET
+    const countResult = await marieDB.query(
+      `SELECT COUNT(*) AS total FROM outreach_enriched ${whereClause}`,
+      countParams
+    );
+    total = parseInt(countResult.rows[0]?.total ?? '0', 10);
+  }
 
   return NextResponse.json({
     success: true,
@@ -250,7 +261,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: total > 0 ? Math.ceil(total / limit) : undefined,
     },
   });
 }
@@ -287,7 +298,6 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   let query = `
     SELECT
       op.*,
-      COUNT(*) OVER() as total_count,
       ls.report_title as latest_send_title,
       ls.sent_at as latest_sent_at,
       ls.campaign_key as latest_campaign,
@@ -467,8 +477,18 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   }
 
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
+
+  // Snapshot the WHERE-clause param count BEFORE pushing any ORDER BY / LIMIT
+  // / OFFSET params.  The count query reuses exactly these params.
+  const whereParamCount = params.length;
+
+  // This sentinel marks where the outer ORDER BY begins so we can reliably
+  // extract only the WHERE clause for the count query (the lateral subquery
+  // above also contains ORDER BY / LIMIT which would fool lastIndexOf).
+  const ORDER_BY_SENTINEL = '/*__OUTER_ORDER_BY__*/';
+
   if (sortMode === 'time') {
-    query += ` ORDER BY ls.sent_at ${orderDirection} NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
+    query += ` ${ORDER_BY_SENTINEL} ORDER BY ls.sent_at ${orderDirection} NULLS LAST LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limit, offset);
   } else {
     const streetSortExpr = `COALESCE(
@@ -480,7 +500,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
       : '';
     const limitIdx = idx + (startStreet ? 1 : 0);
     query += `
-      ORDER BY
+      ${ORDER_BY_SENTINEL} ORDER BY
         ${startCmp}
         op.suburb ASC,
         ${streetSortExpr} ASC,
@@ -496,7 +516,31 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   }
 
   const result = await marieDB.query(query, params);
-  const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
+
+  // Only compute total on the first page — skip the full-table COUNT on
+  // subsequent pages, the frontend already has it from page 1.
+  let total = 0;
+  if (offset === 0) {
+    // Build a minimal count query: strip down to op, p and the WHERE clause.
+    // Use the sentinel to find the outer ORDER BY — lastIndexOf('ORDER BY') would
+    // incorrectly match the ORDER BY inside the lateral join subquery.
+    const whereStart = query.indexOf('WHERE 1=1');
+    const sentinelPos = query.indexOf(ORDER_BY_SENTINEL);
+    const whereClause = query.substring(whereStart, sentinelPos);
+    const countBaseQuery = `
+      SELECT COUNT(*) AS total
+      FROM outreach_properties op
+      LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
+      LEFT JOIN real_estate re ON TRIM(LOWER(SPLIT_PART(re.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(re.suburb)) = TRIM(LOWER(p.suburb))
+      LEFT JOIN real_estate_rent rer ON TRIM(LOWER(SPLIT_PART(rer.address, ',', 1))) = TRIM(LOWER(p.address)) AND TRIM(LOWER(rer.suburb)) = TRIM(LOWER(p.suburb))
+      ${whereClause}
+    `;
+    // Use only the WHERE-clause params — excludes startStreet/LIMIT/OFFSET
+    // which are appended after the ORDER BY and not present in the count query.
+    const countParams = params.slice(0, whereParamCount);
+    const countResult = await marieDB.query(countBaseQuery, countParams);
+    total = parseInt(countResult.rows[0]?.total ?? '0', 10);
+  }
 
   return NextResponse.json({
     success: true,
@@ -505,7 +549,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: total > 0 ? Math.ceil(total / limit) : undefined,
     },
   });
 }

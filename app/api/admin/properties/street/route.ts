@@ -5,6 +5,12 @@ import { isAdmin } from '@/lib/permissions';
 import { extractStreetNameFromAddress, parseHouseNumber, orderStreetsGreedily } from '@/lib/street-ordering';
 import { buildStreetSummaries, toOrderable } from '@/lib/outreach-streets';
 import { getFromCache, setInCache, deleteFromCache } from '@/lib/suburb-street-cache';
+import {
+  getSuburbStreetsFromCache,
+  setSuburbStreetsInCache,
+  deleteSuburbStreetsFromCache,
+  type CachedStreetSummary,
+} from '@/lib/redis';
 import type { StreetSummary } from '@/lib/outreach-streets';
 
 const STREET_PREFIX = 'properties_start_street:';
@@ -17,10 +23,40 @@ interface StreetRow {
   lng: string | null;
 }
 
-async function getSuburbSummaries(suburb: string): Promise<{ summaries: StreetSummary[]; alphaFirst: string }> {
-  const cached = getFromCache(suburb);
-  if (cached) return cached;
+/**
+ * Rebuild a full StreetSummary[] from the lean CachedStreetSummary[] stored in
+ * Upstash.  The `addresses` array and `suburb` field are not needed by any of
+ * the downstream consumers (orderStreetsGreedily / toOrderable), so we just
+ * fill them with safe placeholder values.
+ */
+function rebuildSummaries(cached: CachedStreetSummary[], suburb: string): StreetSummary[] {
+  return cached.map((c) => ({
+    street: c.street,
+    suburb,
+    address_count: c.address_count,
+    has_coords: c.anchorLat != null && c.anchorLng != null,
+    minHouseNumber: c.minHouseNumber,
+    anchorLat: c.anchorLat,
+    anchorLng: c.anchorLng,
+    addresses: [], // not needed for ordering or counting
+  }));
+}
 
+async function getSuburbSummaries(suburb: string): Promise<{ summaries: StreetSummary[]; alphaFirst: string }> {
+  // ── L1: in-process memory cache (valid within a single warm serverless instance) ──
+  const memCached = getFromCache(suburb);
+  if (memCached) return memCached;
+
+  // ── L2: Upstash Redis (shared across all serverless instances, TTL 24 h) ──
+  const redisCached = await getSuburbStreetsFromCache(suburb);
+  if (redisCached) {
+    const summaries = rebuildSummaries(redisCached.summaries, suburb);
+    // Warm the in-process cache so subsequent requests in the same instance skip Redis
+    setInCache(suburb, summaries, redisCached.alphaFirst);
+    return { summaries, alphaFirst: redisCached.alphaFirst };
+  }
+
+  // ── L3: Database (cold path) ──
   const result = await query<StreetRow>(
     `SELECT RTRIM(REGEXP_REPLACE(p.address, '\\d{7,}$', '')) AS address,
             p.latitude AS lat,
@@ -48,7 +84,18 @@ async function getSuburbSummaries(suburb: string): Promise<{ summaries: StreetSu
       ? [...summaries].sort((a, b) => a.street.localeCompare(b.street, undefined, { sensitivity: 'base' }))[0].street
       : '';
 
+  // Write to both caches
   setInCache(suburb, summaries, alphaFirst);
+  await setSuburbStreetsInCache(suburb, {
+    alphaFirst,
+    summaries: summaries.map((s) => ({
+      street: s.street,
+      address_count: s.address_count,
+      minHouseNumber: s.minHouseNumber,
+      anchorLat: s.anchorLat,
+      anchorLng: s.anchorLng,
+    })),
+  });
 
   return { summaries, alphaFirst };
 }
@@ -165,7 +212,9 @@ export async function POST(request: Request) {
        DO UPDATE SET setting_value = $2, updated_at = NOW(), updated_by = $3`,
       [`${STREET_PREFIX}${suburb}`, start, session.user.email]
     );
+    // Invalidate both cache layers so the next GET picks up the new start street
     deleteFromCache(suburb);
+    await deleteSuburbStreetsFromCache(suburb);
     return NextResponse.json({ success: true, suburb, start });
   } catch (error) {
     console.error('Error saving start street:', error);

@@ -1158,7 +1158,11 @@ describe('Outreach page - Card view run ordering', () => {
         });
       });
 
-      it('auto-selects the first street, sets Last Sold to All and Property Type to House on Apply', async () => {
+      it('auto-selects the first street without triggering a re-fetch on Apply', async () => {
+        // Fix: Apply no longer mutates propertyFilter / lastSoldPreset, so no
+        // debounce re-fetch is triggered that would clear displayItems before
+        // likedStreetsSummary can be derived.  The street panel shows streets
+        // from the already-loaded items snapshot immediately.
         const calls: string[] = [];
         likedFetch(STREETS.map((addr) => streetItem(`st-${addr}`, addr)));
         (global.fetch as any) = vi.fn((url: RequestInfo) => {
@@ -1185,13 +1189,13 @@ describe('Outreach page - Card view run ordering', () => {
         // Other streets remain visible for the next selection (req 4).
         expect(panel.getByRole('button', { name: /Bravo Road/ })).toBeDefined();
 
-        // Refetched liked list carries Last Sold = all (no last_sold param)
-        // and Property Type = House (standalone_only=true) after Apply.
+        // Apply must NOT add standalone_only=true or change lastSoldPreset —
+        // those mutations were removed so they don't trigger a debounce
+        // re-fetch that clears displayItems (root cause of the "No streets" bug).
         await waitFor(() => {
           const likedCalls = calls.filter((c) => c.includes('/api/admin/outreach?') && c.includes('status=liked'));
           const last = likedCalls[likedCalls.length - 1] || '';
-          expect(last).toContain('standalone_only=true');
-          expect(last).not.toMatch(/last_sold=/);
+          expect(last).not.toContain('standalone_only=true');
         }, { timeout: 3000 });
       });
 

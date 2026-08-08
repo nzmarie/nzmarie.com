@@ -3,6 +3,11 @@ import { GET, POST } from '@/app/api/admin/properties/street/route';
 import { clearCache as clearSuburbanStreetCache } from '@/lib/suburb-street-cache';
 import { auth } from '@/lib/auth';
 import { query } from '@/lib/db';
+import {
+  getSuburbStreetsFromCache,
+  setSuburbStreetsInCache,
+  deleteSuburbStreetsFromCache,
+} from '@/lib/redis';
 
 vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),
@@ -14,6 +19,12 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/permissions', () => ({
   isAdmin: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('@/lib/redis', () => ({
+  getSuburbStreetsFromCache: vi.fn(),
+  setSuburbStreetsInCache: vi.fn(),
+  deleteSuburbStreetsFromCache: vi.fn(),
 }));
 
 function mockAuth() {
@@ -28,10 +39,38 @@ function addressRows(street: string, count: number, lat: number, lng: number) {
   return rows;
 }
 
+// Order-independent DB mock keyed on SQL shape. The route makes two concurrent
+// queries (street rows + saved start), and the redis L2 lookup suspends before
+// those queries fire, so relying on mockResolvedValueOnce ordering is fragile.
+function mockStreetDb(rows: any[] = [], savedStart: string | null = null) {
+  vi.mocked(query).mockImplementation(async (sql: any) => {
+    const s = String(sql);
+    if (s.includes('FROM properties p')) {
+      return { rows } as any;
+    }
+    if (s.includes('admin_settings')) {
+      return { rows: savedStart ? [{ setting_value: savedStart }] : [] } as any;
+    }
+    return { rows: [] } as any;
+  });
+}
+
+function mockStreetDbThrow() {
+  vi.mocked(query).mockImplementation(async (sql: any) => {
+    const s = String(sql);
+    if (s.includes('FROM properties p')) throw new Error('boom');
+    return { rows: [] } as any;
+  });
+}
+
 describe('GET /api/admin/properties/street', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+    vi.mocked(query).mockReset();
+    vi.mocked(getSuburbStreetsFromCache).mockReset();
+    vi.mocked(setSuburbStreetsInCache).mockReset();
+    vi.mocked(deleteSuburbStreetsFromCache).mockReset();
+    mockStreetDb();
     clearSuburbanStreetCache();
   });
 
@@ -52,15 +91,11 @@ describe('GET /api/admin/properties/street', () => {
   it('returns streets in greedy walking order with counts and default start', async () => {
     mockAuth();
 
-    vi.mocked(query)
-      .mockResolvedValueOnce({
-        rows: [
-          ...addressRows('Gamma Street', 4, -36.6957, 174.7452),
-          ...addressRows('Alpha Street', 5, -36.6958, 174.7453),
-          ...addressRows('Beta Street', 3, -36.6962, 174.7456),
-        ],
-      } as any)
-      .mockResolvedValueOnce({ rows: [] } as any);
+    mockStreetDb([
+      ...addressRows('Gamma Street', 4, -36.6957, 174.7452),
+      ...addressRows('Alpha Street', 5, -36.6958, 174.7453),
+      ...addressRows('Beta Street', 3, -36.6962, 174.7456),
+    ]);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=OrderTown'));
     expect(response.status).toBe(200);
@@ -77,15 +112,14 @@ describe('GET /api/admin/properties/street', () => {
   it('applies a saved start street', async () => {
     mockAuth();
 
-    vi.mocked(query)
-      .mockResolvedValueOnce({
-        rows: [
-          ...addressRows('Alpha Street', 5, -36.6958, 174.7453),
-          ...addressRows('Beta Street', 3, -36.6962, 174.7456),
-          ...addressRows('Gamma Street', 4, -36.71, 174.74),
-        ],
-      } as any)
-      .mockResolvedValueOnce({ rows: [{ setting_value: 'Beta Street' }] } as any);
+    mockStreetDb(
+      [
+        ...addressRows('Alpha Street', 5, -36.6958, 174.7453),
+        ...addressRows('Beta Street', 3, -36.6962, 174.7456),
+        ...addressRows('Gamma Street', 4, -36.71, 174.74),
+      ],
+      'Beta Street'
+    );
 
     const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=SavedStartTown'));
     const body = await response.json();
@@ -97,7 +131,7 @@ describe('GET /api/admin/properties/street', () => {
 
   it('returns 500 when the DB query throws', async () => {
     mockAuth();
-    vi.mocked(query).mockRejectedValueOnce(new Error('boom'));
+    mockStreetDbThrow();
 
     const response = await GET(new Request('http://localhost:3000/api/admin/properties/street?suburb=ErrorTown'));
     expect(response.status).toBe(500);
@@ -107,6 +141,10 @@ describe('GET /api/admin/properties/street', () => {
 describe('POST /api/admin/properties/street', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(query).mockReset();
+    vi.mocked(getSuburbStreetsFromCache).mockReset();
+    vi.mocked(setSuburbStreetsInCache).mockReset();
+    vi.mocked(deleteSuburbStreetsFromCache).mockReset();
     vi.mocked(query).mockResolvedValue({ rows: [] } as any);
     clearSuburbanStreetCache();
   });

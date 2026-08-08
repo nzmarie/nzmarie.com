@@ -1,6 +1,6 @@
 import type { StreetSummary } from './outreach-streets';
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — L1 in-process cache, backed by 30-day Upstash L2
 
 interface SuburbCache {
   summaries: StreetSummary[];

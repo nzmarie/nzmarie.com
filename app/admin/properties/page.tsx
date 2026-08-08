@@ -1380,11 +1380,21 @@ export default function PropertiesPage() {
 
   const loadStreetProgress = useCallback(async () => {
     if (!filters.suburb) return;
+    // Check sessionStorage first — progress rarely changes between page loads
+    const ssKey = `street_progress:${filters.suburb.toLowerCase()}`;
+    try {
+      const cached = sessionStorage.getItem(ssKey);
+      if (cached) {
+        setStreetProgress(JSON.parse(cached));
+        return; // 0 RU — served from sessionStorage
+      }
+    } catch { /* sessionStorage unavailable */ }
     try {
       const res = await fetch(`/api/admin/properties/street/progress?suburb=${encodeURIComponent(filters.suburb)}`);
       const data = await res.json();
       if (data.success && data.progress) {
         setStreetProgress(data.progress);
+        try { sessionStorage.setItem(ssKey, JSON.stringify(data.progress)); } catch { /* ignore */ }
       }
     } catch {
       // ignore
@@ -1401,7 +1411,15 @@ export default function PropertiesPage() {
       });
       const data = await res.json();
       if (data.success && data.entry) {
-        setStreetProgress((prev) => ({ ...prev, [street]: data.entry }));
+        setStreetProgress((prev) => {
+          const updated = { ...prev, [street]: data.entry };
+          // Keep sessionStorage in sync so the next loadStreetProgress call is still fresh
+          try {
+            const ssKey = `street_progress:${filters.suburb.toLowerCase()}`;
+            sessionStorage.setItem(ssKey, JSON.stringify(updated));
+          } catch { /* ignore */ }
+          return updated;
+        });
       }
     } catch {
       // ignore

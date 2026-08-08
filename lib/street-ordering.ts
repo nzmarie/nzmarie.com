@@ -7,8 +7,8 @@ export interface OrderableStreet {
   anchorLng: number | null;
 }
 
-export function parseHouseNumber(address: string): number | null {
-  const clean = address.trim();
+export function parseHouseNumber(address: string | null | undefined): number | null {
+  const clean = (address ?? '').trim();
   const unit = clean.match(/^(\d+)\/(\d+)/);
   if (unit) return parseInt(unit[2], 10);
   const num = clean.match(/^(\d+)/);

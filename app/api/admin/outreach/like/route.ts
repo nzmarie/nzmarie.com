@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { extractStreetName } from '@/lib/google-maps';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -94,6 +95,8 @@ export async function POST(request: Request) {
           marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
             .catch(err => console.error('MV refresh failed (non-critical):', err));
         }
+        // Invalidate street-clusters cache so Today's Run reflects the change
+        invalidateStreetClustersForSuburb(suburb).catch(() => { });
         return NextResponse.json({ liked: false });
       }
       await marieDB.query(
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
         marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
           .catch(err => console.error('MV refresh failed (non-critical):', err));
       }
+      invalidateStreetClustersForSuburb(suburb).catch(() => { });
       return NextResponse.json({ liked: true });
     }
 
@@ -120,6 +124,7 @@ export async function POST(request: Request) {
       marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
         .catch(err => console.error('MV refresh failed (non-critical):', err));
     }
+    invalidateStreetClustersForSuburb(suburb).catch(() => { });
 
     return NextResponse.json({ liked: true });
   } catch (error) {

@@ -71,3 +71,140 @@ export async function getSearchHistory(adminId: number): Promise<string[]> {
     return [];
   }
 }
+
+// ─── Suburb street-summary cache ─────────────────────────────────────────────
+// Stores the greedy-orderable data for every street in a suburb.
+// The full StreetSummary.addresses[] array is intentionally omitted here: it
+// can be hundreds of KB and is not needed for ordering or counting.
+
+export interface CachedStreetSummary {
+  street: string;
+  address_count: number;
+  minHouseNumber: number | null;
+  anchorLat: number | null;
+  anchorLng: number | null;
+}
+
+export interface CachedSuburbStreets {
+  summaries: CachedStreetSummary[];
+  alphaFirst: string;
+}
+
+const SUBURB_STREETS_TTL = 180 * 24 * 60 * 60; // 6 months — street names and coordinates are highly stable
+const suburbStreetsKey = (suburb: string) =>
+  `suburb_streets:${suburb.toLowerCase().trim()}`;
+
+export async function getSuburbStreetsFromCache(
+  suburb: string,
+): Promise<CachedSuburbStreets | null> {
+  if (!redis) return null;
+  try {
+    const cached = await redis.get<CachedSuburbStreets>(suburbStreetsKey(suburb));
+    if (cached !== null) {
+      // Upstash returns plain objects for JSON-serialised values
+      if (typeof cached === 'string') {
+        return JSON.parse(cached) as CachedSuburbStreets;
+      }
+      return cached;
+    }
+  } catch {
+    // Redis unavailable — caller will fall back to DB
+  }
+  return null;
+}
+
+export async function setSuburbStreetsInCache(
+  suburb: string,
+  data: CachedSuburbStreets,
+): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(suburbStreetsKey(suburb), JSON.stringify(data), {
+      ex: SUBURB_STREETS_TTL,
+    });
+  } catch {
+    // Non-critical — silently ignore
+  }
+}
+
+export async function deleteSuburbStreetsFromCache(suburb: string): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.del(suburbStreetsKey(suburb));
+  } catch {
+    // Non-critical
+  }
+}
+
+// ─── Street-clusters cache (Today's Run planner) ─────────────────────────────
+// Caches the full GET /api/admin/outreach/street-clusters response for a given
+// combination of suburb + status + sentStatus + reportQuarter + budget.
+// TTL: 30 minutes — short enough to reflect newly liked/pending properties
+// while still eliminating the repeated DB hit during a single planning session.
+
+const STREET_CLUSTERS_TTL = 30 * 60; // 30 minutes in seconds
+
+export function streetClustersKey(
+  suburb: string,
+  status: string,
+  sentStatus: string,
+  reportQuarter: string | null,
+  budget: number,
+): string {
+  const q = reportQuarter ?? 'all';
+  return `street_clusters:${suburb.toLowerCase().trim()}:${status}:${sentStatus}:${q}:${budget}`;
+}
+
+export async function getStreetClustersFromCache<T>(key: string): Promise<T | null> {
+  if (!redis) return null;
+  try {
+    const cached = await redis.get<T>(key);
+    if (cached !== null) {
+      if (typeof cached === 'string') return JSON.parse(cached) as T;
+      return cached;
+    }
+  } catch {
+    // Redis unavailable — fall back to DB
+  }
+  return null;
+}
+
+export async function setStreetClustersInCache(key: string, data: unknown): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(key, JSON.stringify(data), { ex: STREET_CLUSTERS_TTL });
+  } catch {
+    // Non-critical
+  }
+}
+
+/**
+ * Invalidate all street-clusters cache entries for a suburb.
+ * Called after a like/unlike action since pending counts change.
+ *
+ * Strategy: delete the most common key combinations rather than a KEYS scan
+ * (Upstash REST does not support KEYS pattern efficiently).
+ * Covers: status=pending × sentStatus in [all, unsent] × budget in [20, 25, 30, 35, 40, 50]
+ */
+export async function invalidateStreetClustersForSuburb(suburb: string): Promise<void> {
+  if (!redis) return;
+  const statuses = ['pending'];
+  const sentStatuses = ['all', 'unsent'];
+  const budgets = [20, 25, 30, 35, 40, 50];
+
+  const keys: string[] = [];
+  for (const st of statuses) {
+    for (const ss of sentStatuses) {
+      for (const b of budgets) {
+        keys.push(streetClustersKey(suburb, st, ss, null, b));
+      }
+    }
+  }
+
+  try {
+    // Upstash supports multi-key DEL
+    await redis.del(...keys);
+  } catch {
+    // Non-critical
+  }
+}

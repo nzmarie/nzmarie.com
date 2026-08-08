@@ -123,8 +123,10 @@ export async function GET(request: Request) {
 
   const street = searchParams.get('street');
   if (street) {
-    const prefix = `('^[0-9]+[A-Za-z]?([-/][0-9]+[A-Za-z]?)*[[:space:]]+|^[0-9]+[0-9A-Za-z]*[[:space:]]')`;
-    query += ` AND TRIM(REGEXP_REPLACE(REGEXP_REPLACE(RTRIM(REGEXP_REPLACE(p.address, '\\\\d{7,}$', '')), ${prefix}, '', 'g'), ${prefix}, '', 'g')) = $${paramIndex}`;
+    // Use the pre-computed street_name generated column when available (walks the
+    // composite index idx_properties_suburb_street).  Falls back to the legacy
+    // REGEXP expression for rows where the column hasn't been backfilled yet.
+    query += ` AND p.street_name = $${paramIndex}`;
     params.push(street);
     paramIndex++;
   }
@@ -290,9 +292,11 @@ export async function GET(request: Request) {
     query += ` AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false`;
   }
 
-  // Get total count — avoid expensive JOINs when filters only touch properties table
+  // Get total count — avoid expensive JOINs when filters only touch properties table.
+  // Also skip COUNT entirely on pages beyond the first (offset > 0): the frontend
+  // already knows the total from page 1 and just needs the next slice of data.
   let total = 0;
-  if (!skipCount) {
+  if (!skipCount && offset === 0) {
     const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
     let countQuery: string;
     if (needsJoinForCount) {

@@ -51,7 +51,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
       { id: '2', property_address: '2 Test St', suburb: 'Oteha', city: 'Auckland', region: 'Auckland', total_count: '2' },
     ];
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: mockRows } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: mockRows } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '2' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?limit=10&page=1'));
     expect(response.status).toBe(200);
@@ -69,7 +71,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
       { id: '1', property_address: '1 Test St', suburb: 'Oteha', total_count: '1' },
     ];
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: mockRows } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: mockRows } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?view=card&limit=10'));
     expect(response.status).toBe(200);
@@ -81,7 +85,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
   it('filters by sentStatus and suburb with reportQuarter', async () => {
     mockAuth();
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?sent_status=sent&suburb=Oteha&report_quarter=2026-Q2&limit=10'));
     expect(response.status).toBe(200);
@@ -96,7 +102,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
   it('filters by sentStatus=unsent without suburb', async () => {
     mockAuth();
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?sent_status=unsent&limit=10'));
     expect(response.status).toBe(200);
@@ -108,7 +116,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
   it('filters by market_status', async () => {
     mockAuth();
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?market_status=for_sale&limit=10'));
     expect(response.status).toBe(200);
@@ -120,7 +130,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
   it('filters by no_junk_mail', async () => {
     mockAuth();
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?no_junk_mail=true&limit=10'));
     expect(response.status).toBe(200);
@@ -132,7 +144,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
   it('filters sent properties by sent_dates', async () => {
     mockAuth();
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=sent&sent_dates=2026-07-01,2026-07-02&limit=10'));
     expect(response.status).toBe(200);
@@ -148,7 +162,9 @@ describe('Outreach MV GET /api/admin/outreach', () => {
     mockAuth();
     process.env.USE_OUTREACH_MV = 'false';
 
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=sent&sent_dates=2026-07-03&limit=10'));
     expect(response.status).toBe(200);
