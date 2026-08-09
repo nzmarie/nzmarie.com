@@ -101,7 +101,8 @@ const STATUS_COLORS: Record<string, string> = {
   converted: 'bg-green-50 text-green-600 border-green-200',
 };
 
-const PAGE_SIZE = 18;
+const CARD_PAGE_SIZE = 9;
+const LIST_PAGE_SIZE = 18;
 
 function todayDateKey(): string {
   const t = new Date();
@@ -207,6 +208,11 @@ export default function OutreachPage() {
   const [classicItems, setClassicItems] = useState<OutreachProperty[]>([]);
   const [classicPagination, setClassicPagination] = useState<PaginationMeta | null>(null);
   const [classicLoading, setClassicLoading] = useState(false);
+  // Caches the last known valid total so that during a Classic Pages transition
+  // (page change or viewMode switch) where classicPagination briefly holds stale/0
+  // data, totalPages never drops to 0, preventing "Displaying 10 to 0 of 0"
+  // and "Page 2 of 1" display glitches.
+  const lastValidTotalRef = useRef<number>(0);
 
   // Tracks image load failures (e.g. /static/media/no-photo-available.png) so we can
   // fall back to the "No Image Available" placeholder, matching the Properties page.
@@ -303,6 +309,7 @@ export default function OutreachPage() {
   }, [sentStatusFilter]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const pageSize = viewMode === 'card' ? CARD_PAGE_SIZE : LIST_PAGE_SIZE;
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
   const [selectedByTab, setSelectedByTab] = useState<Record<string, Set<string>>>({
     liked: new Set(),
@@ -556,7 +563,12 @@ export default function OutreachPage() {
     }
   }, []);
   const displayPagination = isClassic ? classicPagination : pagination;
-  const totalPages = Math.max(1, Math.ceil((displayPagination?.total || 0) / PAGE_SIZE));
+  const rawDisplayTotal = displayPagination?.total || 0;
+  // Keep the last non-zero total so the display never flickers to "0" during
+  // a Classic Pages fetch transition (e.g. after a page or viewMode change).
+  if (rawDisplayTotal > 0) lastValidTotalRef.current = rawDisplayTotal;
+  const stableDisplayTotal = rawDisplayTotal > 0 ? rawDisplayTotal : lastValidTotalRef.current;
+  const totalPages = Math.max(1, Math.ceil(stableDisplayTotal / pageSize));
   const availableStreets = useMemo(() => {
     const streets = new Set<string>();
     displayItems.forEach(item => {
@@ -619,9 +631,10 @@ export default function OutreachPage() {
       reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
       sentDateFilter.join(','),
       likedStreetModeApplied ? `start:${likedStartStreet}` : '',
+      `v:${pageSize}`,
       `p${page}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
@@ -645,7 +658,7 @@ export default function OutreachPage() {
     const effectiveLimit =
       activeTab === 'liked' && likedStreetModeApplied ? 1000
         : runStreetFilter.length > 0 ? 500
-          : PAGE_SIZE;
+          : pageSize;
 
     const params = new URLSearchParams({
       status: activeTab,
@@ -699,7 +712,7 @@ export default function OutreachPage() {
       pagination: data.pagination ?? null,
       effectiveLimit,
     };
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -759,7 +772,7 @@ export default function OutreachPage() {
   useEffect(() => {
     if (status !== 'authenticated' || debouncedFilterKey === 0) return;
     fetchItems();
-  }, [debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedFilterKey, status, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isClassic || status !== 'authenticated') return;
@@ -795,7 +808,11 @@ export default function OutreachPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isClassic, currentPage, debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isClassic, currentPage, debouncedFilterKey, status, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [paginationMode, viewMode]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current) return;
@@ -2231,7 +2248,7 @@ export default function OutreachPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
           {isClassic && !(likedStreetModeApplied && likedSelectedStreet)
-            ? `Displaying ${Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)} to ${Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of ${displayPagination?.total || 0} properties`
+            ? `Displaying ${Math.max(1, (currentPage - 1) * pageSize + 1)} to ${Math.min(currentPage * pageSize, stableDisplayTotal)} of ${stableDisplayTotal} properties`
             : `Displaying 1 to ${likedStreetDisplayCount} of ${likedStreetTotalCount} properties`}
         </span>
         <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
@@ -3165,7 +3182,7 @@ export default function OutreachPage() {
           {isClassic && displayItems.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
               <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-                {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+                {Math.max(1, (currentPage - 1) * pageSize + 1)}–{Math.min(currentPage * pageSize, stableDisplayTotal)} of {stableDisplayTotal}
               </span>
               <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
               <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
@@ -3520,7 +3537,7 @@ export default function OutreachPage() {
       {isClassic && displayItems.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
           <span style={{ fontSize: "0.85rem", color: "#4a5568" }}>
-            {Math.max(1, (currentPage - 1) * PAGE_SIZE + 1)}–{Math.min(currentPage * PAGE_SIZE, displayPagination?.total || 0)} of {displayPagination?.total || 0}
+            {Math.max(1, (currentPage - 1) * pageSize + 1)}–{Math.min(currentPage * pageSize, stableDisplayTotal)} of {stableDisplayTotal}
           </span>
           <span style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>|</span>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)} style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
@@ -3563,7 +3580,7 @@ export default function OutreachPage() {
           gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
           gap: viewMode === 'card' ? '20px' : '0',
         }}>
-          {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+          {Array.from({ length: pageSize }).map((_, i) => (
             viewMode === 'card' ? (
               <SkeletonOutreachCard key={`skel-${i}`} />
             ) : (

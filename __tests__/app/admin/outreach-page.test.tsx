@@ -37,6 +37,16 @@ vi.mock('@/lib/geo-data', () => ({
   getAllSuburbs: () => ['Takapuna'],
 }));
 
+const mockObserve = vi.fn();
+const mockDisconnect = vi.fn();
+class MockIntersectionObserver {
+  observe = mockObserve;
+  unobserve = vi.fn();
+  disconnect = mockDisconnect;
+  constructor(_cb: (entries: IntersectionObserverEntry[]) => void, _opts?: IntersectionObserverInit) {}
+}
+globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+
 describe('Outreach page', () => {
   beforeEach(() => {
     mockPush.mockReset();
@@ -352,7 +362,7 @@ describe('Outreach page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/Displaying 1 to 9 of 45 properties/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -1300,6 +1310,134 @@ describe('Outreach page - Card view run ordering', () => {
           expect(restored.value).toBe('Golf Avenue');
         });
       });
+    });
+  });
+});
+
+describe('Outreach page - pagination size by view mode', () => {
+  const outreachItem = (i: number) => ({
+    id: `liked-${i}`,
+    property_address: `5 Alpha Road`,
+    suburb: 'Oteha',
+    city: 'Auckland',
+    region: 'North Shore',
+    status: 'liked',
+    created_at: '2026-07-01T10:00:00Z',
+    image_url: '/static/media/no-photo-available.png',
+    no_junk_mail: false,
+    joined_property_id: `prop-${i}`,
+    build_year: 1990,
+  });
+
+  const limitAwareFetch = () => {
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.startsWith('/api/admin/outreach?') && s.includes('status=liked')) {
+        const parsed = new URL(s, 'http://localhost');
+        const limit = Number(parsed.searchParams.get('limit') || '0');
+        const total = 45;
+        const data = Array.from({ length: Math.min(limit, total) }, (_, i) => outreachItem(i));
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data,
+            pagination: { page: 1, limit, total, totalPages: Math.ceil(total / limit) },
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/liked-streets')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, all_streets: [], ordered_streets: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/like')) {
+        return Promise.resolve({ ok: true, json: async () => ({ liked_ids: [] }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
+      });
+    });
+  };
+
+  const outreachListUrls = () =>
+    (global.fetch as any).mock.calls
+      .map((c: any[]) => String(c[0] || ''))
+      .filter((u: string) => u.includes('/api/admin/outreach?'));
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    limitAwareFetch();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('requests 9 properties per page in card view', async () => {
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      const urls = outreachListUrls();
+      expect(urls.some((u: string) => u.includes('limit=9'))).toBe(true);
+      expect(urls.every((u: string) => !u.includes('limit=18'))).toBe(true);
+    });
+  });
+
+  it('requests 18 properties per page after switching to list view', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /☰ List/i }));
+
+    await waitFor(() => {
+      const urls = outreachListUrls();
+      expect(urls.some((u: string) => u.includes('limit=18'))).toBe(true);
+    });
+  });
+
+  it('shows 9 per page in card classic mode and 18 after switching to list', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 9 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /☰ List/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('resets classic page to 1 when switching from card to list', async () => {
+    render(<OutreachPage />);
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      expect(screen.getAllByText('1–9 of 45').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Move to page 2 in card classic mode.
+    fireEvent.click(screen.getAllByText('›')[0]);
+    await waitFor(() => {
+      expect(screen.getAllByText(/1[0-9]–18 of 45/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Switching to list resets to page 1 and uses the 18-per-page footer.
+    fireEvent.click(screen.getByRole('button', { name: /☰ List/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText('1–18 of 45').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

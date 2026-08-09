@@ -997,7 +997,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Displaying 1 to 18 of 45 properties/)).toBeDefined();
+      expect(screen.getByText(/Displaying 1 to 9 of 45 properties/)).toBeDefined();
     });
   });
 
@@ -1014,7 +1014,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getByText('1–18 of 45')).toBeDefined();
+      expect(screen.getByText('1–9 of 45')).toBeDefined();
     });
   });
 
@@ -1031,7 +1031,7 @@ describe('Properties Page - Dual Pagination Mode', () => {
     fireEvent.click(screen.getByText('Classic Pages'));
 
     await waitFor(() => {
-      expect(screen.getAllByText('Loading Property Card').length).toBe(18);
+      expect(screen.getAllByText('Loading Property Card').length).toBe(9);
     });
   });
 
@@ -1529,6 +1529,170 @@ describe('Properties Page — Address Search Resets Filters', () => {
       );
       expect(postCall).toBeDefined();
       expect(JSON.parse(postCall[1].body)).toEqual({ suburb: 'Northcross', start: 'Marine Parade' });
+    });
+  });
+});
+
+describe('Properties Page - pagination size by view mode', () => {
+  // Makes /api/admin/properties return exactly `limit` properties so page count
+  // and per-page behaviour mirror the real server.
+  const limitAwareFetch = () => {
+    (global.fetch as any).mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.startsWith('/api/admin/properties?')) {
+        const parsed = new URL(url, 'http://localhost');
+        const limit = Number(parsed.searchParams.get('limit') || '0');
+        const total = 45;
+        const properties = Array.from({ length: Math.min(limit, total) }, (_, i) => ({
+          ...defaultProperties[0],
+          id: `page-prop-${i}`,
+        }));
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            properties,
+            total: 45,
+            pagination: { page: 1, limit, total, totalPages: Math.ceil(total / limit) },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ liked_ids: [] }) });
+    });
+  };
+
+  const captureQueryOptions = () => {
+    const captured: { infinite: any[]; classic: any[] } = { infinite: [], classic: [] };
+    mockUseInfiniteQuery.mockImplementation((...args: any[]) => {
+      captured.infinite.push(args[0]);
+      const opts = args[0] || {};
+      if (typeof opts.queryFn === 'function') void opts.queryFn({ pageParam: 1 });
+      return {
+        data: { pages: [] },
+        isLoading: false,
+        isFetchingNextPage: false,
+        hasNextPage: false,
+        fetchNextPage: vi.fn(),
+      };
+    });
+    mockUseQuery.mockImplementation((...args: any[]) => {
+      captured.classic.push(args[0]);
+      const opts = args[0] || {};
+      if (typeof opts.queryFn === 'function') void opts.queryFn();
+      return { data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false };
+    });
+    return captured;
+  };
+
+  const pagesOf = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ ...defaultProperties[0], id: `p${i}` }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('requests limit=9 from the API in card mode (classic + infinite)', async () => {
+    limitAwareFetch();
+    const captured = captureQueryOptions();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      const urls = (global.fetch as any).mock.calls.map((c: any[]) => String(c[0]));
+      const listQuery = urls.find((u: string) => u.startsWith('/api/admin/properties?'));
+      expect(listQuery).toBeDefined();
+      expect(listQuery).toContain('limit=9');
+      expect(listQuery).not.toContain('limit=18');
+    });
+
+    // getNextPageParam uses the card page size (9): a full 9-item page continues.
+    const infiniteOpts = captured.infinite[captured.infinite.length - 1] || {};
+    expect(typeof infiniteOpts.getNextPageParam).toBe('function');
+    const page = { properties: pagesOf(9), total: 45 };
+    expect(infiniteOpts.getNextPageParam(page, [page])).toBe(2);
+    // A short page (e.g. the last one) stops the infinite scroll.
+    const lastPage = { properties: pagesOf(5), total: 45 };
+    expect(infiniteOpts.getNextPageParam(lastPage, [lastPage])).toBeUndefined();
+  });
+
+  it('requests limit=18 from the API after switching to list view', async () => {
+    limitAwareFetch();
+    captureQueryOptions();
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('List'));
+
+    await waitFor(() => {
+      const urls = (global.fetch as any).mock.calls.map((c: any[]) => String(c[0]));
+      expect(urls.some((u: string) => u.startsWith('/api/admin/properties?') && u.includes('limit=18'))).toBe(true);
+    });
+  });
+
+  it('shows 9 per page in card classic mode and 18 after switching to list', async () => {
+    mockUseInfiniteQuery.mockImplementation(() => ({
+      data: undefined as never,
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+    }));
+    mockUseQuery.mockImplementation(() => ({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    }));
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      expect(screen.getByText('1–9 of 45')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('List'));
+    await waitFor(() => {
+      expect(screen.getByText('1–18 of 45')).toBeDefined();
+    });
+  });
+
+  it('resets classic pagination to page 1 when the view mode changes', async () => {
+    mockUseInfiniteQuery.mockImplementation(() => ({
+      data: undefined as never,
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+    }));
+    mockUseQuery.mockImplementation(() => ({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    }));
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+    await waitFor(() => {
+      expect(screen.getByText('1–9 of 45')).toBeDefined();
+    });
+
+    // Navigate to page 2 in card classic mode.
+    fireEvent.click(screen.getAllByText('›')[0]);
+    await waitFor(() => {
+      expect(screen.getByText('10–18 of 45')).toBeDefined();
+    });
+
+    // Switching to list resets to page 1 (and uses the 18-per-page footer).
+    fireEvent.click(screen.getByText('List'));
+    await waitFor(() => {
+      expect(screen.getByText('1–18 of 45')).toBeDefined();
+      expect(screen.queryByText('10–18 of 45')).toBeNull();
     });
   });
 });
