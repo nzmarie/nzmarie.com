@@ -233,7 +233,7 @@ export default function OutreachPage() {
   const [runStreetFilter, setRunStreetFilter] = useState<string[]>([]);
   const [campaignFilter, setCampaignFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [lastSoldPreset, setLastSoldPreset] = useState('5-15');
+  const [lastSoldPreset, setLastSoldPreset] = useState('all');
   const [propertyFilter, setPropertyFilter] = useState<'house' | 'all' | 'townhouse'>('all');
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
   const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
@@ -1399,6 +1399,7 @@ export default function OutreachPage() {
               sentStatusFilter={sentStatusFilter}
               setSentStatusFilter={setSentStatusFilter}
               setSuburbFilter={setSuburbFilter}
+              setLastSoldPreset={setLastSoldPreset}
               onClearRunFilter={() => {
                 setRunStreetFilter([]);
                 setStreetFilter('');
@@ -3831,6 +3832,7 @@ function ReportFilterSection({
   reportQuarterFilter, setReportQuarterFilter,
   sentStatusFilter, setSentStatusFilter,
   setSuburbFilter,
+  setLastSoldPreset,
   onClearRunFilter,
 }: {
   availableReports: Array<{ suburb: string; quarter: string; year: number; id: string }>;
@@ -3842,6 +3844,7 @@ function ReportFilterSection({
   sentStatusFilter: 'all' | 'sent' | 'unsent';
   setSentStatusFilter: React.Dispatch<React.SetStateAction<'all' | 'sent' | 'unsent'>>;
   setSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
+  setLastSoldPreset: React.Dispatch<React.SetStateAction<string>>;
   onClearRunFilter: () => void;
 }) {
   const [loaded, setLoaded] = useState(availableReports.length > 0);
@@ -3852,6 +3855,9 @@ function ReportFilterSection({
 
     // Optimistic: apply the default report as soon as it arrives (parallel
     // with the report list) so the list + "Displaying" data load immediately.
+    // The default report represents a fixed set of addresses, so the Last Sold
+    // preset (e.g. the "5-15 years" default) must be reset to "All" to avoid
+    // silently hiding properties that fall outside the preset's range.
     let optimisticDefault: { suburb: string; label: string } | null = null;
     const applyDefault = async () => {
       try {
@@ -3865,6 +3871,7 @@ function ReportFilterSection({
             setSuburbFilter(suburb);
             setReportSuburbFilter(suburb);
             setReportQuarterFilter(label);
+            setLastSoldPreset('all');
           }
         }
       } catch { /* ignore */ }
@@ -3899,7 +3906,7 @@ function ReportFilterSection({
 
     await Promise.all([applyDefault(), loadList()]);
     setLoading(false);
-  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter]);
+  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter, setLastSoldPreset]);
 
   const initRef = useRef(false);
   useEffect(() => {

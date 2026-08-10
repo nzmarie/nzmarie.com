@@ -1442,3 +1442,162 @@ describe('Outreach page - pagination size by view mode', () => {
   });
 });
 
+describe('Outreach page - Last Sold resets to All when default report applies', () => {
+  const records = [
+    {
+      id: 'out-1',
+      property_address: '15 Marine Parade',
+      suburb: 'Oteha',
+      city: 'Auckland',
+      region: 'North Shore',
+      status: 'PENDING',
+      created_at: '2026-07-01T10:00:00Z',
+    },
+  ];
+
+  const filterPanel = () => screen.getByText('Search Filters').parentElement!.parentElement as HTMLElement;
+  const lastSoldScope = () => within(within(filterPanel()).getByText('Last Sold').closest('div') as HTMLElement);
+  const outreachListUrls = () =>
+    (global.fetch as any).mock.calls
+      .map((c: any[]) => String(c[0] || ''))
+      .filter((u: string) => u.includes('/api/admin/outreach?') && u.includes('status=pending'));
+
+  function defaultReportFetch(calls: string[]) {
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      calls.push(s);
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, defaultReport: { suburb: 'Oteha', label: '2026-Q2' } }),
+        });
+      }
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            reports: [{ suburb: 'Oteha', quarter: 'Q2', year: 2026, id: 'r1' }],
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: records,
+            pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+  }
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('defaults Last Sold to All when first entering the page (Liked tab)', async () => {
+    defaultReportFetch([]);
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      const allBtn = lastSoldScope().getByRole('button', { name: 'All' });
+      expect(allBtn.style.backgroundColor).not.toBe('white');
+    });
+    // The old "5-15 years" default preset is no longer pre-selected.
+    const presetBtn = lastSoldScope().getByRole('button', { name: '★ 5-15 years' });
+    expect(presetBtn.style.backgroundColor).toBe('white');
+  });
+
+  it('does not send last_sold query params on the initial Liked request', async () => {
+    const calls: string[] = [];
+    defaultReportFetch(calls);
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      const likedUrls = calls.filter(
+        (c) => c.includes('/api/admin/outreach?') && c.includes('status=liked')
+      );
+      expect(likedUrls.length).toBeGreaterThan(0);
+      for (const url of likedUrls) {
+        expect(url).not.toContain('last_sold_min_years');
+        expect(url).not.toContain('last_sold_max_years');
+      }
+    }, { timeout: 3000 });
+  });
+
+  it('resets Last Sold to All after clicking Pending and the default report auto-applies', async () => {
+    defaultReportFetch([]);
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Oteha ★' })).toBeTruthy();
+    }, { timeout: 3000 });
+
+    await waitFor(() => {
+      const allBtn = lastSoldScope().getByRole('button', { name: 'All' });
+      expect(allBtn.style.backgroundColor).not.toBe('white');
+    }, { timeout: 3000 });
+
+    // The old preset is no longer highlighted.
+    const presetBtn = lastSoldScope().getByRole('button', { name: '★ 5-15 years' });
+    expect(presetBtn.style.backgroundColor).toBe('white');
+  });
+
+  it('omits last_sold query params from the Pending list request once the default report applies', async () => {
+    const calls: string[] = [];
+    defaultReportFetch(calls);
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    await waitFor(() => {
+      const urls = outreachListUrls();
+      expect(urls.length).toBeGreaterThan(0);
+      const last = urls[urls.length - 1];
+      expect(last).toContain('status=pending');
+      expect(last).not.toContain('last_sold_min_years');
+      expect(last).not.toContain('last_sold_max_years');
+    }, { timeout: 3000 });
+  });
+
+  it('does not reset Property Type or Market Status when the default report applies', async () => {
+    defaultReportFetch([]);
+    render(<OutreachPage />);
+
+    const propTypeScope = () => within(within(filterPanel()).getByText('Property Type').closest('div') as HTMLElement);
+    const marketScope = () => within(within(filterPanel()).getByText('Market Status').closest('div') as HTMLElement);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Oteha ★' })).toBeTruthy();
+    }, { timeout: 3000 });
+
+    // Only Last Sold is touched — Property Type and Market Status keep their values (All).
+    await waitFor(() => {
+      expect(propTypeScope().getByRole('button', { name: 'All' }).style.backgroundColor).not.toBe('white');
+    }, { timeout: 3000 });
+    expect(marketScope().getByRole('button', { name: 'All' }).style.backgroundColor).not.toBe('white');
+    expect(propTypeScope().getByRole('button', { name: 'House' }).style.backgroundColor).toBe('white');
+  });
+});
+
