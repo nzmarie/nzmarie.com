@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider, Map as GoogleMap, useMap } from '@vis.gl/react-google-maps';
-import OutreachMapToolbar from './OutreachMapToolbar';
 import {
   statusColor,
   type AddressStatus,
@@ -127,7 +126,6 @@ function NativeMarkerManager({
 
       const runIndex = street.runId ?? 1;
       const isSelected = selectedStreet === street.street;
-      const isActive = isSelected || (activeRunId != null && runIndex === activeRunId);
 
       let anchorColor: string;
       if (statusFilter === 'sent') {
@@ -225,30 +223,18 @@ function MapInner({
   coordsData,
   activeRunId,
   selectedStreet,
-  isFullscreen,
-  showRunNumbers,
-  onFitAll,
-  onFitRun,
-  onToggleFullscreen,
   onStreetSelect,
   onMapLoad,
   error,
   statusFilter,
-  onStatusFilterChange,
 }: {
   coordsData: ClusterPayload | null;
   activeRunId: number | null;
   selectedStreet: string | null;
-  isFullscreen: boolean;
-  showRunNumbers: boolean;
-  onFitAll: () => void;
-  onFitRun: (runId: number) => void;
-  onToggleFullscreen: () => void;
   onStreetSelect: (suburb: string, street: string) => void;
   onMapLoad: (map: google.maps.Map) => void;
   error: string | null;
   statusFilter: 'all' | 'unsent' | 'sent' | 'junk';
-  onStatusFilterChange: (status: 'all' | 'unsent' | 'sent' | 'junk') => void;
 }) {
   const map = useMap();
 
@@ -266,16 +252,6 @@ function MapInner({
         }}>
           {error}
         </div>
-      )}
-
-      {coordsData && (
-        <OutreachMapToolbar
-          onFitAll={onFitAll}
-          runs={coordsData.runs ?? []}
-          activeRunId={activeRunId}
-          onRunSelect={onFitRun}
-          showRunNumbers={showRunNumbers}
-        />
       )}
 
       {coordsData && (
@@ -334,23 +310,13 @@ export default function OutreachMapView({
   onStreetSelect,
   onCoordsLoaded,
   statusFilter: externalStatusFilter = 'all',
-  onStatusFilterChange,
 }: OutreachMapViewProps) {
   const [coordsData, setCoordsData] = useState<ClusterPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [localStatusFilter, setLocalStatusFilter] = useState<'all' | 'unsent' | 'sent' | 'junk'>('all');
   const mapRef = useRef<google.maps.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const statusFilter = externalStatusFilter;
-  const handleStatusFilterChange = (status: 'all' | 'unsent' | 'sent' | 'junk') => {
-    if (onStatusFilterChange) {
-      onStatusFilterChange(status);
-    } else {
-      setLocalStatusFilter(status);
-    }
-  };
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -441,27 +407,6 @@ export default function OutreachMapView({
     });
   }, []);
 
-  const fitRun = useCallback((runId: number) => {
-    onRunSelect(runId);
-    if (!coordsData) return;
-    const pts: { lat: number; lng: number }[] = [];
-    for (const g of coordsData.groups ?? []) {
-      for (const s of g.streets ?? []) {
-        if (s.runId !== runId) continue;
-        if (s.anchorLat != null && s.anchorLng != null) pts.push({ lat: s.anchorLat, lng: s.anchorLng });
-        for (const a of s.addressCoords ?? []) {
-          if (a.lat != null && a.lng != null) pts.push({ lat: a.lat, lng: a.lng });
-        }
-      }
-    }
-    if (pts.length > 0) {
-      fitToBounds(pts);
-      google.maps.event.addListenerOnce(mapRef.current!, 'idle', () => {
-        const z = mapRef.current?.getZoom();
-        if (z != null && z < 13) mapRef.current?.setZoom(13);
-      });
-    }
-  }, [coordsData, fitToBounds, onRunSelect]);
 
   const lastFittedRunRef = useRef<number | null>(null);
   useEffect(() => {
@@ -519,19 +464,6 @@ export default function OutreachMapView({
     if (mapRef.current && allPoints.length > 0) fitToBounds(allPoints);
   }, [allPoints, fitToBounds]);
 
-  const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) el.requestFullscreen().catch(() => { });
-    else document.exitFullscreen().catch(() => { });
-  }, []);
-
-  useEffect(() => {
-    const h = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', h);
-    return () => document.removeEventListener('fullscreenchange', h);
-  }, []);
-
   if (!suburb) return (
     <div style={{ height: '100%', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', background: '#f8fafc', borderRadius: 12 }}>
       Select a report to view the delivery map.
@@ -550,15 +482,10 @@ export default function OutreachMapView({
           coordsData={coordsData}
           activeRunId={activeRunId}
           selectedStreet={selectedStreet ?? null}
-          isFullscreen={isFullscreen}
-          showRunNumbers={!!reportQuarter} onFitAll={() => fitToBounds(allPoints)}
-          onFitRun={fitRun}
-          onToggleFullscreen={toggleFullscreen}
           onStreetSelect={onStreetSelect}
           onMapLoad={handleMapLoad}
           error={error}
           statusFilter={statusFilter}
-          onStatusFilterChange={handleStatusFilterChange}
         />
       </div>
     </APIProvider>

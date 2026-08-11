@@ -216,7 +216,7 @@ describe('OutreachMapView', () => {
     });
   });
 
-  it('renders run pills in the toolbar with pending counts', async () => {
+  it('renders map canvas and status legend', async () => {
     installMockMap();
     const fetchMock = vi.fn(async () => {
       return {
@@ -240,9 +240,8 @@ describe('OutreachMapView', () => {
       />
     );
 
-    expect(await screen.findByText('● Run 1 (12)')).toBeTruthy();
-    expect(screen.getByText('● Run 2 (8)')).toBeTruthy();
-    expect(screen.getByTitle('Fit all addresses')).toBeTruthy();
+    expect(await screen.findByTestId('map-canvas')).toBeTruthy();
+    expect(screen.getByText('Unsent')).toBeTruthy();
   });
 
   it('shows an inline error when the coords request fails', async () => {

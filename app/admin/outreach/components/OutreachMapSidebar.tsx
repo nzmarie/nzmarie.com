@@ -35,8 +35,6 @@ export default function OutreachMapSidebar({
   onRunSelect,
   hidden,
   onToggleHidden,
-  streetStatusMap,
-  addressCounts,
   statusFilter = 'all',
   onStatusFilterChange,
 }: OutreachMapSidebarProps) {
