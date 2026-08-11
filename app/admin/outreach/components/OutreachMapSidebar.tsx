@@ -51,12 +51,24 @@ export default function OutreachMapSidebar({
 
   if (hidden) {
     return (
-      <div style={{ padding: 12 }}>
+      <div style={{ padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <button
+          aria-label="Show Sidebar"
           onClick={onToggleHidden}
-          style={{ padding: '6px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.85rem' }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1rem',
+          }}
         >
-          ⏩ Show Sidebar
+          ⏩
         </button>
       </div>
     );

@@ -321,10 +321,7 @@ export default function OutreachPage() {
   const [activeMapRunId, setActiveMapRunId] = useState<number | null>(null);
   const [activeMapStreet, setActiveMapStreet] = useState<string | null>(null);
   const [mapStatusFilter, setMapStatusFilter] = useState<'all' | 'unsent' | 'sent' | 'junk'>('all');
-  const [mapSidebarHidden, setMapSidebarHidden] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('outreach_map_sidebar_hidden') === '1';
-  });
+  const [mapSidebarHidden, setMapSidebarHidden] = useState<boolean>(false);
   const [mapStreetStatusMap, setMapStreetStatusMap] = useState<Map<string, 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending'>>(new Map());
   const [mapAddressCounts, setMapAddressCounts] = useState<{ total: number; unsent: number; sent: number; junk: number } | null>(null);
   const handleMapCoordsLoaded = useCallback((
