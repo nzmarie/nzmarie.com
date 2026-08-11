@@ -306,7 +306,6 @@ export default function OutreachMapView({
   selectedStreet,
   sentStatus,
   reportQuarter,
-  onRunSelect,
   onStreetSelect,
   onCoordsLoaded,
   statusFilter: externalStatusFilter = 'all',

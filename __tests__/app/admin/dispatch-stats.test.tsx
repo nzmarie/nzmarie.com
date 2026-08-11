@@ -360,6 +360,7 @@ describe('DispatchStatsPanel', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Campaign Overview — 100 Addresses')).toBeTruthy();
+      expect(screen.getByText('Unsent')).toBeTruthy();
     });
   });
 

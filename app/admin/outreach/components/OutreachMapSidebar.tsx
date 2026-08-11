@@ -14,6 +14,7 @@ interface OutreachMapSidebarProps {
   onToggleStreet: (suburb: string, street: string) => void;
   onStreetSelect: (suburb: string, street: string) => void;
   onRunSelect: (runId: number) => void;
+  onSuburbClick?: (suburb: string) => void;
   hidden: boolean;
   onToggleHidden: () => void;
   streetStatusMap?: Map<string, StreetStatus>;
@@ -33,9 +34,11 @@ export default function OutreachMapSidebar({
   onToggleStreet,
   onStreetSelect,
   onRunSelect,
+  onSuburbClick,
   hidden,
   onToggleHidden,
   statusFilter = 'all',
+  addressCounts = null,
   onStatusFilterChange,
 }: OutreachMapSidebarProps) {
   const [revealedRuns, setRevealedRuns] = useState<Set<number>>(new Set());
@@ -55,6 +58,14 @@ export default function OutreachMapSidebar({
         >
           ⏩ Show Sidebar
         </button>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={{ padding: 12, fontSize: '0.9rem', color: '#334155' }}>
+        {loading ? 'Loading outreach summary…' : error ? error : 'No outreach data available.'}
       </div>
     );
   }
@@ -115,27 +126,52 @@ export default function OutreachMapSidebar({
     return info.totalCount > 0;
   };
 
-  let totalFilteredCount = 0;
   let matchingStreetsCount = 0;
-  let matchingRunsCount = 0;
 
   if (data?.runs) {
     for (const r of data.runs) {
-      let runHasMatch = false;
       for (const g of r.groups) {
         for (const s of g.streets) {
           if (isStreetMatching(s.street)) {
-            runHasMatch = true;
             matchingStreetsCount++;
-            totalFilteredCount += getStreetFilterCount(s.street);
           }
         }
       }
-      if (runHasMatch) matchingRunsCount++;
     }
   }
 
-  const statusText = statusFilter === 'unsent' ? 'pending' : statusFilter === 'sent' ? 'sent' : statusFilter === 'junk' ? 'junk' : 'pending';
+  const countFallback = {
+    total: 0,
+    unsent: 0,
+    sent: 0,
+    junk: 0,
+  };
+  for (const { unsentCount, sentCount, junkCount, totalCount } of allStreetsMap.values()) {
+    countFallback.total += totalCount;
+    countFallback.unsent += unsentCount;
+    countFallback.sent += sentCount;
+    countFallback.junk += junkCount;
+  }
+
+  const effectiveCounts = addressCounts ?? countFallback;
+  const statusCount = statusFilter === 'unsent'
+    ? effectiveCounts.unsent
+    : statusFilter === 'sent'
+      ? effectiveCounts.sent
+      : statusFilter === 'junk'
+        ? effectiveCounts.junk
+        : effectiveCounts.total;
+  const percent = effectiveCounts.total > 0
+    ? `${((statusCount / effectiveCounts.total) * 100).toFixed(1)}%`
+    : '0.0%';
+
+  const summaryText = statusFilter === 'all'
+    ? `${effectiveCounts.total} pending · ${effectiveCounts.unsent} Unsent · ${effectiveCounts.sent} Sent`
+    : statusFilter === 'unsent'
+      ? `${effectiveCounts.unsent} Unsent · ${percent}`
+      : statusFilter === 'sent'
+        ? `${effectiveCounts.sent} Sent · ${percent}`
+        : `${effectiveCounts.junk} Junk · ${percent}`;
 
   return (
     <div style={{ padding: 12, fontSize: '0.9rem' }}>
@@ -166,6 +202,39 @@ export default function OutreachMapSidebar({
         })}
       </div>
 
+      {data && (
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+          <button
+            onClick={() => {
+              onStatusFilterChange?.('all');
+              onSuburbClick?.(data.suburb);
+            }}
+            style={{
+              cursor: 'pointer',
+              border: '1px solid #cbd5e1',
+              borderRadius: 8,
+              padding: '6px 10px',
+              background: '#f8fafc',
+              color: '#1e293b',
+              fontWeight: 600,
+              fontSize: '0.88rem',
+            }}
+          >
+            {data.suburb}
+          </button>
+          <div style={{ color: '#334155', fontSize: '0.9rem', lineHeight: '1.3', flex: 1 }}>
+            {summaryText}
+          </div>
+          <button
+            onClick={onToggleHidden}
+            title="Hide Sidebar"
+            style={{ padding: '4px 8px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            ⏪
+          </button>
+        </div>
+      )}
+
       {loading && !data && (
         <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading streets…</div>
       )}
@@ -176,19 +245,6 @@ export default function OutreachMapSidebar({
 
       {data && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ color: '#374151', fontSize: '0.85rem' }}>
-              <strong>{data.suburb}</strong> · {totalFilteredCount} {statusText} · {matchingStreetsCount} streets · {matchingRunsCount} {matchingRunsCount === 1 ? 'run' : 'runs'}
-            </div>
-            <button
-              onClick={onToggleHidden}
-              title="Hide Sidebar"
-              style={{ padding: '4px 8px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.8rem' }}
-            >
-              ⏪
-            </button>
-          </div>
-
           {data.unclusteredStreets.length > 0 && (
             <div style={{ marginBottom: 8, color: '#d97706', fontSize: '0.8rem' }}>
               ⚠ {data.unclusteredStreets.length} {data.unclusteredStreets.length === 1 ? 'street' : 'streets'} missing coordinates (not located)
@@ -220,6 +276,11 @@ export default function OutreachMapSidebar({
                       const next = new Set(prev);
                       if (next.has(run.runId)) next.delete(run.runId);
                       else next.add(run.runId);
+                      return next;
+                    });
+                    setRevealedRuns((prev) => {
+                      const next = new Set(prev);
+                      next.add(run.runId);
                       return next;
                     });
                   }}
@@ -304,7 +365,7 @@ export default function OutreachMapSidebar({
             );
           })}
 
-          {data.runs.length > 3 && Array.from(data.runs.keys()).some((i) => !revealedRuns.has(i + 1) && i + 1 > 3) && (
+          {data.runs.length > 3 && data.runs.slice(3).some((run) => !revealedRuns.has(run.runId)) && (
             <button
               onClick={() =>
                 setRevealedRuns((prev) => {

@@ -111,6 +111,7 @@ describe('Outreach MV GET /api/admin/outreach', () => {
 
     const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
     expect(queryCall).toContain('NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3');
+    expect(queryCall).toContain('(no_junk_mail IS NULL OR no_junk_mail = false)');
   });
 
   it('filters by market_status', async () => {

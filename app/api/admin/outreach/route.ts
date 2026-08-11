@@ -187,6 +187,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     } else {
       conditions.push('NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id)');
     }
+    conditions.push('(no_junk_mail IS NULL OR no_junk_mail = false)');
   }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';

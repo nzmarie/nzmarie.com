@@ -86,7 +86,7 @@ function SummaryCards({ summary, bizPv, bizUv }: { summary: Summary; bizPv: numb
   );
 }
 
-const PIE_COLORS = ['#16A34A', '#DC2626', '#F59E0B'];
+const PIE_COLORS = ['#DC2626', '#7C3AED', '#EAB308'];
 
 function PieChartLegend({ pieData, total }: { pieData: { name: string; value: number }[]; total: number }) {
   return (
@@ -115,9 +115,9 @@ function CampaignOverview({ summary }: { summary: Summary }) {
   const remaining = summary.remaining_count ?? summary.pending_count - summary.sent_count - summary.no_junk_mail_count;
 
   const pieData = [
+    { name: 'Unsent', value: remaining },
     { name: 'Sent', value: summary.sent_count },
     { name: 'No Junk Mail', value: summary.no_junk_mail_count },
-    { name: 'Remaining', value: remaining },
   ].filter(d => d.value > 0);
 
   return (
@@ -157,7 +157,7 @@ function DailySendChart({ data, noJunkTotal }: { data: DailySend[]; noJunkTotal:
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-700">Daily Dispatch Volume</h3>
         {noJunkTotal > 0 && (
-          <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full">
+          <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2.5 py-1 rounded-full">
             No Junk Mail: {noJunkTotal}
           </span>
         )}
@@ -183,9 +183,9 @@ function DailySendChart({ data, noJunkTotal }: { data: DailySend[]; noJunkTotal:
             }
             return <span style={{ color, fontWeight: weight, fontSize: '0.875rem' }}>{value}</span>;
           }} />
-              <Bar dataKey="total_sent" name="Total Sent" fill="#2563EB" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="total_sent" name="Sent" fill="#7C3AED" radius={[4, 4, 0, 0]} />
               {noJunkTotal > 0 && (
-                <Bar dataKey="no_junk_sent" name="No Junk Mail" fill="#DC2626" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="no_junk_sent" name="No Junk Mail" fill="#EAB308" radius={[4, 4, 0, 0]} />
               )}
             </BarChart>
           </ResponsiveContainer>

@@ -1153,7 +1153,7 @@ export default function OutreachPage() {
       radius: '500',
       budget: String(todayRunBudget),
       status: 'pending',
-      sent_status: viewMode === 'map' ? 'all' : 'unsent',
+      sent_status: 'unsent',
       address_coords: viewMode === 'map' ? 'true' : 'false',
     });
     if (effectiveStartStreet) {
@@ -3288,6 +3288,12 @@ export default function OutreachPage() {
                 addressCounts={mapAddressCounts}
                 statusFilter={mapStatusFilter}
                 onStatusFilterChange={setMapStatusFilter}
+                onSuburbClick={(suburb) => {
+                  setMapStatusFilter('all');
+                  setActiveMapStreet(null);
+                  setActiveMapRunId(null);
+                  setReportSuburbFilter(suburb);
+                }}
               />
             </div>
           )}

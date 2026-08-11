@@ -33,6 +33,14 @@ export function buildOutreachFilter(opts: OutreachFilterOptions): OutreachFilter
       }
     }
     sql += ` AND ${exists} (${sub})`;
+    if (opts.sentStatus === 'unsent') {
+      sql += ` AND NOT EXISTS (
+        SELECT 1
+        FROM properties p2
+        WHERE REPLACE(op.property_id::text, '-', '') = p2.id
+          AND p2.no_junk_mail = true
+      )`;
+    }
   }
   return { sql, params };
 }
