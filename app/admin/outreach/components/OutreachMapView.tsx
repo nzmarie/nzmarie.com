@@ -1,0 +1,566 @@
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { APIProvider, Map as GoogleMap, useMap } from '@vis.gl/react-google-maps';
+import OutreachMapToolbar from './OutreachMapToolbar';
+import {
+  statusColor,
+  type AddressStatus,
+} from '@/lib/outreach-map';
+
+interface AddressCoord {
+  address: string;
+  lat: number;
+  lng: number;
+  sent: boolean;
+  status: AddressStatus;
+}
+
+interface ClusterStreet {
+  suburb: string;
+  street: string;
+  anchorLat: number | null;
+  anchorLng: number | null;
+  pendingCount: number;
+  addressCount?: number;
+  runId?: number;
+  addressCoords?: AddressCoord[];
+  addresses?: string[];
+}
+
+interface RunSummary {
+  runId: number;
+  totalPending: number;
+}
+
+interface ClusterPayload {
+  suburb: string;
+  groups: Array<{ suburb: string; streets: ClusterStreet[] }>;
+  runs: RunSummary[];
+}
+
+interface OutreachMapViewProps {
+  suburb: string;
+  activeRunId: number | null;
+  selectedStreet?: string | null;
+  sentStatus: 'all' | 'unsent' | 'sent';
+  reportQuarter?: string;
+  onRunSelect: (runId: number) => void;
+  onStreetSelect: (suburb: string, street: string) => void;
+  onCoordsLoaded?: (
+    streetStatusMap: Map<string, 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending'>,
+    counts: { total: number; unsent: number; sent: number; junk: number }
+  ) => void;
+  statusFilter?: 'all' | 'unsent' | 'sent' | 'junk';
+  onStatusFilterChange?: (status: 'all' | 'unsent' | 'sent' | 'junk') => void;
+}
+
+const MAX_BOUNDS_ZOOM = 16;
+
+function dotScaleForZoom(zoom: number, isUnsent: boolean): number | null {
+  if (zoom < 13) return null;
+  if (zoom < 14) return isUnsent ? 4 : 3;
+  if (zoom < 15) return isUnsent ? 5 : 4;
+  return isUnsent ? 6 : 5;
+}
+
+function NativeMarkerManager({
+  map,
+  groups,
+  activeRunId,
+  selectedStreet,
+  onStreetSelect,
+  statusFilter = 'all',
+}: {
+  map: google.maps.Map;
+  groups: Array<{ suburb?: string; streets: ClusterStreet[] }>;
+  activeRunId: number | null;
+  selectedStreet: string | null;
+  onStreetSelect: (suburb: string, street: string) => void;
+  statusFilter?: 'all' | 'unsent' | 'sent' | 'junk';
+}) {
+  const onStreetSelectRef = useRef(onStreetSelect);
+  onStreetSelectRef.current = onStreetSelect;
+
+  const [zoom, setZoom] = useState<number>(() => map.getZoom() ?? 12);
+  useEffect(() => {
+    const listener = map.addListener('zoom_changed', () => {
+      setZoom(map.getZoom() ?? 12);
+    });
+    return () => google.maps.event.removeListener(listener);
+  }, [map]);
+
+  const markersRef = useRef<google.maps.Marker[]>([]);
+
+  useEffect(() => {
+    for (const m of markersRef.current) m.setMap(null);
+    markersRef.current = [];
+
+    const flatStreets: Array<{ suburb: string; street: ClusterStreet }> = [];
+    for (const g of groups) {
+      for (const s of g.streets ?? []) {
+        flatStreets.push({ suburb: g.suburb || s.suburb || '', street: s });
+      }
+    }
+
+    const newMarkers: google.maps.Marker[] = [];
+
+    for (const { suburb, street } of flatStreets) {
+      if (street.anchorLat == null || street.anchorLng == null) continue;
+
+      let hasMatchingAddresses = false;
+      if (statusFilter === 'all') {
+        hasMatchingAddresses = (street.addressCoords ?? []).length > 0;
+      } else {
+        hasMatchingAddresses = (street.addressCoords ?? []).some(a => {
+          const isUnsent = a.status === 'unsent';
+          const isSent = a.status === 'sent';
+          const isJunk = a.status === 'junk';
+          if (statusFilter === 'unsent') return isUnsent;
+          if (statusFilter === 'sent') return isSent;
+          if (statusFilter === 'junk') return isJunk;
+          return false;
+        });
+      }
+
+      if (!hasMatchingAddresses) continue;
+
+      const runIndex = street.runId ?? 1;
+      const isSelected = selectedStreet === street.street;
+      const isActive = isSelected || (activeRunId != null && runIndex === activeRunId);
+
+      let anchorColor: string;
+      if (statusFilter === 'sent') {
+        anchorColor = '#7c3aed';
+      } else if (statusFilter === 'junk') {
+        anchorColor = '#eab308';
+      } else if (statusFilter === 'unsent') {
+        anchorColor = '#dc2626';
+      } else {
+        const coords = street.addressCoords ?? [];
+        const hasUnsent = coords.some(a => a.status === 'unsent');
+        const hasJunk = coords.some(a => a.status === 'junk');
+        anchorColor = hasUnsent ? '#dc2626' : hasJunk ? '#eab308' : '#7c3aed';
+      }
+
+      const anchorMarker = new google.maps.Marker({
+        position: { lat: street.anchorLat, lng: street.anchorLng },
+        map,
+        title: `${street.street} — Run ${runIndex} (${street.pendingCount ?? 0} pending)`,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 6,
+          fillColor: anchorColor,
+          fillOpacity: 1.0,
+          strokeColor: '#ffffff',
+          strokeWeight: 1.5,
+        },
+        zIndex: isSelected ? 2000 : 1000,
+      });
+
+      const streetName = street.street;
+      anchorMarker.addListener('click', () => {
+        onStreetSelectRef.current(suburb, streetName);
+      });
+      newMarkers.push(anchorMarker);
+
+      const isInActiveRun = activeRunId != null && runIndex === activeRunId;
+      const showDots = zoom >= 13 || isSelected || isInActiveRun || statusFilter !== 'all';
+
+      if (showDots) {
+        for (const a of street.addressCoords ?? []) {
+          if (a.lat == null || a.lng == null) continue;
+
+          const isUnsent = a.status === 'unsent';
+          const isSent = a.status === 'sent';
+          const isJunk = a.status === 'junk';
+
+          if (statusFilter !== 'all') {
+            if (statusFilter === 'unsent' && !isUnsent) continue;
+            if (statusFilter === 'sent' && !isSent) continue;
+            if (statusFilter === 'junk' && !isJunk) continue;
+          }
+
+          const scale = isSelected
+            ? (isUnsent ? 8 : 6)
+            : isInActiveRun
+              ? (isUnsent ? 6 : 5)
+              : dotScaleForZoom(zoom, isUnsent);
+
+          if (scale == null) continue;
+
+          const dotColor = statusColor(a.status);
+          const statusLabel = isUnsent ? 'Unsent' : isJunk ? 'No junk mail' : 'Sent';
+
+          newMarkers.push(new google.maps.Marker({
+            position: { lat: a.lat, lng: a.lng },
+            map,
+            title: `${a.address} · ${statusLabel}`,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale,
+              fillColor: dotColor,
+              fillOpacity: 1.0,
+              strokeColor: '#ffffff',
+              strokeWeight: 1.5,
+            },
+            zIndex: isUnsent ? 500 : isJunk ? 450 : 300,
+          }));
+        }
+      }
+    }
+
+    markersRef.current = newMarkers;
+
+    return () => {
+      for (const m of markersRef.current) m.setMap(null);
+      markersRef.current = [];
+    };
+  }, [map, groups, activeRunId, selectedStreet, zoom, statusFilter]);
+
+  return null;
+}
+
+function MapInner({
+  coordsData,
+  activeRunId,
+  selectedStreet,
+  isFullscreen,
+  showRunNumbers,
+  onFitAll,
+  onFitRun,
+  onToggleFullscreen,
+  onStreetSelect,
+  onMapLoad,
+  error,
+  statusFilter,
+  onStatusFilterChange,
+}: {
+  coordsData: ClusterPayload | null;
+  activeRunId: number | null;
+  selectedStreet: string | null;
+  isFullscreen: boolean;
+  showRunNumbers: boolean;
+  onFitAll: () => void;
+  onFitRun: (runId: number) => void;
+  onToggleFullscreen: () => void;
+  onStreetSelect: (suburb: string, street: string) => void;
+  onMapLoad: (map: google.maps.Map) => void;
+  error: string | null;
+  statusFilter: 'all' | 'unsent' | 'sent' | 'junk';
+  onStatusFilterChange: (status: 'all' | 'unsent' | 'sent' | 'junk') => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (map) onMapLoad(map);
+  }, [map, onMapLoad]);
+
+  return (
+    <>
+      {error && (
+        <div style={{
+          position: 'absolute', left: 12, top: 46, zIndex: 50,
+          color: '#dc2626', background: 'rgba(255,255,255,.92)',
+          padding: '4px 8px', borderRadius: 6, fontSize: '0.85rem',
+        }}>
+          {error}
+        </div>
+      )}
+
+      {coordsData && (
+        <OutreachMapToolbar
+          onFitAll={onFitAll}
+          runs={coordsData.runs ?? []}
+          activeRunId={activeRunId}
+          onRunSelect={onFitRun}
+          showRunNumbers={showRunNumbers}
+        />
+      )}
+
+      {coordsData && (
+        <div style={{
+          position: 'absolute', left: 12, bottom: 28, zIndex: 50,
+          background: 'rgba(255,255,255,.95)', border: '1px solid #e5e7eb',
+          borderRadius: 8, padding: '6px 10px', fontSize: '11px', color: '#374151',
+          display: 'flex', flexDirection: 'column', gap: 3,
+          boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#dc2626', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', flexShrink: 0 }} />
+            Unsent
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#7c3aed', border: '2px solid #fff', flexShrink: 0 }} />
+            Sent
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#eab308', border: '2px solid #fff', flexShrink: 0 }} />
+            No junk mail
+          </div>
+        </div>
+      )}
+
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <GoogleMap
+          defaultCenter={{ lat: -36.6966, lng: 174.7454 }}
+          defaultZoom={12}
+          mapTypeControl={true}
+          gestureHandling="greedy"
+          style={{ width: '100%', height: '100%' }}
+        />
+        {map && coordsData && (
+          <NativeMarkerManager
+            map={map}
+            groups={coordsData.groups ?? []}
+            activeRunId={activeRunId}
+            selectedStreet={selectedStreet}
+            onStreetSelect={onStreetSelect}
+            statusFilter={statusFilter}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+export default function OutreachMapView({
+  suburb,
+  activeRunId,
+  selectedStreet,
+  sentStatus,
+  reportQuarter,
+  onRunSelect,
+  onStreetSelect,
+  onCoordsLoaded,
+  statusFilter: externalStatusFilter = 'all',
+  onStatusFilterChange,
+}: OutreachMapViewProps) {
+  const [coordsData, setCoordsData] = useState<ClusterPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [localStatusFilter, setLocalStatusFilter] = useState<'all' | 'unsent' | 'sent' | 'junk'>('all');
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const statusFilter = externalStatusFilter;
+  const handleStatusFilterChange = (status: 'all' | 'unsent' | 'sent' | 'junk') => {
+    if (onStatusFilterChange) {
+      onStatusFilterChange(status);
+    } else {
+      setLocalStatusFilter(status);
+    }
+  };
+
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+  const onCoordsLoadedRef = useRef(onCoordsLoaded);
+  onCoordsLoadedRef.current = onCoordsLoaded;
+
+  const loadCoords = useCallback(async () => {
+    if (!suburb) return;
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        suburb,
+        radius: '500',
+        budget: '20',
+        status: 'pending',
+        sent_status: sentStatus,
+        address_coords: 'true',
+      });
+      if (reportQuarter) params.set('report_quarter', reportQuarter);
+      const res = await fetch(`/api/admin/outreach/street-clusters?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch coords');
+      const body = await res.json();
+      if (body.success === false) throw new Error(body.error || 'Failed to load');
+      setCoordsData(body);
+      if (onCoordsLoadedRef.current) {
+        const sm = new Map<string, 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending'>();
+        let unsentCount = 0;
+        let sentCount = 0;
+        let junkCount = 0;
+        for (const g of (body.groups ?? []) as Array<{ streets: ClusterStreet[] }>) {
+          for (const s of g.streets ?? []) {
+            const coords = s.addressCoords ?? [];
+            let state: 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending';
+            if (coords.length === 0) {
+              state = 'no-pending';
+            } else if (coords.some((c) => c.status === 'unsent')) {
+              state = 'has-unsent';
+            } else if (coords.every((c) => c.status === 'junk')) {
+              state = 'junk-only';
+            } else {
+              state = 'all-sent';
+            }
+            sm.set(s.street, state);
+            for (const c of coords) {
+              if (c.status === 'unsent') unsentCount++;
+              else if (c.status === 'sent') sentCount++;
+              else if (c.status === 'junk') junkCount++;
+            }
+          }
+        }
+        onCoordsLoadedRef.current(sm, {
+          total: unsentCount + sentCount + junkCount,
+          unsent: unsentCount,
+          sent: sentCount,
+          junk: junkCount,
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [suburb, sentStatus, reportQuarter]);
+
+  useEffect(() => { if (suburb) loadCoords(); }, [suburb, loadCoords]);
+
+  const allPoints = useMemo(() => {
+    const pts: { lat: number; lng: number }[] = [];
+    if (!coordsData) return pts;
+    for (const g of coordsData.groups ?? []) {
+      for (const s of g.streets ?? []) {
+        if (s.anchorLat != null && s.anchorLng != null) pts.push({ lat: s.anchorLat, lng: s.anchorLng });
+        for (const a of s.addressCoords ?? []) {
+          if (a.lat != null && a.lng != null) pts.push({ lat: a.lat, lng: a.lng });
+        }
+      }
+    }
+    return pts;
+  }, [coordsData]);
+
+  const fitToBounds = useCallback((points: { lat: number; lng: number }[]) => {
+    const map = mapRef.current;
+    if (!map || points.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+    for (const p of points) bounds.extend(new google.maps.LatLng(p.lat, p.lng));
+    map.fitBounds(bounds);
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+      const z = map.getZoom();
+      if (typeof z === 'number' && z > MAX_BOUNDS_ZOOM) map.setZoom(MAX_BOUNDS_ZOOM);
+    });
+  }, []);
+
+  const fitRun = useCallback((runId: number) => {
+    onRunSelect(runId);
+    if (!coordsData) return;
+    const pts: { lat: number; lng: number }[] = [];
+    for (const g of coordsData.groups ?? []) {
+      for (const s of g.streets ?? []) {
+        if (s.runId !== runId) continue;
+        if (s.anchorLat != null && s.anchorLng != null) pts.push({ lat: s.anchorLat, lng: s.anchorLng });
+        for (const a of s.addressCoords ?? []) {
+          if (a.lat != null && a.lng != null) pts.push({ lat: a.lat, lng: a.lng });
+        }
+      }
+    }
+    if (pts.length > 0) {
+      fitToBounds(pts);
+      google.maps.event.addListenerOnce(mapRef.current!, 'idle', () => {
+        const z = mapRef.current?.getZoom();
+        if (z != null && z < 13) mapRef.current?.setZoom(13);
+      });
+    }
+  }, [coordsData, fitToBounds, onRunSelect]);
+
+  const lastFittedRunRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (activeRunId != null && activeRunId !== lastFittedRunRef.current && coordsData) {
+      lastFittedRunRef.current = activeRunId;
+      const pts: { lat: number; lng: number }[] = [];
+      for (const g of coordsData.groups ?? []) {
+        for (const s of g.streets ?? []) {
+          if (s.runId !== activeRunId) continue;
+          if (s.anchorLat != null && s.anchorLng != null) pts.push({ lat: s.anchorLat, lng: s.anchorLng });
+          for (const a of s.addressCoords ?? []) {
+            if (a.lat != null && a.lng != null) pts.push({ lat: a.lat, lng: a.lng });
+          }
+        }
+      }
+      if (pts.length > 0) fitToBounds(pts);
+    } else if (activeRunId == null) {
+      lastFittedRunRef.current = null;
+    }
+  }, [activeRunId, coordsData, fitToBounds]);
+
+  const focusStreet = useCallback((streetName: string) => {
+    const map = mapRef.current;
+    if (!map || !coordsData) return;
+    const target = (coordsData.groups ?? [])
+      .flatMap((g) => g.streets ?? [])
+      .find((s) => s.street === streetName);
+    if (!target || target.anchorLat == null || target.anchorLng == null) return;
+    const pts = (target.addressCoords ?? [])
+      .filter((a) => a.lat != null && a.lng != null)
+      .map((a) => ({ lat: a.lat, lng: a.lng }));
+    if (pts.length === 0) pts.push({ lat: target.anchorLat, lng: target.anchorLng });
+    const bounds = new google.maps.LatLngBounds();
+    for (const p of pts) bounds.extend(new google.maps.LatLng(p.lat, p.lng));
+    map.fitBounds(bounds);
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+      const z = map.getZoom();
+      if (z != null && z < 15) map.setZoom(15);
+      if (z != null && z > 17) map.setZoom(17);
+    });
+  }, [coordsData]);
+
+  useEffect(() => {
+    if (selectedStreet && coordsData) focusStreet(selectedStreet);
+  }, [selectedStreet, coordsData, focusStreet]);
+
+  const handleMapLoad = useCallback((map: google.maps.Map) => {
+    if (!mapRef.current) {
+      mapRef.current = map;
+      fitToBounds(allPoints);
+    }
+  }, [allPoints, fitToBounds]);
+
+  useEffect(() => {
+    if (mapRef.current && allPoints.length > 0) fitToBounds(allPoints);
+  }, [allPoints, fitToBounds]);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) el.requestFullscreen().catch(() => { });
+    else document.exitFullscreen().catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    const h = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', h);
+    return () => document.removeEventListener('fullscreenchange', h);
+  }, []);
+
+  if (!suburb) return (
+    <div style={{ height: '100%', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', background: '#f8fafc', borderRadius: 12 }}>
+      Select a report to view the delivery map.
+    </div>
+  );
+  if (!apiKey) return (
+    <div style={{ height: '100%', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', background: '#f8fafc', borderRadius: 12 }}>
+      Map unavailable — Google Maps API key not configured.
+    </div>
+  );
+
+  return (
+    <APIProvider apiKey={apiKey} libraries={['places']}>
+      <div ref={containerRef} style={{ position: 'relative', height: '100%', background: '#fff' }}>
+        <MapInner
+          coordsData={coordsData}
+          activeRunId={activeRunId}
+          selectedStreet={selectedStreet ?? null}
+          isFullscreen={isFullscreen}
+          showRunNumbers={!!reportQuarter} onFitAll={() => fitToBounds(allPoints)}
+          onFitRun={fitRun}
+          onToggleFullscreen={toggleFullscreen}
+          onStreetSelect={onStreetSelect}
+          onMapLoad={handleMapLoad}
+          error={error}
+          statusFilter={statusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
+        />
+      </div>
+    </APIProvider>
+  );
+}

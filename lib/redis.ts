@@ -196,7 +196,9 @@ export async function invalidateStreetClustersForSuburb(suburb: string): Promise
   for (const st of statuses) {
     for (const ss of sentStatuses) {
       for (const b of budgets) {
-        keys.push(streetClustersKey(suburb, st, ss, null, b));
+        const base = streetClustersKey(suburb, st, ss, null, b);
+        keys.push(base);
+        keys.push(`${base}:coords`); // also invalidate the address-coords variant
       }
     }
   }

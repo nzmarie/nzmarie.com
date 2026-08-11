@@ -68,6 +68,7 @@ export async function GET(request: Request) {
   const sentStatus = (searchParams.get('sent_status') || 'all') as 'all' | 'unsent' | 'sent';
   const reportQuarter = searchParams.get('report_quarter');
   const startStreet = searchParams.get('start_street') || '';
+  const includeAddressCoords = (searchParams.get('address_coords') || 'false') === 'true';
 
   if (!suburb) {
     return NextResponse.json({ error: 'Missing suburb parameter' }, { status: 400 });
@@ -80,7 +81,8 @@ export async function GET(request: Request) {
     // start_street is intentionally excluded from the key: changing the start
     // only reorders the existing streets, it doesn't change pending counts.
     // We still serve cached data but it will be reordered client-side if needed.
-    const cacheKey = streetClustersKey(suburb, status, sentStatus, reportQuarter ?? null, budget);
+    let cacheKey = streetClustersKey(suburb, status, sentStatus, reportQuarter ?? null, budget);
+    if (includeAddressCoords) cacheKey = `${cacheKey}:coords`;
     const cached = await getStreetClustersFromCache<StreetClusterPayload>(cacheKey);
     if (cached) {
       // start_street is intentionally excluded from the cache key (changing the
@@ -100,10 +102,10 @@ export async function GET(request: Request) {
       reportQuarter,
     });
 
-    const { rows: addressRows } = await marieDB.query(
+    const { rows: addressRowsRaw } = await marieDB.query(
       `
-      SELECT op.street, op.house_number, op.property_address,
-             p.latitude AS lat, p.longitude AS lng
+      SELECT op.id AS id, op.street, op.house_number, op.property_address,
+             p.latitude AS lat, p.longitude AS lng, p.no_junk_mail AS no_junk_mail
       FROM outreach_properties op
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
       WHERE ${where}
@@ -112,7 +114,44 @@ export async function GET(request: Request) {
       params
     );
 
-    const summaries = buildStreetSummaries(addressRows as AddressRow[], suburb);
+    // If address-level coords/status requested, enrich rows with `sent` flag
+    const addressRows: AddressRow[] = (addressRowsRaw as Record<string, unknown>[]).map((r) => ({
+      id: r.id == null ? null : String(r.id),
+      street: String(r.street ?? ''),
+      house_number: r.house_number == null ? null : (Number(r.house_number) || String(r.house_number)),
+      property_address: String(r.property_address ?? ''),
+      lat: r.lat == null ? null : (Number(r.lat) || null),
+      lng: r.lng == null ? null : (Number(r.lng) || null),
+      no_junk_mail: Boolean(r.no_junk_mail),
+      sent: false,
+    }));
+
+    if (includeAddressCoords && addressRows.length > 0) {
+      try {
+        const ids = addressRows.map((r) => r.id).filter(Boolean);
+        if (ids.length > 0) {
+          const sendParams: (string | number | string[])[] = [ids as string[], suburb];
+          let sendSql = `SELECT DISTINCT sl.outreach_property_id FROM outreach_send_logs sl JOIN suburb_reports sr ON sl.suburb_report_id = sr.id WHERE sl.outreach_property_id = ANY($1) AND sr.suburb = $2`;
+          if (reportQuarter) {
+            const parts = reportQuarter.split('-');
+            const year = parseInt(parts[0], 10) || 0;
+            const quarter = parts[1] || '';
+            sendSql += ` AND sr.quarter = $3 AND sr.year = $4`;
+            sendParams.push(quarter, year);
+          }
+          const { rows: sentRows } = await marieDB.query(sendSql, sendParams);
+          const sentSet = new Set(sentRows.map((r: { outreach_property_id: unknown }) => String(r.outreach_property_id)));
+          for (const ar of addressRows) {
+            if (ar.id && sentSet.has(ar.id)) ar.sent = true;
+          }
+        }
+      } catch (e) {
+        // Non-critical; leave sent flags as false
+        console.warn('Failed to fetch send-log flags for address_coords:', e);
+      }
+    }
+
+    const summaries = buildStreetSummaries(addressRows as AddressRow[], suburb, includeAddressCoords);
 
     const storedOrder = await marieDB.query(
       `SELECT setting_value FROM admin_settings WHERE setting_key = $1 LIMIT 1`,
@@ -147,8 +186,11 @@ export async function GET(request: Request) {
       suburb,
       lat: s.anchorLat ?? 0,
       lng: s.anchorLng ?? 0,
+      anchorLat: s.anchorLat,
+      anchorLng: s.anchorLng,
       pendingCount: s.address_count,
       addresses: s.addresses,
+      addressCoords: includeAddressCoords ? s.addressCoords : undefined,
     }));
 
     const groups = [
@@ -163,18 +205,41 @@ export async function GET(request: Request) {
 
     const noAnchorStreets = summaries.filter((s) => s.anchorLat == null || s.anchorLng == null);
 
+    const runsPayload = runs.map((run, i) => {
+      const runId = i + 1;
+      for (const g of run) {
+        for (const s of g.streets) s.runId = runId;
+      }
+      return {
+        runId,
+        groups: run,
+        totalPending: run.reduce((s, g) => s + g.totalPending, 0),
+        streetCount: run.reduce((s, g) => s + g.streets.length, 0),
+      };
+    });
+
+    // Sync runId back to the top-level streetPoints so coordsData.groups
+    // passed to NativeMarkerManager has correct runId on each street.
+    const streetRunMap = new Map<string, number>();
+    for (const rp of runsPayload) {
+      for (const g of rp.groups) {
+        for (const s of g.streets) {
+          streetRunMap.set(s.street, rp.runId);
+        }
+      }
+    }
+    for (const s of streetPoints) {
+      const rid = streetRunMap.get(s.street);
+      if (rid != null) s.runId = rid;
+    }
+
     const responsePayload = {
       success: true,
       radius,
       budget,
       suburb,
       groups,
-      runs: runs.map((run, i) => ({
-        runId: i + 1,
-        groups: run,
-        totalPending: run.reduce((s, g) => s + g.totalPending, 0),
-        streetCount: run.reduce((s, g) => s + g.streets.length, 0),
-      })),
+      runs: runsPayload,
       unclusteredStreets: noAnchorStreets.map((s) => ({
         street: s.street,
         has_coords: s.has_coords,

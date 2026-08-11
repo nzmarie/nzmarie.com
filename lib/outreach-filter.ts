@@ -14,8 +14,7 @@ export function buildOutreachFilter(opts: OutreachFilterOptions): OutreachFilter
   const params: unknown[] = [opts.suburb, opts.status];
   let idx = 3;
   let sql = `op.suburb = $1 AND op.status = $2
-    AND op.street IS NOT NULL AND TRIM(op.street) <> ''
-    AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)`;
+    AND op.street IS NOT NULL AND TRIM(op.street) <> ''`;
   if (opts.sentStatus === 'unsent' || opts.sentStatus === 'sent') {
     const exists = opts.sentStatus === 'sent' ? 'EXISTS' : 'NOT EXISTS';
     let sub = `SELECT 1 FROM outreach_send_logs sl3

@@ -57,8 +57,8 @@ export function loadGoogleMapsScript(): Promise<void> {
       return;
     }
 
-    // Check if script already exists
-    if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+    // Check if script already exists or global google.maps is loaded
+    if (typeof window !== 'undefined' && (window.google?.maps || document.querySelector('script[src*="maps.googleapis.com"]'))) {
       googleMapsLoaded = true;
       resolve();
       return;

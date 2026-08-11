@@ -10,6 +10,13 @@ export interface RunStreet {
   lng: number;
   pendingCount: number;
   addresses?: string[];
+  addressCoords?: Array<{
+    address: string;
+    lat: number;
+    lng: number;
+    sent: boolean;
+    status: 'unsent' | 'sent' | 'junk';
+  }>;
 }
 
 export interface RunGroup {

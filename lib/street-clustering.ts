@@ -10,9 +10,23 @@ export interface StreetPoint {
   suburb: string;
   lat: number;
   lng: number;
+  /** Alias for lat — used by frontend ClusterStreet interface */
+  anchorLat?: number | null;
+  /** Alias for lng — used by frontend ClusterStreet interface */
+  anchorLng?: number | null;
   pendingCount: number;
   /** Optional full addresses for this street (e.g. for run detail views). */
   addresses?: string[];
+  /** Optional id of the run this street was assigned to (stamped by the route). */
+  runId?: number;
+  /** Optional per-address coordinates and status (populated when address_coords=true). */
+  addressCoords?: Array<{
+    address: string;
+    lat: number;
+    lng: number;
+    sent: boolean;
+    status: 'unsent' | 'sent' | 'junk';
+  }>;
 }
 
 export interface ClusterGroup {
@@ -35,9 +49,9 @@ export function haversineMeters(
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 

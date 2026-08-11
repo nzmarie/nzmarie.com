@@ -11,6 +11,11 @@ import SendReportModal from './components/SendReportModal';
 import DispatchHistoryDrawer from './components/DispatchHistoryDrawer';
 import SentDateFilter from './components/SentDateFilter';
 import TodayRunSection, { type TodayRunData } from './components/TodayRunSection';
+import dynamic from 'next/dynamic';
+import OutreachMapSidebar from './components/OutreachMapSidebar';
+// OutreachMapView uses @vis.gl/react-google-maps which references window/google at
+// module level — must never be server-side rendered.
+const OutreachMapView = dynamic(() => import('./components/OutreachMapView'), { ssr: false });
 import {
   FaBed,
   FaBath,
@@ -308,9 +313,34 @@ export default function OutreachPage() {
     setStreetFilter('');
   }, [sentStatusFilter]);
 
-  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
-  const pageSize = viewMode === 'card' ? CARD_PAGE_SIZE : LIST_PAGE_SIZE;
+  const [viewMode, setViewMode] = useState<'card' | 'list' | 'map'>('card');
+  const pageSize = viewMode === 'list' ? LIST_PAGE_SIZE : CARD_PAGE_SIZE;
   const [collapsedStreets, setCollapsedStreets] = useState<Set<string>>(new Set());
+
+  // Map mode state
+  const [activeMapRunId, setActiveMapRunId] = useState<number | null>(null);
+  const [activeMapStreet, setActiveMapStreet] = useState<string | null>(null);
+  const [mapStatusFilter, setMapStatusFilter] = useState<'all' | 'unsent' | 'sent' | 'junk'>('all');
+  const [mapSidebarHidden, setMapSidebarHidden] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('outreach_map_sidebar_hidden') === '1';
+  });
+  const [mapStreetStatusMap, setMapStreetStatusMap] = useState<Map<string, 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending'>>(new Map());
+  const [mapAddressCounts, setMapAddressCounts] = useState<{ total: number; unsent: number; sent: number; junk: number } | null>(null);
+  const handleMapCoordsLoaded = useCallback((
+    sm: Map<string, 'has-unsent' | 'all-sent' | 'junk-only' | 'no-pending'>,
+    counts: { total: number; unsent: number; sent: number; junk: number }
+  ) => {
+    setMapStreetStatusMap(sm);
+    setMapAddressCounts(counts);
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem('outreach_map_sidebar_hidden', mapSidebarHidden ? '1' : '0');
+  }, [mapSidebarHidden]);
+  // Reset to card view when leaving pending tab
+  useEffect(() => {
+    if (activeTab !== 'pending') setViewMode((v) => (v === 'map' ? 'card' : v));
+  }, [activeTab]);
   const [selectedByTab, setSelectedByTab] = useState<Record<string, Set<string>>>({
     liked: new Set(),
     pending: new Set(),
@@ -1092,7 +1122,6 @@ export default function OutreachPage() {
   // (when todayRunSuburb changed): the fetch saw the stale '' value because
   // setTodayRunStartStreet() from the restore effect had not been committed yet.
   // Reading localStorage synchronously inside the same effect that builds the fetch
-  // params guarantees the correct start_street is sent on the very first request.
   useEffect(() => {
     if (!todayRunSuburb) {
       setTodayRunStartStreet('');
@@ -1101,23 +1130,17 @@ export default function OutreachPage() {
       return;
     }
 
-    if (activeTab !== 'pending' || sentStatusFilter !== 'unsent') {
+    if (activeTab !== 'pending' || (sentStatusFilter !== 'unsent' && viewMode !== 'map')) {
       setTodayRunData(null);
       setTodayRunError(null);
       return;
     }
 
-    // Resolve the effective start street synchronously:
-    // - If state is already up-to-date (user changed the selector), use it.
-    // - On first load for a suburb, state may still be '' while localStorage
-    //   already holds a saved value -- read it directly so the first fetch
-    //   includes the correct start_street param without an extra round-trip.
     const effectiveStartStreet =
       todayRunStartStreet ||
       window.localStorage.getItem(`today_run_start_street:${todayRunSuburb}`) ||
       '';
 
-    // Keep React state in sync with what we're actually using.
     if (effectiveStartStreet !== todayRunStartStreet) {
       setTodayRunStartStreet(effectiveStartStreet);
     }
@@ -1130,7 +1153,8 @@ export default function OutreachPage() {
       radius: '500',
       budget: String(todayRunBudget),
       status: 'pending',
-      sent_status: 'unsent',
+      sent_status: viewMode === 'map' ? 'all' : 'unsent',
+      address_coords: viewMode === 'map' ? 'true' : 'false',
     });
     if (effectiveStartStreet) {
       params.set('start_street', effectiveStartStreet);
@@ -1143,7 +1167,6 @@ export default function OutreachPage() {
       .then((json) => {
         if (cancelled) return;
         if (!json.success) throw new Error(json.error || 'Failed to load');
-        // If the saved street no longer exists in the current data, clear it.
         if (
           effectiveStartStreet &&
           Array.isArray(json.allStreets) &&
@@ -1163,7 +1186,7 @@ export default function OutreachPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
+  }, [activeTab, sentStatusFilter, viewMode, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
 
   const groupedBySuburb = useMemo(() => {
     const sourceItems = filteredLikedItems ?? displayItems;
@@ -2246,6 +2269,7 @@ export default function OutreachPage() {
         </div>
       </div>
 
+      {(activeTab !== 'pending' || viewMode !== 'map') && (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
           {isClassic && !(likedStreetModeApplied && likedSelectedStreet)
@@ -2285,6 +2309,7 @@ export default function OutreachPage() {
           </button>
         </div>
       </div>
+      )}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           <button
@@ -2301,10 +2326,19 @@ export default function OutreachPage() {
           >
             ☰ List
           </button>
+          {activeTab === 'pending' && (
+            <button
+              onClick={() => setViewMode('map')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'map' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              title="Map View"
+            >
+              🗺 Map
+            </button>
+          )}
         </div>
       </div>
 
-      {isClassic && (
+      {isClassic && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
             style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: currentPage <= 1 ? '#f8fafc' : 'white', color: currentPage <= 1 ? '#cbd5e1' : '#4a5568', cursor: currentPage <= 1 ? 'default' : 'pointer', fontSize: "0.85rem", fontWeight: "600", transition: "all 0.15s", lineHeight: "1" }}
@@ -3217,6 +3251,67 @@ export default function OutreachPage() {
             </div>
           )}
         </>
+      ) : viewMode === 'map' ? (
+        /* ── MAP VIEW: sidebar 30% + Google Map 70% ── */
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile
+              ? '1fr'
+              : mapSidebarHidden
+                ? '48px 1fr'
+                : '30% 1fr',
+            gap: 12,
+            alignItems: 'flex-start',
+          }}
+        >
+          {!isMobile && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', overflow: 'hidden', minWidth: 0 }}>
+              <OutreachMapSidebar
+                data={todayRunData}
+                loading={todayRunLoading}
+                error={todayRunError}
+                activeRunId={activeMapRunId}
+                collapsedStreets={collapsedStreets}
+                onToggleStreet={toggleStreet}
+                onStreetSelect={(suburb, street) => {
+                  setActiveMapStreet(street);
+                  setReportSuburbFilter(suburb);
+                }}
+                onRunSelect={(runId) => {
+                  setActiveMapRunId(runId);
+                  setActiveMapStreet(null);
+                }}
+                hidden={mapSidebarHidden}
+                onToggleHidden={() => setMapSidebarHidden((h) => !h)}
+                streetStatusMap={mapStreetStatusMap}
+                addressCounts={mapAddressCounts}
+                statusFilter={mapStatusFilter}
+                onStatusFilterChange={setMapStatusFilter}
+              />
+            </div>
+          )}
+          <div style={{ height: 600, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+            <OutreachMapView
+              suburb={reportSuburbFilter || todayRunData?.suburb || firstPendingSuburb}
+              activeRunId={activeMapRunId}
+              selectedStreet={activeMapStreet}
+              sentStatus="all"
+              reportQuarter={reportQuarterFilter || undefined}
+              onCoordsLoaded={handleMapCoordsLoaded}
+              statusFilter={mapStatusFilter}
+              onStatusFilterChange={setMapStatusFilter}
+              onRunSelect={(runId) => {
+                setActiveMapRunId(runId);
+                setActiveMapStreet(null);
+              }}
+              onStreetSelect={(suburb, street) => {
+                setActiveMapStreet(street);
+                setReportSuburbFilter(suburb);
+              }}
+            />
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           {groupedBySuburb.map(({ suburb, streets, totalCount }) => {
@@ -3571,11 +3666,11 @@ export default function OutreachPage() {
           >≫</button>
         </div>
       )}
-      {!isClassic && hasMore && !loading && !loadingMore && (
+      {!isClassic && hasMore && !loading && !loadingMore && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div ref={lastPropertyElementRef} style={{ height: '1px' }} />
       )}
 
-      {!isClassic && loadingMore && (
+      {!isClassic && loadingMore && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
@@ -3591,7 +3686,7 @@ export default function OutreachPage() {
         </div>
       )}
 
-      {!isClassic && !hasMore && displayItems.length > 0 && !loadingMore && (
+      {!isClassic && !hasMore && displayItems.length > 0 && !loadingMore && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div style={{
           textAlign: 'center',
           padding: '30px',

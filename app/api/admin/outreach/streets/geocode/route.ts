@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
-import { isSuperAdmin } from '@/lib/permissions';
+import { isAdmin, isSuperAdmin } from '@/lib/permissions';
+
+async function sleep(ms: number) { return new Promise((res) => setTimeout(res, ms)); }
+
+export async function GET(request: Request) {
+  const session = await auth();
+  if (!session?.user?.email || !isAdmin(session.user.email)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const { searchParams } = new URL(request.url);
+  const suburb = searchParams.get('suburb');
+  if (!suburb) return NextResponse.json({ error: 'Missing suburb' }, { status: 400 });
+
+  // Return number of properties missing coords (informational)
+  try {
+    const { rows } = await marieDB.query(`SELECT COUNT(*)::int AS cnt FROM outreach_properties op LEFT JOIN properties p ON REPLACE(op.property_id::text,'-','') = p.id WHERE op.suburb = $1 AND (p.latitude IS NULL OR p.longitude IS NULL)`, [suburb]);
+    return NextResponse.json({ missing: rows?.[0]?.cnt ?? 0 });
+  } catch {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
+}
 
 /**
  * POST /api/admin/outreach/streets/geocode
@@ -18,12 +38,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not configured' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'GEOCODE API KEY is not configured' }, { status: 500 });
   }
 
   let suburbFilter: string | null = null;
@@ -78,7 +95,7 @@ export async function POST(request: Request) {
     for (const { suburb, street } of unique.values()) {
       try {
         const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-          `${street}, ${suburb}, Auckland, New Zealand`
+          `${street}, ${suburb}, New Zealand`
         )}&key=${apiKey}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -104,6 +121,8 @@ export async function POST(request: Request) {
       } catch {
         results.push({ suburb, street, status: 'error' });
       }
+      // Respect a gentle rate limit
+      await sleep(600);
     }
 
     return NextResponse.json({
@@ -115,9 +134,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error geocoding street locations:', error);
-    return NextResponse.json(
-      { error: 'Failed to geocode street locations' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to geocode street locations' }, { status: 500 });
   }
 }

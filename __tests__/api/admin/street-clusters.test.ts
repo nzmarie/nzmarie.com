@@ -235,4 +235,34 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     const runStreets = body.runs[0].groups.flatMap((g: any) => g.streets.map((s: any) => s.street));
     expect(runStreets).toEqual(['Alpha Street', 'Beta Street']);
   });
+
+  it('returns addressCoords when address_coords=true with sent flags and statuses', async () => {
+    mockAuth();
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { id: '1', street: 'Alpha Street', property_address: '1 Alpha Street', house_number: 1, lat: -36.7, lng: 174.7, no_junk_mail: false },
+          { id: '2', street: 'Alpha Street', property_address: '3 Alpha Street', house_number: 3, lat: -36.7001, lng: 174.7001, no_junk_mail: false },
+          { id: '3', street: 'Beta Street', property_address: '2 Beta Street', house_number: 2, lat: -36.701, lng: 174.701, no_junk_mail: true },
+        ],
+      } as any)
+      // sent rows
+      .mockResolvedValueOnce({ rows: [{ outreach_property_id: '1' }] } as any)
+      // stored order
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&address_coords=true')
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const alpha = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Alpha Street');
+    expect(alpha.addressCoords).toBeDefined();
+    expect(alpha.addressCoords.map((a: any) => ({ address: a.address, lat: a.lat, lng: a.lng, sent: a.sent, status: a.status }))).toEqual([
+      { address: '1 Alpha Street', lat: -36.7, lng: 174.7, sent: true, status: 'sent' },
+      { address: '3 Alpha Street', lat: -36.7001, lng: 174.7001, sent: false, status: 'unsent' },
+    ]);
+    const beta = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Beta Street');
+    expect(beta.addressCoords![0].status).toBe('junk');
+  });
 });

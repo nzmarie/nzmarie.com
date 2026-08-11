@@ -6,6 +6,9 @@ export interface AddressRow {
   property_address: string;
   lat: string | number | null;
   lng: string | number | null;
+  id?: string | null;
+  no_junk_mail?: boolean | null;
+  sent?: boolean | null;
 }
 
 export interface StreetSummary {
@@ -17,9 +20,17 @@ export interface StreetSummary {
   anchorLat: number | null;
   anchorLng: number | null;
   addresses: string[];
+  // Optional per-address coordinates and status (only when requested)
+  addressCoords?: Array<{
+    address: string;
+    lat: number;
+    lng: number;
+    sent: boolean;
+    status: 'unsent' | 'sent' | 'junk';
+  }>;
 }
 
-export function buildStreetSummaries(rows: AddressRow[], suburb: string): StreetSummary[] {
+export function buildStreetSummaries(rows: AddressRow[], suburb: string, includeAddressCoords: boolean = false): StreetSummary[] {
   const map = new Map<string, StreetSummary>();
   for (const r of rows) {
     let s = map.get(r.street);
@@ -34,6 +45,7 @@ export function buildStreetSummaries(rows: AddressRow[], suburb: string): Street
         anchorLng: null,
         addresses: [],
       };
+      if (includeAddressCoords) s.addressCoords = [];
       map.set(r.street, s);
     }
     s.address_count++;
@@ -50,6 +62,16 @@ export function buildStreetSummaries(rows: AddressRow[], suburb: string): Street
           s.anchorLng = lng;
           s.minHouseNumber = hn;
         }
+      }
+      if (includeAddressCoords) {
+        const status: 'unsent' | 'sent' | 'junk' = r.no_junk_mail ? 'junk' : (r.sent ? 'sent' : 'unsent');
+        s.addressCoords!.push({
+          address: r.property_address,
+          lat,
+          lng,
+          sent: !!r.sent,
+          status,
+        });
       }
     }
   }
