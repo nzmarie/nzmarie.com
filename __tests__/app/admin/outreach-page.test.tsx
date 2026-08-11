@@ -191,6 +191,65 @@ describe('Outreach page', () => {
       expect(screen.queryByText('15 Marine Parade')).toBeNull();
     });
   });
+
+  it('uses selected addresses when a card-level Send Report button is clicked', async () => {
+    const pendingItems = [
+      {
+        id: 'out-1',
+        property_address: '15 Marine Parade',
+        suburb: 'Takapuna',
+        city: 'Auckland',
+        region: 'North Shore',
+        status: 'PENDING',
+        created_at: '2026-07-01T10:00:00Z',
+      },
+      {
+        id: 'out-2',
+        property_address: '22 Beach Road',
+        suburb: 'Takapuna',
+        city: 'Auckland',
+        region: 'North Shore',
+        status: 'PENDING',
+        created_at: '2026-07-02T10:00:00Z',
+      },
+    ];
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?') && s.includes('status=pending')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: pendingItems,
+            pagination: { page: 1, limit: 50, total: 2, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const cardCheckboxes = await screen.findAllByRole('checkbox');
+    expect(cardCheckboxes.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(cardCheckboxes[0]);
+    fireEvent.click(cardCheckboxes[1]);
+
+    const sendButtons = await screen.findAllByRole('button', { name: /Send Report/i });
+    fireEvent.click(sendButtons[0]);
+
+    expect(await screen.findByText(/Selected 2 target addresses/i)).toBeTruthy();
+  });
 });
 
 describe('Outreach page - Dual Pagination Mode', () => {

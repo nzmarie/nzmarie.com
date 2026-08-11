@@ -355,7 +355,7 @@ export default function OutreachPage() {
   const [historyTargetAddress, setHistoryTargetAddress] = useState<string>('');
 
   const openSendModal = (ids?: string[]) => {
-    const targets = ids || Array.from(selected);
+    const targets = selected.size > 0 ? Array.from(selected) : ids || Array.from(selected);
     if (targets.length === 0) return;
     // Derive the report suburb from the selected target addresses so the
     // modal defaults to that suburb's quarterly report set (e.g. "Torbay 2026 Q2").
@@ -2307,7 +2307,7 @@ export default function OutreachPage() {
         </div>
       </div>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+      <div style={{ display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", marginTop: "12px" }}>
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           <button
             onClick={() => setViewMode('card')}
@@ -2334,6 +2334,34 @@ export default function OutreachPage() {
           )}
         </div>
       </div>
+
+      {/* Mobile: overlay status buttons (All / Unsent / Sent / Junk) placed above the map and under the view buttons */}
+      {isMobile && viewMode === 'map' && (
+        <div style={{ position: 'absolute', left: 12, top: 72, zIndex: 70, display: 'flex', gap: 8 }}>
+          {(['all', 'unsent', 'sent', 'junk'] as const).map((s) => {
+            const labels: Record<string, string> = { all: 'All', unsent: 'Unsent', sent: 'Sent', junk: 'Junk' };
+            const isActive = mapStatusFilter === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setMapStatusFilter(s)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: isActive ? '1.5px solid #2563eb' : '1px solid #d1d5db',
+                  background: isActive ? '#eff6ff' : '#ffffff',
+                  color: isActive ? '#1d4ed8' : '#374151',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: isActive ? 600 : 500,
+                }}
+              >
+                {labels[s]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {isClassic && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
@@ -3253,15 +3281,13 @@ export default function OutreachPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isMobile
-              ? '1fr'
-              : mapSidebarHidden
-                ? '48px 1fr'
-                : '30% 1fr',
+            gridTemplateColumns: isMobile ? '1fr' : mapSidebarHidden ? '48px 1fr' : '30% 1fr',
             gap: 12,
             alignItems: 'flex-start',
+            position: 'relative',
           }}
         >
+          {/* Desktop: regular sidebar column. Mobile: render a compact, absolute-positioned sidebar (icon-only when hidden). */}
           {!isMobile && (
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', overflow: 'hidden', minWidth: 0 }}>
               <OutreachMapSidebar
@@ -3294,6 +3320,40 @@ export default function OutreachPage() {
               />
             </div>
           )}
+
+          {isMobile && (
+            <div style={{ position: 'absolute', left: 12, top: 12, zIndex: 60 }}>
+              <OutreachMapSidebar
+                data={todayRunData}
+                loading={todayRunLoading}
+                error={todayRunError}
+                activeRunId={activeMapRunId}
+                collapsedStreets={collapsedStreets}
+                onToggleStreet={toggleStreet}
+                onStreetSelect={(suburb, street) => {
+                  setActiveMapStreet(street);
+                  setReportSuburbFilter(suburb);
+                }}
+                onRunSelect={(runId) => {
+                  setActiveMapRunId(runId);
+                  setActiveMapStreet(null);
+                }}
+                hidden={mapSidebarHidden}
+                onToggleHidden={() => setMapSidebarHidden((h) => !h)}
+                streetStatusMap={mapStreetStatusMap}
+                addressCounts={mapAddressCounts}
+                statusFilter={mapStatusFilter}
+                onStatusFilterChange={setMapStatusFilter}
+                onSuburbClick={(suburb) => {
+                  setMapStatusFilter('all');
+                  setActiveMapStreet(null);
+                  setActiveMapRunId(null);
+                  setReportSuburbFilter(suburb);
+                }}
+              />
+            </div>
+          )}
+
           <div style={{ height: 600, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
             <OutreachMapView
               suburb={reportSuburbFilter || todayRunData?.suburb || firstPendingSuburb}
