@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { DateTime } from 'luxon';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
@@ -76,11 +77,28 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   }
 
   if (sentDates.length > 0) {
-    const placeholders = sentDates.map((_, i) => `$${params.length + 1 + i}`).join(', ');
-    conditions.push(
-      `EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = id AND (sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN (${placeholders}))`
-    );
-    params.push(...sentDates);
+    const dateRanges = sentDates
+      .map((date) => {
+        const dt = DateTime.fromISO(date, { zone: 'Pacific/Auckland' });
+        if (!dt.isValid) return null;
+        return {
+          start: dt.startOf('day').toUTC().toISO(),
+          end: dt.plus({ days: 1 }).startOf('day').toUTC().toISO(),
+        };
+      })
+      .filter(Boolean) as Array<{ start: string; end: string }>;
+
+    if (dateRanges.length > 0) {
+      const rangeClauses = dateRanges
+        .map((_, i) => `(sl6.sent_at >= $${params.length + 1 + i * 2} AND sl6.sent_at < $${params.length + 2 + i * 2})`)
+        .join(' OR ');
+      conditions.push(
+        `EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = id AND (${rangeClauses}))`
+      );
+      for (const range of dateRanges) {
+        params.push(range.start, range.end);
+      }
+    }
   }
 
   if (campaign) {
@@ -88,15 +106,15 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     params.push(campaign);
   }
   if (region) {
-    conditions.push(`region ILIKE $${params.length + 1}`);
+    conditions.push(`lower(region) LIKE lower($${params.length + 1})`);
     params.push(region);
   }
   if (city) {
-    conditions.push(`city ILIKE $${params.length + 1}`);
+    conditions.push(`lower(city) LIKE lower($${params.length + 1})`);
     params.push(city);
   }
   if (suburb) {
-    conditions.push(`suburb ILIKE $${params.length + 1}`);
+    conditions.push(`lower(suburb) LIKE lower($${params.length + 1})`);
     params.push(suburb);
   }
   if (street) {
@@ -471,10 +489,27 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   }
 
   if (sentDates.length > 0) {
-    const placeholders = sentDates.map((_, i) => `$${idx + i}`).join(', ');
-    query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id AND (sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN (${placeholders}))`;
-    params.push(...sentDates);
-    idx += sentDates.length;
+    const dateRanges = sentDates
+      .map((date) => {
+        const dt = DateTime.fromISO(date, { zone: 'Pacific/Auckland' });
+        if (!dt.isValid) return null;
+        return {
+          start: dt.startOf('day').toUTC().toISO(),
+          end: dt.plus({ days: 1 }).startOf('day').toUTC().toISO(),
+        };
+      })
+      .filter(Boolean) as Array<{ start: string; end: string }>;
+
+    if (dateRanges.length > 0) {
+      const rangeClauses = dateRanges
+        .map((_, i) => `(sl6.sent_at >= $${idx + i * 2} AND sl6.sent_at < $${idx + i * 2 + 1})`)
+        .join(' OR ');
+      query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id AND (${rangeClauses}))`;
+      for (const range of dateRanges) {
+        params.push(range.start, range.end);
+      }
+      idx += dateRanges.length * 2;
+    }
   }
 
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';

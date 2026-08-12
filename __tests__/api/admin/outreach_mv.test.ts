@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { DateTime } from 'luxon';
 import { GET, POST } from '@/app/api/admin/outreach/route';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
@@ -154,9 +155,33 @@ describe('Outreach MV GET /api/admin/outreach', () => {
 
     const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
     const params = vi.mocked(marieDB.query).mock.calls[0][1] as unknown[];
-    expect(queryCall).toContain("(sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN");
-    expect(params).toContain('2026-07-01');
-    expect(params).toContain('2026-07-02');
+    const range1Start = DateTime.fromISO('2026-07-01', { zone: 'Pacific/Auckland' })
+      .startOf('day')
+      .toUTC()
+      .toISO();
+    const range1End = DateTime.fromISO('2026-07-01', { zone: 'Pacific/Auckland' })
+      .plus({ days: 1 })
+      .startOf('day')
+      .toUTC()
+      .toISO();
+    const range2Start = DateTime.fromISO('2026-07-02', { zone: 'Pacific/Auckland' })
+      .startOf('day')
+      .toUTC()
+      .toISO();
+    const range2End = DateTime.fromISO('2026-07-02', { zone: 'Pacific/Auckland' })
+      .plus({ days: 1 })
+      .startOf('day')
+      .toUTC()
+      .toISO();
+    expect(queryCall).toContain('EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = id AND ((');
+    expect(queryCall).toContain('sl6.sent_at >= $1');
+    expect(queryCall).toContain('sl6.sent_at < $2');
+    expect(queryCall).toContain('sl6.sent_at >= $3');
+    expect(queryCall).toContain('sl6.sent_at < $4');
+    expect(params).toContain(range1Start);
+    expect(params).toContain(range1End);
+    expect(params).toContain(range2Start);
+    expect(params).toContain(range2End);
   });
 
   it('filters sent properties by sent_dates in legacy mode', async () => {
@@ -172,9 +197,21 @@ describe('Outreach MV GET /api/admin/outreach', () => {
 
     const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
     const params = vi.mocked(marieDB.query).mock.calls[0][1] as unknown[];
+    const rangeStart = DateTime.fromISO('2026-07-03', { zone: 'Pacific/Auckland' })
+      .startOf('day')
+      .toUTC()
+      .toISO();
+    const rangeEnd = DateTime.fromISO('2026-07-03', { zone: 'Pacific/Auckland' })
+      .plus({ days: 1 })
+      .startOf('day')
+      .toUTC()
+      .toISO();
     expect(queryCall).toContain('outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id');
-    expect(queryCall).toContain("(sl6.sent_at AT TIME ZONE 'Pacific/Auckland')::date IN");
-    expect(params).toContain('2026-07-03');
+    expect(queryCall).toContain('EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = op.id AND ((');
+    expect(queryCall).toContain('sl6.sent_at >= $1');
+    expect(queryCall).toContain('sl6.sent_at < $2');
+    expect(params).toContain(rangeStart);
+    expect(params).toContain(rangeEnd);
   });
 });
 

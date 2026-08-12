@@ -991,12 +991,11 @@ export default function PropertiesPage() {
     }
   }, [marketStatus]);
 
-  // When Liked filter is active, reset property-type and last-sold to "all" so
-  // liked results match the outreach page's unfiltered view. The user can still
-  // re-apply these filters explicitly after entering liked-only mode.
+  // When a status filter is active, only reset last-sold presets so the status
+  // view stays consistent. Do not reset Property Type here, because the user may
+  // want to preserve that filter across status changes.
   useEffect(() => {
     if (showLikedOnly || showPendingOnly || showSentOnly || showUnselectedOnly) {
-      setPropertyFilter('all');
       setLastSoldPreset('all');
       setFilters((prev) => ({
         ...prev,

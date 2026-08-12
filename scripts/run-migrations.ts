@@ -55,6 +55,35 @@ async function runMigrations() {
     console.log(`📁 Found ${files.length} migration files\n`);
 
     // Execute each migration
+    async function runMigrationFile(file: string, sql: string) {
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await pool.query(sql);
+          console.log(`✅ ${file} completed\n`);
+          return;
+        } catch (error: any) {
+          const message = error?.message ?? '';
+          const isRetryable = /TransactionRetryWithProtoRefreshError|TransactionRetryError|restart transaction/i.test(message);
+          const isAlreadyApplied = message.includes('already exists') || message.includes('duplicate');
+
+          if (isAlreadyApplied) {
+            console.log(`✓  ${file} (already applied)\n`);
+            return;
+          }
+
+          if (isRetryable && attempt < maxAttempts) {
+            console.warn(`⚠️  Retryable error running ${file} (attempt ${attempt}): ${message}`);
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+            continue;
+          }
+
+          console.error(`❌ Error in ${file}:`, message);
+          return;
+        }
+      }
+    }
+
     for (const file of files) {
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
@@ -65,22 +94,8 @@ async function runMigrations() {
         continue;
       }
 
-      try {
-        console.log(`⚙️  Running ${file}...`);
-        await pool.query(sql);
-        console.log(`✅ ${file} completed\n`);
-      } catch (error: any) {
-        // Some errors are acceptable (e.g., "already exists")
-        if (
-          error.message.includes('already exists') ||
-          error.message.includes('duplicate')
-        ) {
-          console.log(`✓  ${file} (already applied)\n`);
-        } else {
-          console.error(`❌ Error in ${file}:`, error.message);
-          // Continue with other migrations
-        }
-      }
+      console.log(`⚙️  Running ${file}...`);
+      await runMigrationFile(file, sql);
     }
 
     // Verify all required tables exist

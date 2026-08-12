@@ -346,6 +346,28 @@ describe('Properties Page', () => {
     fireEvent.click(houseBtn);
   });
 
+  it('does not reset Property Type when status filter toggles', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const houseBtn = screen.getByText('House');
+    fireEvent.click(houseBtn);
+
+    const pendingBtn = screen.getByRole('button', { name: 'Pending' });
+    fireEvent.click(pendingBtn);
+
+    await waitFor(() => {
+      expect(houseBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+    });
+
+    const sentBtn = screen.getByRole('button', { name: 'Sent' });
+    fireEvent.click(sentBtn);
+
+    await waitFor(() => {
+      expect(houseBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+    });
+  });
+
   it('displays all properties regardless of selected property type (server-side filtering)', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);

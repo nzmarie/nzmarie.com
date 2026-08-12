@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import OutreachMapSidebar from '../../app/admin/outreach/components/OutreachMapSidebar';
+import type { TodayRunData } from '../../app/admin/outreach/components/TodayRunSection';
 
 afterEach(() => {
   cleanup();
@@ -9,7 +10,7 @@ afterEach(() => {
 });
 
 describe('OutreachMapSidebar', () => {
-  const data = {
+  const data: TodayRunData = {
     suburb: 'Torbay',
     groups: [
       {
@@ -18,8 +19,8 @@ describe('OutreachMapSidebar', () => {
           {
             street: 'Ringwood Street',
             suburb: 'Torbay',
-            anchorLat: -36.7,
-            anchorLng: 174.75,
+            lat: -36.7,
+            lng: 174.75,
             pendingCount: 25,
             addressCoords: [
               { address: '1 Ringwood Street', lat: -36.7, lng: 174.75, sent: false, status: 'unsent' },
@@ -27,6 +28,8 @@ describe('OutreachMapSidebar', () => {
             ],
           },
         ],
+        totalPending: 25,
+        extentMeters: 0,
       },
     ],
     runs: [
@@ -39,8 +42,8 @@ describe('OutreachMapSidebar', () => {
               {
                 street: 'Ringwood Street',
                 suburb: 'Torbay',
-                anchorLat: -36.7,
-                anchorLng: 174.75,
+                lat: -36.7,
+                lng: 174.75,
                 pendingCount: 25,
                 addressCoords: [
                   { address: '1 Ringwood Street', lat: -36.7, lng: 174.75, sent: false, status: 'unsent' },
