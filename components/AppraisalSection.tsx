@@ -589,21 +589,43 @@ export default function AppraisalSection({ lang = "en" }: { lang?: Language }) {
             </span>
 
             <div className="relative z-10 space-y-6 text-slate-700 leading-relaxed text-base md:text-lg">
-              <p>
-                &quot;I honestly couldn&apos;t have asked for a more <strong>responsible and forward-thinking agent</strong>. Her level of preparation and attention to detail was exceptional &ndash; she often considered things even more carefully than we did as owners.&quot;
-              </p>
-              <p>
-                &quot;She has a <strong>deep understanding of how business is done in New Zealand</strong>, where relationships and trust matter just as much as numbers. That made a huge difference throughout the process.&quot;
-              </p>
-              <p>
-                &quot;In what has been a very challenging <strong>property market</strong>, she achieved an <strong>outstanding result for our property</strong> &ndash; well beyond what we had hoped for.&quot;
-              </p>
-              <p>
-                &quot;She is honest, reliable, and incredibly professional. What truly stood out was her patience and kindness towards my children during contract negotiations. She made the whole process smooth and stress-free, even with kids around, which we deeply appreciated.&quot;
-              </p>
-              <p className="italic text-slate-600">
-                &quot;I would absolutely recommend her to anyone looking for an agent who genuinely cares and delivers results.&quot;
-              </p>
+              {lang === "en" ? (
+                <>
+                  <p>
+                    &quot;I honestly couldn&apos;t have asked for a more <strong>responsible and forward-thinking agent</strong>. Her level of preparation and attention to detail was exceptional &ndash; she often considered things even more carefully than we did as owners.&quot;
+                  </p>
+                  <p>
+                    &quot;She has a <strong>deep understanding of how business is done in New Zealand</strong>, where relationships and trust matter just as much as numbers. That made a huge difference throughout the process.&quot;
+                  </p>
+                  <p>
+                    &quot;In what has been a very challenging <strong>property market</strong>, she achieved an <strong>outstanding result for our property</strong> &ndash; well beyond what we had hoped for.&quot;
+                  </p>
+                  <p>
+                    &quot;She is honest, reliable, and incredibly professional. What truly stood out was her patience and kindness towards my children during contract negotiations. She made the whole process smooth and stress-free, even with kids around, which we deeply appreciated.&quot;
+                  </p>
+                  <p className="italic text-slate-600">
+                    &quot;I would absolutely recommend her to anyone looking for an agent who genuinely cares and delivers results.&quot;
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    我非常满意 Marie 的专业与前瞻性。她的准备工作和对细节的关注非常出色——很多时候她比我们作为房主考虑得还更周到。
+                  </p>
+                  <p>
+                    她深谙新西兰的商业运作，重视关系与信任，这一点在交易过程中带来了巨大的不同。
+                  </p>
+                  <p>
+                    在这个充满挑战的房产市场中，她为我们的房产取得了非常出色的结果，远超我们的期望。
+                  </p>
+                  <p>
+                    她诚实、可靠且极具专业性。尤其让我印象深刻的是她在合同谈判期间对孩子们的耐心与关怀，使整个过程在有孩子在场的情况下仍然顺利且无压力。
+                  </p>
+                  <p className="italic text-slate-600">
+                    我会毫不犹豫地向任何寻求真诚且有实绩代理的人推荐她。
+                  </p>
+                </>
+              )}
 
               <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
                 <div>

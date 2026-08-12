@@ -5,21 +5,58 @@ import Image from "next/image";
 
 import { translations, Language } from "../lib/translations";
 
+const PROFILE_URL = 'https://www.barfoot.co.nz/our-people/m.nian';
+
 const formatLicense = (text: string) => {
-  const targets = ["(Under REAA 2008)", "(REAA 2008)"];
+  // Render the license string but replace occurrences of "Barfoot & Thompson"
+  // with a safe external link and keep REAA parenthetical styling.
+  const agency = 'Barfoot & Thompson';
+  const targets = ['(Under REAA 2008)', '(REAA 2008)'];
+
+  let rendered: React.ReactNode = text;
+
+  // Replace agency with anchor if present
+  if (text.includes(agency)) {
+    const [beforeAgency, afterAgency] = text.split(agency);
+    rendered = (
+      <>
+        {beforeAgency}
+        <a
+          href={PROFILE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          {agency}
+        </a>
+        {afterAgency}
+      </>
+    );
+  }
+
+  // If REAA parenthetical exists, make it slightly smaller and lighter
   for (const target of targets) {
     if (text.includes(target)) {
+      // If we've already built a JSX node with the agency link, we need to
+      // split the raw text around the target to ensure the parenthetical
+      // receives the smaller styling.
       const parts = text.split(target);
       return (
         <>
-          {parts[0]}
-          <span style={{ fontSize: "0.78em", fontWeight: 400, opacity: 0.7 }}>{target}</span>
+          {parts[0].includes(agency) ? (
+            // parts[0] already contains agency replacement inside `rendered` above
+            rendered
+          ) : (
+            parts[0]
+          )}
+          <span style={{ fontSize: '0.78em', fontWeight: 400, opacity: 0.7 }}>{target}</span>
           {parts[1]}
         </>
       );
     }
   }
-  return <>{text}</>;
+
+  return <>{rendered}</>;
 };
 
 export default function About({ lang = "en" }: { lang?: Language }) {
@@ -105,6 +142,18 @@ export default function About({ lang = "en" }: { lang?: Language }) {
                   <p className="flex items-center justify-center md:justify-start gap-2">
                     <span className="text-blue-600">✉️</span>
                     m.nian@barfoot.co.nz
+                  </p>
+                  <p className="flex items-center justify-center md:justify-start gap-2">
+                    <span className="text-blue-600">🏛️</span>
+                    <a
+                      href={PROFILE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-700 hover:underline truncate"
+                      style={{ textDecoration: 'underline', color: 'inherit' }}
+                    >
+                      Marie&apos;s Barfoot Profile
+                    </a>
                   </p>
                 </div>
 
