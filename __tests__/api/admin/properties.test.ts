@@ -261,6 +261,23 @@ describe('GET /api/admin/properties — market status JOIN', () => {
     expect(countSql).toContain('AND re.id IS NULL AND rer.id IS NULL AND p.has_rental_history = false');
   });
 
+  it('COUNT builds correctly when unselected=true and marketStatus=not_listed', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] })
+      .mockResolvedValueOnce({ rows: [makeDefaultRow()] });
+
+    const req = new Request(
+      'http://localhost/api/admin/properties?market_status=not_listed&unselected=true'
+    );
+    await GET(req);
+
+    const calls = mockQuery.mock.calls as Array<[string, unknown[]]>;
+    const countSql = calls[0][0];
+    expect(countSql).toContain('SELECT COUNT(*) as total FROM properties p');
+    expect(countSql).toContain('NOT EXISTS (SELECT 1 FROM outreach_enriched oe');
+    expect(countSql).not.toMatch(/FROM outreach_enriched oe[\s\S]*FROM properties p/);
+  });
+
   it('uses parameterized date for last_sold_min_years', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ total: '1' }] })

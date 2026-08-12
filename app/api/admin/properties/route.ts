@@ -307,7 +307,9 @@ export async function GET(request: Request) {
     const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
     let countQuery: string;
     if (needsJoinForCount) {
-      countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) as total FROM');
+      // Only replace the main SELECT ... FROM properties p section; don't match
+      // nested FROM clauses inside subqueries such as NOT EXISTS.
+      countQuery = query.replace(/^\s*SELECT[\s\S]*?FROM properties p/, 'SELECT COUNT(*) as total FROM properties p');
     } else {
       const wherePos = query.indexOf('WHERE 1=1');
       countQuery = 'SELECT COUNT(*) as total FROM properties p ' + query.substring(wherePos);
