@@ -37,6 +37,7 @@ interface QrCodeRecord {
 
 const DEFAULT_SUBURBS = [
   'Business Card',
+  'North Shore',
   'Northcross',
   'Oteha',
   'Torbay',
@@ -75,6 +76,7 @@ const DEFAULT_SUBURBS = [
 
 const SUBURB_URLS: Record<string, string> = {
   'Business Card': 'https://nzmarie.com/card',
+  'North Shore': 'https://nzmarie.com',
   'Northcross': 'https://nzmarie.com/northcross',
   'Oteha': 'https://nzmarie.com/oteha',
   'Torbay': 'https://nzmarie.com/torbay',

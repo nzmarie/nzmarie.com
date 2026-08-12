@@ -9,7 +9,7 @@ interface UploadFormData {
   file: File | null;
 }
 
-const SUBURBS = ["Northcross", "Albany", "Browns Bay", "Glenfield", "Others"];
+const SUBURBS = ["North Shore", "Northcross", "Albany", "Browns Bay", "Glenfield", "Others"];
 
 export default function ReportUploadForm({ onSuccess }: { onSuccess?: () => void }) {
   const [formData, setFormData] = useState<UploadFormData>({

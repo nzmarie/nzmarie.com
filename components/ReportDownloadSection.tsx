@@ -11,7 +11,7 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
     firstName: "",
     email: "",
     phone: "",
-    suburb: "Northcross",
+    suburb: "North Shore",
     subscribe: false,
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "limit">("idle");
@@ -149,6 +149,7 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
                 onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-white"
               >
+                <option value="North Shore">North Shore</option>
                 <option value="Oteha">Oteha</option>
                 <option value="Northcross">Northcross</option>
                 <option value="Albany">Albany</option>
@@ -159,7 +160,6 @@ export default function ReportDownloadSection({ lang = "en" }: { lang?: Language
                 <option value="Long Bay">Long Bay</option>
                 <option value="Torbay">Torbay</option>
                 <option value="Mairangi Bay">Mairangi Bay</option>
-                <option value="North Shore">North Shore</option>
               </select>
             </div>
             <div className="flex flex-col">
