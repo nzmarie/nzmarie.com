@@ -156,6 +156,13 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
+  // Special 'unselected' flag: return properties not present in outreach_enriched
+  const unselected = searchParams.get('unselected') === 'true';
+  if (unselected) {
+    // Only apply simple filters; complex joins are expensive here.
+    query += ` AND NOT EXISTS (SELECT 1 FROM outreach_enriched oe WHERE LOWER(REPLACE(oe.property_id::text, '-', '')) = LOWER(p.id))`;
+  }
+
   if (lastSoldNone === 'true') {
     query += ` AND p.last_sold_date IS NULL`;
   } else {

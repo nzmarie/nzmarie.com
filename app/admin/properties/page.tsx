@@ -907,6 +907,9 @@ export default function PropertiesPage() {
   const [marketStatus, setMarketStatus] = useState<'all' | 'for_sale' | 'for_rent' | 'rented' | 'never_rented' | 'not_listed'>('all');
   const [junkFilter, setJunkFilter] = useState<'all' | 'no_junk' | 'allow_junk'>('all');
   const [showLikedOnly, setShowLikedOnly] = useState(false);
+  const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [showSentOnly, setShowSentOnly] = useState(false);
+  const [showUnselectedOnly, setShowUnselectedOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [lastSoldPreset, setLastSoldPreset] = useState('5-15');
   const [buildYearPreset, setBuildYearPreset] = useState('all');
@@ -992,7 +995,7 @@ export default function PropertiesPage() {
   // liked results match the outreach page's unfiltered view. The user can still
   // re-apply these filters explicitly after entering liked-only mode.
   useEffect(() => {
-    if (showLikedOnly) {
+    if (showLikedOnly || showPendingOnly || showSentOnly || showUnselectedOnly) {
       setPropertyFilter('all');
       setLastSoldPreset('all');
       setFilters((prev) => ({
@@ -1001,46 +1004,69 @@ export default function PropertiesPage() {
         last_sold_max_years: '',
       }));
     }
-  }, [showLikedOnly]);
+  }, [showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly]);
 
   const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
-    if (showLikedOnly) {
-      const params = new URLSearchParams({
-        status: 'liked',
-        page: pageNum.toString(),
-        limit: String(pageSize),
-      });
+    if (showLikedOnly || showPendingOnly || showSentOnly || showUnselectedOnly) {
+      // Unselected: query properties that are NOT present in outreach_enriched
+      if (showUnselectedOnly) {
+        const params = new URLSearchParams({ page: pageNum.toString(), limit: String(pageSize) });
+        if (filters.suburb) params.append('suburb', filters.suburb);
+        if (filters.city) params.append('city', filters.city);
+        if (filters.region) params.append('region', filters.region);
+        if (filters.search) params.append('search', filters.search);
+        if (lastSoldPreset === 'none') params.append('last_sold_none', 'true');
+        else {
+          if (filters.last_sold_min_years) params.append('last_sold_min_years', filters.last_sold_min_years);
+          if (filters.last_sold_max_years) params.append('last_sold_max_years', filters.last_sold_max_years);
+        }
+        if (filters.min_bedrooms) params.append('min_bedrooms', filters.min_bedrooms);
+        if (filters.max_bedrooms) params.append('max_bedrooms', filters.max_bedrooms);
+        if (filters.min_bathrooms) params.append('min_bathrooms', filters.min_bathrooms);
+        if (filters.max_bathrooms) params.append('max_bathrooms', filters.max_bathrooms);
+        if (filters.min_car_spaces) params.append('min_car_spaces', filters.min_car_spaces);
+        if (filters.max_car_spaces) params.append('max_car_spaces', filters.max_car_spaces);
+        if (filters.build_year_min) params.append('build_year_min', filters.build_year_min);
+        if (filters.build_year_max) params.append('build_year_max', filters.build_year_max);
+        if (filters.rv_min) params.append('rv_min', filters.rv_min);
+        if (filters.rv_max) params.append('rv_max', filters.rv_max);
+        if (filters.min_floor_area) params.append('min_floor_area', filters.min_floor_area);
+        if (filters.min_land_area) params.append('min_land_area', filters.min_land_area);
+        if (filters.max_land_area) params.append('max_land_area', filters.max_land_area);
+        if (filters.market_premium) params.append('market_premium', filters.market_premium);
+        if (propertyFilter === 'house') params.append('standalone_only', 'true');
+        if (propertyFilter === 'townhouse') params.append('townhouse_only', 'true');
+        if (marketStatus !== 'all') params.append('market_status', marketStatus);
+        if (junkFilter !== 'all') params.append('no_junk_mail', junkFilter === 'no_junk' ? 'true' : 'false');
+        params.append('unselected', 'true');
+
+        const response = await fetch(`/api/admin/properties?${params}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Failed to fetch properties');
+        return { properties: result.properties, total: result.pagination.total };
+      }
+
+      // Otherwise delegate to outreach API (liked/pending/sent)
+      const status = showPendingOnly ? 'pending' : (showSentOnly ? 'sent' : 'liked');
+      const params = new URLSearchParams({ status, page: pageNum.toString(), limit: String(pageSize) });
       if (filters.suburb) params.append('suburb', filters.suburb);
       if (filters.city) params.append('city', filters.city);
       if (filters.region) params.append('region', filters.region);
       if (filters.search) params.append('search', filters.search);
-      // When a street is selected in Filter by Street, pass it through so only
-      // liked properties on that street are returned.
       if (streetModeApplied && selectedStreet) params.append('street', selectedStreet);
-
-      // Delegate last-sold, property-type and market-status filtering to the
-      // outreach API (server-side SQL) so liked results are consistent.
-      if (lastSoldPreset === 'none') {
-        params.append('last_sold_none', 'true');
-      } else if (filters.last_sold_min_years || filters.last_sold_max_years) {
+      if (lastSoldPreset === 'none') params.append('last_sold_none', 'true');
+      else {
         if (filters.last_sold_min_years) params.append('last_sold_min_years', filters.last_sold_min_years);
         if (filters.last_sold_max_years) params.append('last_sold_max_years', filters.last_sold_max_years);
       }
-      if (propertyFilter === 'house') {
-        params.append('standalone_only', 'true');
-      } else if (propertyFilter === 'townhouse') {
-        params.append('townhouse_only', 'true');
-      }
-      if (marketStatus !== 'all') {
-        params.append('market_status', marketStatus);
-      }
-      if (junkFilter !== 'all') {
-        params.append('no_junk_mail', junkFilter === 'no_junk' ? 'true' : 'false');
-      }
+      if (propertyFilter === 'house') params.append('standalone_only', 'true');
+      else if (propertyFilter === 'townhouse') params.append('townhouse_only', 'true');
+      if (marketStatus !== 'all') params.append('market_status', marketStatus);
+      if (junkFilter !== 'all') params.append('no_junk_mail', junkFilter === 'no_junk' ? 'true' : 'false');
 
       const response = await fetch(`/api/admin/outreach?${params}`);
       const result = await response.json();
-      if (!result.success) throw new Error(result.error || 'Failed to fetch liked properties');
+      if (!result.success) throw new Error(result.error || 'Failed to fetch outreach properties');
 
       let mapped: Property[] = result.data.map((item: Record<string, unknown>) => ({
         id: (item.joined_property_id as string) || ((item.property_id as string) ? (item.property_id as string).replace(/-/g, '') : (item.id as string)),
@@ -1061,7 +1087,7 @@ export default function PropertiesPage() {
         property_url: item.property_url || '',
         realestate_url: item.realestate_url || null,
         description: item.description || null,
-        property_type: item.property_type || null,
+        property_type: item.property_type ?? null,
         on_market_sale: item.on_market_sale ?? false,
         on_market_rent: item.on_market_rent ?? false,
         sale_listing_status: item.sale_listing_status ?? null,
@@ -1072,9 +1098,7 @@ export default function PropertiesPage() {
         no_junk_mail: item.no_junk_mail ?? false,
       }));
 
-      // Client-side filters for fields the outreach API doesn't support
-      // (bedrooms, bathrooms, car spaces, build year, RV, floor/land area, market premium)
-
+      // apply same client-side filters as before
       if (filters.min_bedrooms) {
         const min = parseInt(filters.min_bedrooms);
         mapped = mapped.filter(p => p.bedrooms !== null && p.bedrooms >= min);
@@ -1099,7 +1123,6 @@ export default function PropertiesPage() {
         const max = parseInt(filters.max_car_spaces);
         mapped = mapped.filter(p => p.garages !== null && p.garages <= max);
       }
-
       if (filters.build_year_min) {
         const min = parseInt(filters.build_year_min);
         mapped = mapped.filter(p => p.build_year !== null && p.build_year >= min);
@@ -1145,8 +1168,6 @@ export default function PropertiesPage() {
         });
       }
 
-      // Client-side street guard: if a street was selected in "Filter by Street",
-      // ensure only addresses on that street are shown even if the API returned more.
       if (streetModeApplied && selectedStreet) {
         mapped = mapped.filter(p => extractStreetName(p.address) === selectedStreet);
       }
@@ -1210,7 +1231,7 @@ export default function PropertiesPage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, marketStatus, junkFilter, streetModeApplied ? selectedStreet : '', viewMode],
+    queryKey: ["admin-properties", "infinite", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly, marketStatus, junkFilter, streetModeApplied ? selectedStreet : '', viewMode],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => fetchPageData((pageParam as number) || 1),
     getNextPageParam: (lastPage, allPages) => {
@@ -1230,7 +1251,7 @@ export default function PropertiesPage() {
     isLoading: classicLoading,
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
-    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, currentPage, marketStatus, junkFilter, streetModeApplied ? selectedStreet : '', viewMode],
+    queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly, currentPage, marketStatus, junkFilter, streetModeApplied ? selectedStreet : '', viewMode],
     queryFn: async () => fetchPageData(currentPage),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated" && !streetModeOn,
@@ -1576,7 +1597,7 @@ export default function PropertiesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, propertyFilter, lastSoldPreset, showLikedOnly, viewMode]);
+  }, [filters, propertyFilter, lastSoldPreset, showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly, viewMode]);
 
   const propertyIds = !showLikedOnly
     ? (streetModeOn ? streetAddresses : properties).map(p => p.id).filter(Boolean).join(',')
@@ -1628,6 +1649,37 @@ export default function PropertiesPage() {
         const next = new Set(prev);
         if (wasLiked) next.add(property.id);
         else next.delete(property.id);
+        return next;
+      });
+    }
+  };
+
+  const handleUnselect = async (property: Property) => {
+    // Optimistically update UI
+    setLikedPropertyIds(prev => {
+      const next = new Set(prev);
+      next.delete(property.id);
+      return next;
+    });
+    try {
+      const res = await fetch('/api/admin/outreach/unselect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ property_id: property.id }),
+      });
+      await res.json();
+      if (!res.ok) {
+        // revert
+        setLikedPropertyIds(prev => {
+          const next = new Set(prev);
+          next.add(property.id);
+          return next;
+        });
+      }
+    } catch {
+      setLikedPropertyIds(prev => {
+        const next = new Set(prev);
+        next.add(property.id);
         return next;
       });
     }
@@ -2445,11 +2497,11 @@ export default function PropertiesPage() {
 
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
-            Like Status
+            Status
           </label>
           <div style={{ display: "flex", gap: "8px" }}>
             <button
-              onClick={() => setShowLikedOnly(!showLikedOnly)}
+              onClick={() => { setShowLikedOnly(v => { if (!v) { setShowPendingOnly(false); setShowSentOnly(false); setShowUnselectedOnly(false); } return !v; }); }}
               style={{
                 padding: '8px 18px',
                 backgroundColor: showLikedOnly ? '#ef4444' : 'white',
@@ -2479,9 +2531,75 @@ export default function PropertiesPage() {
             </button>
             {showLikedOnly && (
               <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#718096' }}>
-                {displayProperties.length} liked
+                {totalProperties} liked
               </span>
             )}
+            {showPendingOnly && (
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#718096' }}>
+                {totalProperties} pending
+              </span>
+            )}
+            {showSentOnly && (
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#718096' }}>
+                {totalProperties} sent
+              </span>
+            )}
+            {showUnselectedOnly && (
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#718096' }}>
+                {totalProperties} unselected
+              </span>
+            )}
+            <button
+              onClick={() => { setShowPendingOnly(v => { if (!v) { setShowLikedOnly(false); setShowSentOnly(false); setShowUnselectedOnly(false); } return !v; }); }}
+              style={{
+                padding: '8px 18px',
+                backgroundColor: showPendingOnly ? '#3b82f6' : 'white',
+                color: showPendingOnly ? 'white' : '#4a5568',
+                border: showPendingOnly ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: showPendingOnly ? '600' : '500',
+                transition: 'all 0.2s ease',
+                boxShadow: showPendingOnly ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+              }}
+            >
+              {showPendingOnly ? 'Pending' : 'Pending'}
+            </button>
+            <button
+              onClick={() => { setShowSentOnly(v => { if (!v) { setShowLikedOnly(false); setShowPendingOnly(false); setShowUnselectedOnly(false); } return !v; }); }}
+              style={{
+                padding: '8px 18px',
+                backgroundColor: showSentOnly ? '#7c3aed' : 'white',
+                color: showSentOnly ? 'white' : '#4a5568',
+                border: showSentOnly ? '2px solid #7c3aed' : '2px solid #e2e8f0',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: showSentOnly ? '600' : '500',
+                transition: 'all 0.2s ease',
+                boxShadow: showSentOnly ? '0 4px 12px rgba(124, 58, 237, 0.3)' : 'none',
+              }}
+            >
+              {showSentOnly ? 'Sent' : 'Sent'}
+            </button>
+            <button
+              onClick={() => { setShowUnselectedOnly(v => { if (!v) { setShowLikedOnly(false); setShowPendingOnly(false); setShowSentOnly(false); } return !v; }); }}
+              style={{
+                padding: '8px 18px',
+                backgroundColor: showUnselectedOnly ? '#10b981' : 'white',
+                color: showUnselectedOnly ? 'white' : '#4a5568',
+                border: showUnselectedOnly ? '2px solid #10b981' : '2px solid #e2e8f0',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: showUnselectedOnly ? '600' : '500',
+                transition: 'all 0.2s ease',
+                boxShadow: showUnselectedOnly ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
+              }}
+            >
+              {showUnselectedOnly ? 'Unselected' : 'Unselected'}
+            </button>
           </div>
         </div>
 
@@ -3395,6 +3513,17 @@ export default function PropertiesPage() {
                                     title={(showLikedOnly || likedPropertyIds.has(prop.id)) ? 'Unlike' : 'Like'}
                                   >
                                     {(showLikedOnly || likedPropertyIds.has(prop.id)) ? '\u2764' : '\u2661'}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleUnselect(prop); }}
+                                    style={{
+                                      marginLeft: '6px', padding: '6px 10px', borderRadius: '8px',
+                                      background: 'white', border: '1px solid #e2e8f0', color: '#4a5568', cursor: 'pointer',
+                                      fontSize: '0.8rem', fontWeight: 600,
+                                    }}
+                                    title="Unselect (clear outreach statuses)"
+                                  >
+                                    Unselect
                                   </button>
                                   <span className="text-xs text-slate-500">
                                     {[(prop.bedrooms != null ? `${prop.bedrooms} bd` : null),
