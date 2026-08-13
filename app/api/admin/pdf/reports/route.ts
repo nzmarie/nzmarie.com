@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
-import { deleteFromR2 } from '@/lib/r2-storage';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -83,7 +83,7 @@ export async function DELETE(request: Request) {
 
   try {
     const result = await marieDB.query(
-      `SELECT file_url FROM suburb_reports WHERE id = $1`,
+      `SELECT file_url, suburb, quarter, year, doc_label FROM suburb_reports WHERE id = $1`,
       [id]
     );
     const row = result.rows[0];
@@ -91,19 +91,50 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
+    // Delete from R2 BEFORE deleting from database to ensure it's cleaned up
+    const fileUrl = row.file_url as string;
+    const publicDomain = (process.env.R2_PUBLIC_DOMAIN || 'https://r2.nzmarie.com').replace(/\/+$/, '');
+    let r2DeleteSucceeded = false;
+
+    if (fileUrl && fileUrl.startsWith(publicDomain)) {
+      const key = fileUrl.slice(publicDomain.length + 1);
+      try {
+        const r2 = new S3Client({
+          region: 'auto',
+          endpoint: process.env.R2_ENDPOINT,
+          credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID || 'mock',
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || 'mock',
+          },
+        });
+
+        const deleteResult = await r2.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: key,
+          })
+        );
+
+        // DeleteObjectCommand returns success even if file doesn't exist
+        // So we just log it
+        console.log(`Deleted R2 object: ${key}`, deleteResult);
+        r2DeleteSucceeded = true;
+      } catch (e) {
+        console.error('Failed to delete R2 object:', e);
+        // Continue with database deletion even if R2 deletion fails
+      }
+    }
+
+    // Then delete from database
     await marieDB.query(`DELETE FROM suburb_reports WHERE id = $1`, [id]);
 
-    // Best-effort: also remove the object from R2 storage.
-    try {
-      const fileUrl = row.file_url as string;
-      const publicDomain = (process.env.R2_PUBLIC_DOMAIN || 'https://reports.nzmarie.com').replace(/\/+$/, '');
-      if (fileUrl.startsWith(publicDomain)) {
-        const key = fileUrl.slice(publicDomain.length + 1);
-        await deleteFromR2(key);
-      }
-    } catch (e) {
-      console.error('Failed to delete R2 object:', e);
-    }
+    console.log(`Report deleted - R2: ${r2DeleteSucceeded}, DB: true`, {
+      id,
+      suburb: row.suburb,
+      quarter: row.quarter,
+      year: row.year,
+      doc_label: row.doc_label,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

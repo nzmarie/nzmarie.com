@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 
@@ -77,17 +77,54 @@ export async function POST(request: Request) {
 
       const docLabel = (labels[i] || '').trim() || 'Main Report';
       const buffer = Buffer.from(await file.arrayBuffer());
-      const key = `${folderKey}/${sanitizeFileName(file.name)}`;
+      const timestamp = Date.now();
+      const key = `${folderKey}/${timestamp}-${sanitizeFileName(file.name)}`;
+
+      console.log(`[Upload] Processing file ${i + 1}/${files.length}: ${file.name} → ${key}`);
+
+      // Check if a file with the same suburb, quarter, year, and doc_label already exists
+      // If so, delete the old R2 file before uploading the new one
+      const existingResult = await marieDB.query(
+        `SELECT file_url FROM suburb_reports WHERE suburb = $1 AND quarter = $2 AND year = $3 AND doc_label = $4`,
+        [suburb, quarter, year, docLabel]
+      );
+
+      if (existingResult.rows.length > 0) {
+        const oldFileUrl = existingResult.rows[0].file_url as string;
+        if (oldFileUrl && oldFileUrl.startsWith(publicDomain)) {
+          const oldKey = oldFileUrl.replace(`${publicDomain}/`, '');
+          try {
+            if (process.env.R2_BUCKET_NAME) {
+              await r2.send(
+                new DeleteObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: oldKey,
+                })
+              );
+              console.log(`[Upload] Deleted old R2 file: ${oldKey}`);
+            }
+          } catch (e) {
+            console.error(`[Upload] Failed to delete old R2 object (${oldKey}):`, e);
+          }
+        }
+      }
 
       if (process.env.R2_BUCKET_NAME) {
+        console.log(`[Upload] Uploading to R2: ${key} (${buffer.length} bytes)`);
         await r2.send(
           new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME,
             Key: key,
             Body: buffer,
             ContentType: 'application/pdf',
+            ContentDisposition: 'inline',
+            CacheControl: 'public, max-age=31536000, immutable',
+            Metadata: {
+              'upload-timestamp': new Date().toISOString(),
+            },
           })
         );
+        console.log(`[Upload] Successfully uploaded to R2: ${key}`);
       }
 
       const fileUrl = `${publicDomain}/${key}`;
@@ -105,6 +142,8 @@ export async function POST(request: Request) {
          RETURNING *`,
         [suburb, quarter, year, docLabel, fileUrl, file.name || `${suburb}_${quarter}_${year}.pdf`, buffer.length, session.user.email]
       );
+
+      console.log(`[Upload] DB record saved/updated for ${docLabel}: ${result.rows[0].id}`);
 
       uploaded.push({
         file_name: file.name,

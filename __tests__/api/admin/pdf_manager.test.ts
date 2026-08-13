@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST as uploadPOST } from '@/app/api/admin/pdf/upload/route';
 import { GET as reportsGET, DELETE as reportsDELETE } from '@/app/api/admin/pdf/reports/route';
 import { POST as downloadPOST } from '@/app/api/reports/download/route';
@@ -34,6 +34,11 @@ vi.mock('@/lib/r2-storage', () => ({
 describe('PDF Manager & Report Download API Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('POST /api/admin/pdf/upload', () => {
@@ -53,18 +58,22 @@ describe('PDF Manager & Report Download API Routes', () => {
         user: { email: 'nzlouis.com@gmail.com' },
       } as any);
 
-      vi.mocked(marieDB.query).mockResolvedValueOnce({
-        rows: [
-          {
-            id: 'report-1',
-            suburb: 'Oteha',
-            quarter: 'Q2',
-            year: 2026,
-            doc_label: 'Main Report',
-            file_url: 'https://r2.nzmarie.com/reports/Oteha/Q2-2026/Oteha_Q2_2026.pdf',
-          },
-        ],
-      } as any);
+      // First query: check for existing record (should return empty)
+      // Second query: insert/update record
+      vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({ rows: [] } as any) // check existing
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'report-1',
+              suburb: 'Oteha',
+              quarter: 'Q2',
+              year: 2026,
+              doc_label: 'Main Report',
+              file_url: 'https://r2.nzmarie.com/reports/Oteha/Q2-2026/Oteha_Q2_2026.pdf',
+            },
+          ],
+        } as any); // insert/update
 
       const mockFile = new File(['dummy pdf content'], 'Oteha_Q2_2026.pdf', { type: 'application/pdf' });
       const mockFormData = new Map<string, unknown>([
@@ -91,18 +100,134 @@ describe('PDF Manager & Report Download API Routes', () => {
       expect(data.reports[0].doc_label).toBe('Main Report');
     });
 
+    it('generates a unique timestamp-prefixed R2 key on every upload', async () => {
+      vi.mocked(auth).mockResolvedValueOnce({
+        user: { email: 'nzlouis.com@gmail.com' },
+      } as any);
+
+      const fakeTime = 1723500000000;
+      vi.setSystemTime(fakeTime);
+
+      vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'report-ts',
+            suburb: 'Oteha',
+            quarter: 'Q2',
+            year: 2026,
+            doc_label: 'Main Report',
+            file_url: `https://reports.nzmarie.com/reports/Oteha/Q2-2026/${fakeTime}-Oteha_Q2_2026.pdf`,
+          }],
+        } as any);
+
+      const mockFile = new File(['pdf bytes'], 'Oteha Q2 2026.pdf', { type: 'application/pdf' });
+      const request = {
+        formData: vi.fn().mockResolvedValue({
+          get: (key: string) => ({
+            suburb: 'Oteha', quarter: 'Q2', year: '2026', labels: '["Main Report"]', file: null,
+          }[key] ?? null),
+          getAll: (key: string) => key === 'files' ? [mockFile] : [],
+        }),
+      } as unknown as Request;
+
+      const response = await uploadPOST(request);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.success).toBe(true);
+      expect(data.reports[0].file_url).toContain(`${fakeTime}`);
+      expect(data.reports[0].file_url).toContain('Oteha_Q2_2026.pdf');
+      expect(data.reports[0].file_url).toMatch(
+        /reports\/Oteha\/Q2-2026\/\d+-Oteha_Q2_2026\.pdf$/
+      );
+    });
+
+    it('deletes old R2 object before uploading replacement with same label', async () => {
+      vi.mocked(auth).mockResolvedValueOnce({
+        user: { email: 'nzlouis.com@gmail.com' },
+      } as any);
+
+      const publicDomain = 'https://reports.nzmarie.com';
+      const oldFileUrl = `${publicDomain}/reports/Oteha/Q2-2026/1000000000000-letter.pdf`;
+
+      vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({ rows: [{ file_url: oldFileUrl }] } as any)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'report-new', suburb: 'Oteha', quarter: 'Q2', year: 2026, doc_label: 'Letter' }],
+        } as any);
+
+      const newFile = new File(['new letter content'], 'letter.pdf', { type: 'application/pdf' });
+      const request = {
+        formData: vi.fn().mockResolvedValue({
+          get: (key: string) => ({
+            suburb: 'Oteha', quarter: 'Q2', year: '2026', labels: '["Letter"]', file: null,
+          }[key] ?? null),
+          getAll: (key: string) => key === 'files' ? [newFile] : [],
+        }),
+      } as unknown as Request;
+
+      const response = await uploadPOST(request);
+      expect(response.status).toBe(200);
+
+      const selectCall = vi.mocked(marieDB.query).mock.calls[0];
+      expect(selectCall[0]).toContain('SELECT file_url FROM suburb_reports');
+      expect(selectCall[1]).toEqual(['Oteha', 'Q2', 2026, 'Letter']);
+    });
+
+    it('generates different URLs for two uploads of same filename', async () => {
+      vi.mocked(auth)
+        .mockResolvedValueOnce({ user: { email: 'nzlouis.com@gmail.com' } } as any)
+        .mockResolvedValueOnce({ user: { email: 'nzlouis.com@gmail.com' } } as any);
+
+      vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [{ id: 'r1', suburb: 'Oteha', quarter: 'Q2', year: 2026, doc_label: 'Letter',
+          file_url: 'https://reports.nzmarie.com/reports/Oteha/Q2-2026/1111111111111-letter.pdf' }] } as any)
+        .mockResolvedValueOnce({ rows: [{ file_url: 'https://reports.nzmarie.com/reports/Oteha/Q2-2026/1111111111111-letter.pdf' }] } as any)
+        .mockResolvedValueOnce({ rows: [{ id: 'r2', suburb: 'Oteha', quarter: 'Q2', year: 2026, doc_label: 'Letter',
+          file_url: 'https://reports.nzmarie.com/reports/Oteha/Q2-2026/2222222222222-letter.pdf' }] } as any);
+
+      const makeRequest = (fakeTs: number) => {
+        vi.setSystemTime(fakeTs);
+        const f = new File(['content'], 'letter.pdf', { type: 'application/pdf' });
+        return {
+          formData: vi.fn().mockResolvedValue({
+            get: (key: string) => ({
+              suburb: 'Oteha', quarter: 'Q2', year: '2026', labels: '["Letter"]', file: null,
+            }[key] ?? null),
+            getAll: (key: string) => key === 'files' ? [f] : [],
+          }),
+        } as unknown as Request;
+      };
+
+      const res1 = await uploadPOST(makeRequest(1111111111111));
+      const data1 = await res1.json();
+
+      const res2 = await uploadPOST(makeRequest(2222222222222));
+      const data2 = await res2.json();
+
+      expect(data1.reports[0].file_url).not.toBe(data2.reports[0].file_url);
+      expect(data1.reports[0].file_url).toContain('1111111111111');
+      expect(data2.reports[0].file_url).toContain('2222222222222');
+    });
+
     it('uploads multiple PDFs with distinct labels for the same suburb/quarter/year', async () => {
       vi.mocked(auth).mockResolvedValueOnce({
         user: { email: 'nzlouis.com@gmail.com' },
       } as any);
 
+      // For 2 files, we need 4 query calls (2 per file):
+      // File 1: check existing (empty) + insert
+      // File 2: check existing (empty) + insert
       vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({ rows: [] } as any) // check existing for file 1
         .mockResolvedValueOnce({
           rows: [{ id: 'r1', suburb: 'Oteha', quarter: 'Q2', year: 2026, doc_label: 'Cover Letter', file_url: 'https://r2.nzmarie.com/reports/Oteha/Q2-2026/letter.pdf' }],
-        } as any)
+        } as any) // insert file 1
+        .mockResolvedValueOnce({ rows: [] } as any) // check existing for file 2
         .mockResolvedValueOnce({
           rows: [{ id: 'r2', suburb: 'Oteha', quarter: 'Q2', year: 2026, doc_label: 'About Marie', file_url: 'https://r2.nzmarie.com/reports/Oteha/Q2-2026/about-marie.pdf' }],
-        } as any);
+        } as any); // insert file 2
 
       const file1 = new File(['letter'], 'letter.pdf', { type: 'application/pdf' });
       const file2 = new File(['about'], 'about-marie.pdf', { type: 'application/pdf' });
@@ -131,7 +256,7 @@ describe('PDF Manager & Report Download API Routes', () => {
       expect(data.count).toBe(2);
       expect(data.reports[0].doc_label).toBe('Cover Letter');
       expect(data.reports[1].doc_label).toBe('About Marie');
-      expect(marieDB.query).toHaveBeenCalledTimes(2);
+      expect(marieDB.query).toHaveBeenCalledTimes(4);
     });
 
     it('rejects upload when a file is not a PDF', async () => {
