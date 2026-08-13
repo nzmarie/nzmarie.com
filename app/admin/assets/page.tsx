@@ -274,26 +274,65 @@ export default function PDFManagerPage() {
 
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('suburb', suburb);
-      formData.append('quarter', quarter);
-      formData.append('year', year);
+      const uploadResults: Array<{ suburb: string; quarter: string; year: string; label: string; fileName: string; fileSize: number; fileUrl: string }> = [];
 
-      const labels: string[] = [];
       for (const { file, label } of selectedFiles) {
-        formData.append('files', file);
-        labels.push(label);
-      }
-      formData.append('labels', JSON.stringify(labels));
+        console.log(`[Upload] Getting signed URL for: ${file.name} (${label})`);
+        const signedRes = await fetch('/api/admin/pdf/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            suburb,
+            quarter,
+            year,
+            fileName: file.name,
+            label,
+          }),
+        });
 
-      console.log(`[Upload] Uploading ${selectedFiles.length} file(s) to backend...`);
+        const signedData = await signedRes.json();
+        console.log(`[Upload] Signed URL response:`, { ok: signedRes.ok, data: signedData });
+        if (!signedRes.ok || !signedData?.success || !signedData?.url) {
+          throw new Error(signedData?.error || 'Failed to generate upload URL');
+        }
+
+        console.log(`[Upload] Uploading to R2 via presigned URL...`);
+        const uploadRes = await fetch(signedData.url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': file.type || 'application/pdf',
+          },
+          body: file,
+        });
+
+        console.log(`[Upload] R2 upload response:`, { ok: uploadRes.ok, status: uploadRes.status });
+        if (!uploadRes.ok) {
+          const errorText = await uploadRes.text();
+          console.error(`[Upload] R2 upload failed:`, errorText);
+          throw new Error(`Failed to upload file to R2: ${uploadRes.status} ${uploadRes.statusText}`);
+        }
+
+        console.log(`[Upload] File uploaded successfully, preparing metadata...`);
+        uploadResults.push({
+          suburb,
+          quarter,
+          year,
+          label,
+          fileName: file.name,
+          fileSize: file.size,
+          fileUrl: signedData.fileUrl,
+        });
+      }
+
+      console.log(`[Upload] Finalizing upload metadata on server...`);
       const res = await fetch('/api/admin/pdf/upload', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploads: uploadResults }),
       });
 
       const data = await res.json();
-      console.log(`[Upload] Response:`, { ok: res.ok, status: res.status, data });
+      console.log(`[Upload] Finalize response:`, { ok: res.ok, data });
 
       if (res.ok && data.success) {
         showNotify('success', `${data.count || selectedFiles.length} document(s) for ${suburb} ${year}-${quarter} uploaded successfully`);
