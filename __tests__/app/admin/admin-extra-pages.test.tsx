@@ -228,6 +228,62 @@ describe('Extra admin pages', () => {
     expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
   });
 
+  it('shows the newest uploaded suburb first in the Uploaded Reports list', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            reports: [
+              {
+                id: 'north-shore',
+                suburb: 'North Shore',
+                quarter: 'Q2',
+                year: 2026,
+                doc_label: 'Main Report',
+                file_url: 'https://example.com/north-shore.pdf',
+                file_name: 'north-shore.pdf',
+                file_size: 1000,
+                download_count: 0,
+                view_count: 0,
+                status: 'active',
+                uploaded_by: 'admin@example.com',
+                uploaded_at: '2025-02-01T00:00:00.000Z',
+              },
+              {
+                id: 'oteha',
+                suburb: 'Oteha',
+                quarter: 'Q2',
+                year: 2026,
+                doc_label: 'Main Report',
+                file_url: 'https://example.com/oteha.pdf',
+                file_name: 'oteha.pdf',
+                file_size: 1500,
+                download_count: 0,
+                view_count: 0,
+                status: 'active',
+                uploaded_by: 'admin@example.com',
+                uploaded_at: '2025-05-15T00:00:00.000Z',
+              },
+            ],
+          }),
+        }) as any;
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as any;
+    }) as any;
+
+    const qc = createQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <PDFManagerPage />
+      </QueryClientProvider>
+    );
+
+    await screen.findByText('Uploaded Reports');
+    const bodyText = document.body.textContent || '';
+    expect(bodyText.indexOf('Oteha')).toBeLessThan(bodyText.indexOf('North Shore'));
+  });
+
   it('renders Last Sold Data For Sale table with suburb rows', async () => {
     const qc = createQueryClient();
     render(

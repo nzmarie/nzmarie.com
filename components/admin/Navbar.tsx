@@ -43,14 +43,14 @@ export function AdminNavbar() {
   const userInitial = userName.charAt(0).toUpperCase();
 
   const navLinks = [
-    { href: '/admin/activity', label: '📋 Activity', alwaysShow: true },
-    { href: '/admin/properties', label: '🏠 Properties', alwaysShow: true },
-    { href: '/admin/outreach', label: '📬 Outreach', alwaysShow: true },
-    { href: '/admin/leads', label: '👤 Leads', alwaysShow: true },
-    { href: '/admin/realestate', label: '🏡 Realestate', alwaysShow: true },
-    { href: '/admin/analytics', label: '📊 Analytics', alwaysShow: false },
-    { href: '/admin/reports', label: '📝 Reports', alwaysShow: false },
-    { href: '/admin/assets', label: '☁️ Assets', alwaysShow: false },
+    { href: '/admin/activity', label: 'Activity', alwaysShow: true },
+    { href: '/admin/properties', label: 'Properties', alwaysShow: true },
+    { href: '/admin/outreach', label: 'Outreach', alwaysShow: true },
+    { href: '/admin/leads', label: 'Leads', alwaysShow: true },
+    { href: '/admin/realestate', label: 'Realestate', alwaysShow: true },
+    { href: '/admin/analytics', label: 'Analytics', alwaysShow: false },
+    { href: '/admin/reports', label: 'Reports', alwaysShow: false },
+    { href: '/admin/assets', label: 'Assets', alwaysShow: false },
   ];
 
   function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -63,7 +63,7 @@ export function AdminNavbar() {
           isActive
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-700 hover:text-gray-900'
-        } px-2.5 py-2 text-sm font-medium transition-colors whitespace-nowrap`}
+        } px-2 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap`}
       >
         {children}
       </Link>
@@ -74,9 +74,9 @@ export function AdminNavbar() {
     <>
     <nav className={`bg-white shadow-sm fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-in-out ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-3">
+        <div className="flex justify-between items-center gap-2 py-3">
           {/* Left: Logo */}
-          <div className="flex-1 flex items-center">
+          <div className="flex-shrink-0 flex items-center">
             <Link
               href="/admin"
               className="text-lg font-semibold text-gray-900 hover:text-gray-700"
@@ -86,7 +86,7 @@ export function AdminNavbar() {
           </div>
 
           {/* Center: Desktop Navigation */}
-          <div className="hidden lg:flex flex-none items-center space-x-1">
+          <div className="hidden md:flex flex-1 items-center justify-center flex-wrap gap-x-0.5">
             {navLinks.map(link => {
               if (!link.alwaysShow && !superAdmin) return null;
 
@@ -99,10 +99,10 @@ export function AdminNavbar() {
           </div>
 
           {/* Right: User Menu */}
-          <div className="flex-1 flex items-center justify-end space-x-4">
-            {/* Mobile/Tablet Menu Button */}
+          <div className="flex-shrink-0 flex items-center justify-end space-x-3">
+            {/* Mobile Menu Button */}
             <button
-              className="lg:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              className="md:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,7 +176,7 @@ export function AdminNavbar() {
         leaveFrom="opacity-100"
         leaveTo="opacity-0"
       >
-        <div className="fixed inset-0 z-[60] lg:hidden">
+        <div className="fixed inset-0 z-[60] md:hidden">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-gray-600 bg-opacity-75"
