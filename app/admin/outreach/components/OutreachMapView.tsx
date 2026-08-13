@@ -141,10 +141,15 @@ function NativeMarkerManager({
         anchorColor = hasUnsent ? '#dc2626' : hasJunk ? '#eab308' : '#7c3aed';
       }
 
+      // Get the first address for the street anchor marker
+      const firstAddress = street.addressCoords?.[0]?.address || 
+                          street.addresses?.[0] || 
+                          street.street;
+
       const anchorMarker = new google.maps.Marker({
         position: { lat: street.anchorLat, lng: street.anchorLng },
         map,
-        title: `${street.street} — Run ${runIndex} (${street.pendingCount ?? 0} pending)`,
+        title: firstAddress,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 6,

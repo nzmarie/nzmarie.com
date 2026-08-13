@@ -263,4 +263,139 @@ describe('OutreachMapView', () => {
 
     expect(await screen.findByText('Failed to fetch coords')).toBeTruthy();
   });
+
+  it('displays street anchor marker with first address when addressCoords provided', async () => {
+    const map = installMockMap();
+    const markerTitles: string[] = [];
+    
+    const OriginalMarker = (globalThis.google as any).maps.Marker;
+    (globalThis.google as any).maps.Marker = class extends OriginalMarker {
+      constructor(opts: any) {
+        super(opts);
+        if (opts.title) {
+          markerTitles.push(opts.title);
+        }
+      }
+    };
+
+    const fetchMock = vi.fn(async (url: RequestInfo) => {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          suburb: 'Torbay',
+          groups: [
+            {
+              suburb: 'Torbay',
+              streets: [
+                {
+                  street: 'Glamorgan Drive',
+                  suburb: 'Torbay',
+                  anchorLat: -36.69,
+                  anchorLng: 174.74,
+                  pendingCount: 12,
+                  runId: 1,
+                  addresses: ['1 Glamorgan Drive', '5 Glamorgan Drive', '10 Glamorgan Drive'],
+                  addressCoords: [
+                    { address: '1 Glamorgan Drive', lat: -36.69, lng: 174.74, sent: false, status: 'unsent' },
+                    { address: '5 Glamorgan Drive', lat: -36.692, lng: 174.741, sent: false, status: 'unsent' },
+                  ],
+                },
+              ],
+            },
+          ],
+          runs: [{ runId: 1, totalPending: 12 }],
+        }),
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={null}
+        sentStatus="unsent"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      // Check that the street anchor marker displays the first address
+      const streetAnchorTitle = markerTitles.find(t => t.includes('Glamorgan Drive') && !t.includes('Unsent') && !t.includes('Sent'));
+      expect(streetAnchorTitle).toBe('1 Glamorgan Drive');
+      // Make sure it's not showing the old format
+      expect(streetAnchorTitle).not.toContain('Run');
+      expect(streetAnchorTitle).not.toContain('pending');
+    });
+  });
+
+  it('displays address markers with specific address and status', async () => {
+    const map = installMockMap();
+    const markerTitles: string[] = [];
+    
+    const OriginalMarker = (globalThis.google as any).maps.Marker;
+    (globalThis.google as any).maps.Marker = class extends OriginalMarker {
+      constructor(opts: any) {
+        super(opts);
+        if (opts.title) {
+          markerTitles.push(opts.title);
+        }
+      }
+    };
+
+    const fetchMock = vi.fn(async (url: RequestInfo) => {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          suburb: 'Torbay',
+          groups: [
+            {
+              suburb: 'Torbay',
+              streets: [
+                {
+                  street: 'Glamorgan Drive',
+                  suburb: 'Torbay',
+                  anchorLat: -36.69,
+                  anchorLng: 174.74,
+                  pendingCount: 2,
+                  runId: 1,
+                  addresses: ['1 Glamorgan Drive', '5 Glamorgan Drive'],
+                  addressCoords: [
+                    { address: '1 Glamorgan Drive', lat: -36.69, lng: 174.74, sent: false, status: 'unsent' },
+                    { address: '5 Glamorgan Drive', lat: -36.692, lng: 174.741, sent: false, status: 'unsent' },
+                  ],
+                },
+              ],
+            },
+          ],
+          runs: [{ runId: 1, totalPending: 2 }],
+        }),
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={1}
+        sentStatus="unsent"
+        selectedStreet="Glamorgan Drive"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      // With selectedStreet set, address markers should be visible regardless of zoom
+      const addressMarkersWithStatus = markerTitles.filter(t => 
+        t.includes('Glamorgan Drive') && (t.includes('Unsent') || t.includes('Sent'))
+      );
+      expect(addressMarkersWithStatus.length).toBeGreaterThan(0);
+      
+      // Verify address markers contain actual addresses with status
+      expect(markerTitles.some(t => t.includes('1 Glamorgan Drive') && t.includes('Unsent'))).toBeTruthy();
+    });
+  });
 });
