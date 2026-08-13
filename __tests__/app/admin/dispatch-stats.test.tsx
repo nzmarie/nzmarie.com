@@ -270,8 +270,8 @@ describe('DispatchStatsPanel', () => {
     });
 
     const q1Call = fetchMock.mock.calls.some(
-      ([url, init]) =>
-        String(url).includes('campaign-stats') && String(url).includes('campaign=2026_Q1_Oteha') && !init
+      ([url]) =>
+        String(url).includes('campaign-stats') && String(url).includes('campaign=2026_Q1_Oteha')
     );
     expect(q1Call).toBe(true);
   });

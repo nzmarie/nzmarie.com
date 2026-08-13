@@ -39,6 +39,21 @@ export async function uploadToR2(key: string, body: Buffer | Uint8Array, content
   return key;
 }
 
+export async function createPresignedUploadUrl(key: string, contentType: string = 'application/pdf', expiresIn: number = 600): Promise<string> {
+  if (isR2Mock) {
+    return `https://mock-r2.example.com/${key}`;
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ContentType: contentType,
+    CacheControl: 'public, max-age=31536000, immutable',
+  });
+
+  return getSignedUrl(s3Client, command, { expiresIn });
+}
+
 export function getLocalReportUrl(key: string): string {
   const path = key.startsWith("reports/") ? key.slice("reports/".length) : key;
   return `/reports/pdf/${path}`;

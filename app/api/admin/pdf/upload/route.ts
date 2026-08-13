@@ -25,6 +25,87 @@ export async function POST(request: Request) {
   }
 
   try {
+    const contentType = typeof request.headers?.get === 'function'
+      ? request.headers.get('content-type') || ''
+      : '';
+
+    if (contentType.includes('application/json')) {
+      const body = await request.json();
+      const uploads = Array.isArray(body?.uploads) ? body.uploads : [];
+
+      if (uploads.length > 0) {
+        const publicDomain = (process.env.R2_PUBLIC_DOMAIN || 'https://r2.nzmarie.com').replace(/\/+$/, '');
+        const finalized: Array<{ file_name: string; doc_label: string; file_url: string; file_size: number; report?: unknown }> = [];
+
+        for (const item of uploads) {
+          const suburb = String(item?.suburb || '').trim();
+          const quarter = String(item?.quarter || '').trim();
+          const year = Number(item?.year);
+          const docLabel = String(item?.label || 'Main Report').trim() || 'Main Report';
+          const fileUrl = String(item?.fileUrl || '').trim();
+          const fileName = String(item?.fileName || 'report.pdf').trim() || 'report.pdf';
+          const fileSize = Number(item?.fileSize || 0);
+
+          if (!suburb || !quarter || Number.isNaN(year) || !fileUrl) {
+            return NextResponse.json({ error: 'Invalid upload metadata' }, { status: 400 });
+          }
+
+          const existingResult = await marieDB.query(
+            `SELECT file_url FROM suburb_reports WHERE suburb = $1 AND quarter = $2 AND year = $3 AND doc_label = $4`,
+            [suburb, quarter, year, docLabel]
+          );
+
+          if (existingResult.rows.length > 0) {
+            const oldFileUrl = existingResult.rows[0].file_url as string;
+            if (oldFileUrl && oldFileUrl.startsWith(publicDomain)) {
+              const oldKey = oldFileUrl.replace(`${publicDomain}/`, '');
+              try {
+                if (process.env.R2_BUCKET_NAME) {
+                  await r2.send(
+                    new DeleteObjectCommand({
+                      Bucket: process.env.R2_BUCKET_NAME,
+                      Key: oldKey,
+                    })
+                  );
+                }
+              } catch (e) {
+                console.error('[Upload finalize] Failed to delete old R2 object:', e);
+              }
+            }
+          }
+
+          const result = await marieDB.query(
+            `INSERT INTO suburb_reports (suburb, quarter, year, doc_label, file_url, file_name, file_size, uploaded_by, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+             ON CONFLICT (suburb, quarter, year, doc_label)
+             DO UPDATE SET
+               file_url = $5,
+               file_name = $6,
+               file_size = $7,
+               uploaded_at = NOW(),
+               updated_at = NOW()
+             RETURNING *`,
+            [suburb, quarter, year, docLabel, fileUrl, fileName, fileSize, session.user.email]
+          );
+
+          finalized.push({
+            file_name: fileName,
+            doc_label: docLabel,
+            file_url: fileUrl,
+            file_size: fileSize,
+            report: result.rows[0],
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          reports: finalized,
+          count: finalized.length,
+          message: `${finalized.length} report document(s) uploaded successfully`,
+        });
+      }
+    }
+
     const formData = await request.formData();
     const suburb = formData.get('suburb') as string;
     const quarter = formData.get('quarter') as string;
@@ -168,3 +249,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Configuration for Vercel serverless function
+export const config = {
+  maxDuration: 60, // 60 seconds for upload processing
+};

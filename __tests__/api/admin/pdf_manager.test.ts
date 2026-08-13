@@ -4,6 +4,7 @@ import { GET as reportsGET, DELETE as reportsDELETE } from '@/app/api/admin/pdf/
 import { POST as downloadPOST } from '@/app/api/reports/download/route';
 import { auth } from '@/lib/auth';
 import { marieDB, query } from '@/lib/db';
+import { isAdmin } from '@/lib/permissions';
 
 vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),
@@ -33,7 +34,8 @@ vi.mock('@/lib/r2-storage', () => ({
 
 describe('PDF Manager & Report Download API Routes', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(isAdmin).mockReturnValue(true);
     vi.useFakeTimers();
   });
 
