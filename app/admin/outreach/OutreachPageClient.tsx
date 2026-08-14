@@ -1129,7 +1129,7 @@ export default function OutreachPage() {
       return;
     }
 
-    if (activeTab !== 'pending' || (sentStatusFilter !== 'unsent' && viewMode !== 'map')) {
+    if (activeTab !== 'pending' || sentStatusFilter !== 'unsent') {
       setTodayRunData(null);
       setTodayRunError(null);
       return;
@@ -1152,7 +1152,7 @@ export default function OutreachPage() {
       radius: '500',
       budget: String(todayRunBudget),
       status: 'pending',
-      sent_status: viewMode === 'map' ? 'all' : 'unsent',
+      sent_status: 'unsent',
       address_coords: viewMode === 'map' ? 'true' : 'false',
     });
     if (effectiveStartStreet) {
