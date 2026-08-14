@@ -173,40 +173,49 @@ export async function setStreetClustersInCache(key: string, data: unknown): Prom
   if (!redis) return;
   try {
     await redis.set(key, JSON.stringify(data), { ex: STREET_CLUSTERS_TTL });
+    const parts = key.split(':');
+    const suburb = parts[1];
+    if (suburb) {
+      const indexKey = `street_clusters_keys:${suburb.toLowerCase().trim()}`;
+      await redis.sadd(indexKey, key);
+      await redis.expire(indexKey, STREET_CLUSTERS_TTL * 2);
+    }
   } catch {
-    // Non-critical
   }
 }
 
-/**
- * Invalidate all street-clusters cache entries for a suburb.
- * Called after a like/unlike action since pending counts change.
- *
- * Strategy: delete the most common key combinations rather than a KEYS scan
- * (Upstash REST does not support KEYS pattern efficiently).
- * Covers: status=pending × sentStatus in [all, unsent] × budget in [20, 25, 30, 35, 40, 50]
- */
 export async function invalidateStreetClustersForSuburb(suburb: string): Promise<void> {
-  if (!redis) return;
-  const statuses = ['pending'];
-  const sentStatuses = ['all', 'unsent'];
-  const budgets = [20, 25, 30, 35, 40, 50];
-
-  const keys: string[] = [];
-  for (const st of statuses) {
-    for (const ss of sentStatuses) {
-      for (const b of budgets) {
-        const base = streetClustersKey(suburb, st, ss, null, b);
-        keys.push(base);
-        keys.push(`${base}:coords`); // also invalidate the address-coords variant
-      }
-    }
-  }
+  if (!redis || !suburb) return;
+  const s = suburb.toLowerCase().trim();
+  const indexKey = `street_clusters_keys:${s}`;
 
   try {
-    // Upstash supports multi-key DEL
-    await redis.del(...keys);
+    const trackedKeys = await redis.smembers<string[]>(indexKey);
+    const keysToDelete = new Set<string>(trackedKeys ?? []);
+
+    const statuses = ['pending', 'liked', 'sent', 'all'];
+    const sentStatuses = ['all', 'unsent', 'sent'];
+    const quarters = ['all', null, '2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4', '2026_Q1', '2026_Q2', '2026_Q3', '2026_Q4'];
+    const budgets = [10, 15, 20, 25, 30, 35, 40, 50, 100];
+
+    for (const st of statuses) {
+      for (const ss of sentStatuses) {
+        for (const q of quarters) {
+          for (const b of budgets) {
+            const base = streetClustersKey(s, st, ss, q, b);
+            keysToDelete.add(base);
+            keysToDelete.add(`${base}:coords`);
+          }
+        }
+      }
+    }
+
+    const allKeys = Array.from(keysToDelete);
+    if (allKeys.length > 0) {
+      await redis.del(...allKeys);
+    }
+    await redis.del(indexKey);
+    await redis.del(`suburb_streets:${s}`);
   } catch {
-    // Non-critical
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -28,9 +29,17 @@ export async function POST(request: Request) {
     const formatted = property_id ? formatUuid(property_id) : null;
 
     const result = await marieDB.query(
-      `DELETE FROM outreach_properties WHERE property_id = $1 OR louis_property_id = $2 RETURNING id, property_id, status`,
+      `DELETE FROM outreach_properties WHERE property_id = $1 OR louis_property_id = $2 RETURNING id, property_id, status, suburb`,
       [formatted, louis_property_id || property_id]
     );
+
+    const affectedSuburbs = new Set<string>();
+    for (const r of result.rows) {
+      if (r.suburb) affectedSuburbs.add(r.suburb);
+    }
+    for (const suburb of affectedSuburbs) {
+      invalidateStreetClustersForSuburb(suburb).catch(() => { });
+    }
 
     if (process.env.USE_OUTREACH_MV === 'true') {
       marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched').catch(() => {});

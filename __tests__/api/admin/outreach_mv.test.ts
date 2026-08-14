@@ -213,6 +213,35 @@ describe('Outreach MV GET /api/admin/outreach', () => {
     expect(params).toContain(rangeStart);
     expect(params).toContain(rangeEnd);
   });
+
+  it('includes both pending and sent records when status=pending and sent_status=all in MV mode', async () => {
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=pending&sent_status=all&suburb=Torbay&limit=10'));
+    expect(response.status).toBe(200);
+
+    const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    expect(queryCall).toContain("status IN ('pending', 'sent')");
+  });
+
+  it('includes both pending and sent records when status=pending and sent_status=all in legacy mode', async () => {
+    process.env.USE_OUTREACH_MV = 'false';
+    mockAuth();
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] } as any);
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach?status=pending&sent_status=all&suburb=Torbay&limit=10'));
+    expect(response.status).toBe(200);
+
+    const queryCall = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    expect(queryCall).toContain("op.status IN ('pending', 'sent')");
+  });
 });
 
 describe('Outreach MV POST /api/admin/outreach (add property)', () => {

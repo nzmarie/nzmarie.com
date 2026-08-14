@@ -105,7 +105,8 @@ export async function GET(request: Request) {
     const { rows: addressRowsRaw } = await marieDB.query(
       `
       SELECT op.id AS id, op.street, op.house_number, op.property_address,
-             p.latitude AS lat, p.longitude AS lng, p.no_junk_mail AS no_junk_mail
+             p.latitude AS lat, p.longitude AS lng, p.no_junk_mail AS no_junk_mail,
+             op.sent_at, op.last_sent_at, op.total_send_count, op.status
       FROM outreach_properties op
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
       WHERE ${where}
@@ -114,7 +115,6 @@ export async function GET(request: Request) {
       params
     );
 
-    // If address-level coords/status requested, enrich rows with `sent` flag
     const addressRows: AddressRow[] = (addressRowsRaw as Record<string, unknown>[]).map((r) => ({
       id: r.id == null ? null : String(r.id),
       street: String(r.street ?? ''),
@@ -123,7 +123,13 @@ export async function GET(request: Request) {
       lat: r.lat == null ? null : (Number(r.lat) || null),
       lng: r.lng == null ? null : (Number(r.lng) || null),
       no_junk_mail: Boolean(r.no_junk_mail),
-      sent: false,
+      status: r.status == null ? null : String(r.status),
+      sent: Boolean(
+        Number(r.total_send_count) > 0 ||
+        r.last_sent_at != null ||
+        r.sent_at != null ||
+        r.status === 'sent'
+      ),
     }));
 
     if (includeAddressCoords && addressRows.length > 0) {
@@ -131,22 +137,36 @@ export async function GET(request: Request) {
         const ids = addressRows.map((r) => r.id).filter(Boolean);
         if (ids.length > 0) {
           const sendParams: (string | number | string[])[] = [ids as string[], suburb];
-          let sendSql = `SELECT DISTINCT sl.outreach_property_id FROM outreach_send_logs sl JOIN suburb_reports sr ON sl.suburb_report_id = sr.id WHERE sl.outreach_property_id = ANY($1) AND sr.suburb = $2`;
+          let sendSql = `SELECT DISTINCT sl.outreach_property_id FROM outreach_send_logs sl LEFT JOIN suburb_reports sr ON sl.suburb_report_id = sr.id WHERE sl.outreach_property_id = ANY($1) AND (sl.suburb = $2 OR sr.suburb = $2 OR sl.suburb IS NULL)`;
           if (reportQuarter) {
             const parts = reportQuarter.split('-');
-            const year = parseInt(parts[0], 10) || 0;
-            const quarter = parts[1] || '';
-            sendSql += ` AND sr.quarter = $3 AND sr.year = $4`;
-            sendParams.push(quarter, year);
+            if (parts.length === 2) {
+              const year = parseInt(parts[0], 10) || 0;
+              const quarter = parts[1] || '';
+              const qAlt = reportQuarter.replace('-', '_');
+              sendSql += ` AND ((sr.quarter = $3 AND sr.year = $4) OR sl.campaign_key = $5 OR sl.campaign_key = $6)`;
+              sendParams.push(quarter, year, reportQuarter, qAlt);
+            }
           }
           const { rows: sentRows } = await marieDB.query(sendSql, sendParams);
           const sentSet = new Set(sentRows.map((r: { outreach_property_id: unknown }) => String(r.outreach_property_id)));
-          for (const ar of addressRows) {
-            if (ar.id && sentSet.has(ar.id)) ar.sent = true;
+          for (let i = 0; i < addressRows.length; i++) {
+            const ar = addressRows[i];
+            const rawObj = (addressRowsRaw as Record<string, unknown>[])[i];
+            const opSent = Boolean(
+              rawObj && (
+                Number(rawObj.total_send_count) > 0 ||
+                rawObj.last_sent_at != null ||
+                rawObj.sent_at != null ||
+                rawObj.status === 'sent'
+              )
+            );
+            if (ar.id && (sentSet.has(ar.id) || opSent)) {
+              ar.sent = true;
+            }
           }
         }
       } catch (e) {
-        // Non-critical; leave sent flags as false
         console.warn('Failed to fetch send-log flags for address_coords:', e);
       }
     }

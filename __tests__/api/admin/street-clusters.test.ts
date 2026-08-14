@@ -265,4 +265,54 @@ describe('GET /api/admin/outreach/street-clusters', () => {
     const beta = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Beta Street');
     expect(beta.addressCoords![0].status).toBe('junk');
   });
+
+  it('deduplicates duplicate rows for the same address and resolves one final status by precedence (sent > junk > unsent)', async () => {
+    mockAuth();
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { id: '1', street: 'Helen Ryburn Place', property_address: '26 Helen Ryburn Place', house_number: 26, lat: -36.7, lng: 174.7, no_junk_mail: true },
+          { id: '2', street: 'Helen Ryburn Place', property_address: '26 Helen Ryburn Place', house_number: 26, lat: -36.7, lng: 174.7, no_junk_mail: false, sent_at: '2026-08-13T00:00:00Z', total_send_count: 1 },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [{ outreach_property_id: '2' }] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&address_coords=true')
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const street = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Helen Ryburn Place');
+    expect(street.addressCoords).toHaveLength(1);
+    expect(street.addressCoords[0].status).toBe('sent');
+    expect(street.addressCoords[0].sent).toBe(true);
+  });
+
+  it('includes both pending and sent records with status sent when sent_status is all', async () => {
+    mockAuth();
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { id: '1', street: 'Alpha Street', property_address: '1 Alpha Street', house_number: 1, lat: -36.7, lng: 174.7, no_junk_mail: false, status: 'sent', sent_at: '2026-08-13T00:00:00Z', total_send_count: 1 },
+          { id: '2', street: 'Alpha Street', property_address: '3 Alpha Street', house_number: 3, lat: -36.7001, lng: 174.7001, no_junk_mail: false, status: 'pending', sent_at: null, total_send_count: 0 },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Torbay&status=pending&sent_status=all&address_coords=true')
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const querySql = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    expect(querySql).toContain("op.status IN ('pending', 'sent')");
+
+    const alpha = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Alpha Street');
+    expect(alpha.addressCoords).toEqual([
+      { address: '1 Alpha Street', lat: -36.7, lng: 174.7, sent: true, status: 'sent' },
+      { address: '3 Alpha Street', lat: -36.7001, lng: 174.7001, sent: false, status: 'unsent' },
+    ]);
+  });
 });

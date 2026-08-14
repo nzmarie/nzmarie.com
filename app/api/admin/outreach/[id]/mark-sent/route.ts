@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function PATCH(
   _request: Request,
@@ -28,6 +29,12 @@ export async function PATCH(
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    // Invalidate street-clusters cache for this suburb
+    const suburban = result.rows[0]?.suburb;
+    if (suburban) {
+      invalidateStreetClustersForSuburb(suburban).catch(() => { });
     }
 
     return NextResponse.json({ success: true, data: result.rows[0], message: 'Marked as sent successfully' });

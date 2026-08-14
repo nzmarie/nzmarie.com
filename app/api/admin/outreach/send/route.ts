@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -49,8 +50,12 @@ export async function POST(request: Request) {
 
     const sendUser = session.user.email;
     const insertedLogs = [];
+    const affectedSuburbs = new Set<string>();
 
     for (const prop of propertiesResult.rows) {
+      if (prop.suburb) {
+        affectedSuburbs.add(prop.suburb);
+      }
       const logRes = await marieDB.query(
         `INSERT INTO outreach_send_logs (
           outreach_property_id,
@@ -76,7 +81,8 @@ export async function POST(request: Request) {
 
       await marieDB.query(
         `UPDATE outreach_properties
-         SET total_send_count = COALESCE(total_send_count, 0) + 1,
+         SET status = CASE WHEN status = 'pending' THEN 'sent' ELSE status END,
+             total_send_count = COALESCE(total_send_count, 0) + 1,
              last_sent_at = NOW(),
              last_campaign = $1,
              sent_at = NOW(),
@@ -86,6 +92,11 @@ export async function POST(request: Request) {
       );
 
       insertedLogs.push(logRes.rows[0]);
+    }
+
+    // Invalidate street-clusters cache for all affected suburbs
+    for (const suburb of affectedSuburbs) {
+      invalidateStreetClustersForSuburb(suburb).catch(() => { });
     }
 
     if (process.env.USE_OUTREACH_MV === 'true') {

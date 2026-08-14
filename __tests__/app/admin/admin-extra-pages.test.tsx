@@ -220,12 +220,12 @@ describe('Extra admin pages', () => {
         <PDFManagerPage />
       </QueryClientProvider>
     );
-    expect(await screen.findByText('Upload Quarterly Report')).toBeTruthy();
+    expect(await screen.findByText('Upload suburb reports')).toBeTruthy();
     expect(screen.getByText('PDF Reports')).toBeTruthy();
     expect(screen.getByText('QR Codes')).toBeTruthy();
 
     fireEvent.click(screen.getByText('QR Codes'));
-    expect(await screen.findByText('Suburb QR Code Manager')).toBeTruthy();
+    expect(await screen.findByText('Uploaded QR codes')).toBeTruthy();
   });
 
   it('shows the newest uploaded suburb first in the Uploaded Reports list', async () => {
@@ -235,21 +235,6 @@ describe('Extra admin pages', () => {
           ok: true,
           json: () => Promise.resolve({
             reports: [
-              {
-                id: 'north-shore',
-                suburb: 'North Shore',
-                quarter: 'Q2',
-                year: 2026,
-                doc_label: 'Main Report',
-                file_url: 'https://example.com/north-shore.pdf',
-                file_name: 'north-shore.pdf',
-                file_size: 1000,
-                download_count: 0,
-                view_count: 0,
-                status: 'active',
-                uploaded_by: 'admin@example.com',
-                uploaded_at: '2025-02-01T00:00:00.000Z',
-              },
               {
                 id: 'oteha',
                 suburb: 'Oteha',
@@ -265,6 +250,21 @@ describe('Extra admin pages', () => {
                 uploaded_by: 'admin@example.com',
                 uploaded_at: '2025-05-15T00:00:00.000Z',
               },
+              {
+                id: 'north-shore',
+                suburb: 'North Shore',
+                quarter: 'Q2',
+                year: 2026,
+                doc_label: 'Main Report',
+                file_url: 'https://example.com/north-shore.pdf',
+                file_name: 'north-shore.pdf',
+                file_size: 1000,
+                download_count: 0,
+                view_count: 0,
+                status: 'active',
+                uploaded_by: 'admin@example.com',
+                uploaded_at: '2025-02-01T00:00:00.000Z',
+              },
             ],
           }),
         }) as any;
@@ -279,7 +279,7 @@ describe('Extra admin pages', () => {
       </QueryClientProvider>
     );
 
-    await screen.findByText('Uploaded Reports');
+    await screen.findByText('Upload suburb reports');
     const bodyText = document.body.textContent || '';
     expect(bodyText.indexOf('Oteha')).toBeLessThan(bodyText.indexOf('North Shore'));
   });

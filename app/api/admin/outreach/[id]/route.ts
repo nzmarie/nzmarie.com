@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function PATCH(
   request: Request,
@@ -73,6 +74,12 @@ export async function PATCH(
       );
     }
 
+    // Invalidate street-clusters cache if status or suburb changed
+    const updatedProperty = result.rows[0];
+    if (updatedProperty?.suburb) {
+      invalidateStreetClustersForSuburb(updatedProperty.suburb).catch(() => { });
+    }
+
     if (process.env.USE_OUTREACH_MV === 'true') {
       marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')
         .catch(err => console.error('MV refresh failed (non-critical):', err));
@@ -105,7 +112,7 @@ export async function DELETE(
     const { id } = await params;
 
     const result = await marieDB.query(
-      `DELETE FROM outreach_properties WHERE id = $1 RETURNING id`,
+      `DELETE FROM outreach_properties WHERE id = $1 RETURNING id, suburb`,
       [id]
     );
 
@@ -114,6 +121,11 @@ export async function DELETE(
         { error: 'Property not found' },
         { status: 404 }
       );
+    }
+
+    const deletedSuburb = result.rows[0]?.suburb;
+    if (deletedSuburb) {
+      invalidateStreetClustersForSuburb(deletedSuburb).catch(() => { });
     }
 
     if (process.env.USE_OUTREACH_MV === 'true') {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function PATCH(
   _request: Request,
@@ -48,6 +49,12 @@ export async function PATCH(
         `DELETE FROM outreach_send_logs WHERE outreach_property_id = $1`,
         [params.id]
       );
+    }
+
+    // Invalidate street-clusters cache for this suburb
+    const suburban = result.rows[0]?.suburb;
+    if (suburban) {
+      invalidateStreetClustersForSuburb(suburban).catch(() => { });
     }
 
     if (process.env.USE_OUTREACH_MV === 'true') {

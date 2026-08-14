@@ -264,7 +264,7 @@ describe('OutreachMapView', () => {
     expect(await screen.findByText('Failed to fetch coords')).toBeTruthy();
   });
 
-  it('displays street anchor marker with first address when addressCoords provided', async () => {
+  it('displays street anchor marker with street name at low zoom (showDots=false)', async () => {
     const map = installMockMap();
     const markerTitles: string[] = [];
     
@@ -321,12 +321,12 @@ describe('OutreachMapView', () => {
     );
 
     await waitFor(() => {
-      // Check that the street anchor marker displays the first address
-      const streetAnchorTitle = markerTitles.find(t => t.includes('Glamorgan Drive') && !t.includes('Unsent') && !t.includes('Sent'));
-      expect(streetAnchorTitle).toBe('1 Glamorgan Drive');
-      // Make sure it's not showing the old format
-      expect(streetAnchorTitle).not.toContain('Run');
-      expect(streetAnchorTitle).not.toContain('pending');
+      const glamorganMarkers = markerTitles.filter(t => t.includes('Glamorgan Drive'));
+      expect(glamorganMarkers.length).toBeGreaterThan(0);
+      const anchorTitle = glamorganMarkers.find(t => !t.includes('·'));
+      expect(anchorTitle).toBe('Glamorgan Drive');
+      const dotMarkers = glamorganMarkers.filter(t => t.includes('·'));
+      expect(dotMarkers.length).toBe(0);
     });
   });
 

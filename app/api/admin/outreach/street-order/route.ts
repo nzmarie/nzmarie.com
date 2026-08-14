@@ -5,6 +5,7 @@ import { isAdmin } from '@/lib/permissions';
 import { buildOutreachFilter } from '@/lib/outreach-filter';
 import { buildStreetSummaries, toOrderable, AddressRow } from '@/lib/outreach-streets';
 import { orderStreetsGreedily } from '@/lib/street-ordering';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 const KEY_PREFIX = 'outreach_street_order:';
 const MAX_ORDER_STREETS = 500;
@@ -157,6 +158,7 @@ export async function PUT(request: Request) {
        DO UPDATE SET setting_value = $2, updated_at = NOW(), updated_by = $3`,
       [`${KEY_PREFIX}${suburb}`, value, session.user.email]
     );
+    invalidateStreetClustersForSuburb(suburb).catch(() => {});
     return NextResponse.json({ success: true, suburb, order: clean });
   } catch (error) {
     console.error('Error saving street order:', error);
@@ -184,6 +186,7 @@ export async function DELETE(request: Request) {
       `DELETE FROM admin_settings WHERE setting_key = $1`,
       [`${KEY_PREFIX}${suburb}`]
     );
+    invalidateStreetClustersForSuburb(suburb).catch(() => {});
     return NextResponse.json({ success: true, suburb });
   } catch (error) {
     console.error('Error clearing street order:', error);

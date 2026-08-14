@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -71,6 +72,14 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
 
   if (status === 'sent') {
     conditions.push(`EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = id)`);
+  } else if (status === 'pending') {
+    if (sentStatus === 'all' || !sentStatus) {
+      conditions.push(`status IN ('pending', 'sent')`);
+    } else if (sentStatus === 'sent') {
+      conditions.push(`(status = 'sent' OR status = 'pending')`);
+    } else {
+      conditions.push(`status = 'pending'`);
+    }
   } else if (status) {
     conditions.push(`status = $${params.length + 1}`);
     params.push(status);
@@ -173,37 +182,41 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
 
   if (sentStatus === 'sent') {
     if (suburb) {
-      let sub = `EXISTS (SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND sr3.suburb = $${params.length + 1}`;
+      let sub = `EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
       params.push(suburb);
       if (reportQuarter) {
         const parts = reportQuarter.split('-');
         if (parts.length === 2) {
           const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}`;
-          params.push(parts[1], isNaN(y) ? 0 : y);
+          const q = parts[1];
+          const qAlt = reportQuarter.replace('-', '_');
+          sub += ` AND ((sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}) OR sl3.campaign_key = $${params.length + 3} OR sl3.campaign_key = $${params.length + 4} OR last_campaign = $${params.length + 3} OR last_campaign = $${params.length + 4})`;
+          params.push(q, isNaN(y) ? 0 : y, reportQuarter, qAlt);
         }
       }
-      sub += ')';
-      conditions.push(sub);
+      sub += ') OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\'';
+      conditions.push(`(${sub})`);
     } else {
-      conditions.push('EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id)');
+      conditions.push('(EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id) OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\')');
     }
   } else if (sentStatus === 'unsent') {
     if (suburb) {
-      let sub = `NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND sr3.suburb = $${params.length + 1}`;
+      let sub = `NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
       params.push(suburb);
       if (reportQuarter) {
         const parts = reportQuarter.split('-');
         if (parts.length === 2) {
           const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}`;
-          params.push(parts[1], isNaN(y) ? 0 : y);
+          const q = parts[1];
+          const qAlt = reportQuarter.replace('-', '_');
+          sub += ` AND ((sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}) OR sl3.campaign_key = $${params.length + 3} OR sl3.campaign_key = $${params.length + 4} OR last_campaign = $${params.length + 3} OR last_campaign = $${params.length + 4})`;
+          params.push(q, isNaN(y) ? 0 : y, reportQuarter, qAlt);
         }
       }
-      sub += ')';
-      conditions.push(sub);
+      sub += ') AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\'';
+      conditions.push(`(${sub})`);
     } else {
-      conditions.push('NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id)');
+      conditions.push('(NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id) AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\')');
     }
     conditions.push('(no_junk_mail IS NULL OR no_junk_mail = false)');
   }
@@ -372,6 +385,14 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
 
   if (status === 'sent') {
     query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = op.id)`;
+  } else if (status === 'pending') {
+    if (sentStatus === 'all' || !sentStatus) {
+      query += ` AND op.status IN ('pending', 'sent')`;
+    } else if (sentStatus === 'sent') {
+      query += ` AND (op.status = 'sent' OR op.status = 'pending')`;
+    } else {
+      query += ` AND op.status = 'pending'`;
+    }
   } else if (status) {
     query += ` AND op.status = $${idx++}`;
     params.push(status);
@@ -464,9 +485,9 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
           idx += 2;
         }
       }
-      query += ` AND EXISTS (${sub})`;
+      query += ` AND (EXISTS (${sub}) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
     } else {
-      query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id)`;
+      query += ` AND (EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
     }
   } else if (sentStatus === 'unsent') {
     if (suburb) {
@@ -482,10 +503,11 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
           idx += 2;
         }
       }
-      query += ` AND NOT EXISTS (${sub})`;
+      query += ` AND (NOT EXISTS (${sub}) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
     } else {
-      query += ` AND NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id)`;
+      query += ` AND (NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
     }
+    query += ` AND (p.no_junk_mail IS NULL OR p.no_junk_mail = false)`;
   }
 
   if (sentDates.length > 0) {
@@ -697,6 +719,10 @@ export async function POST(request: Request) {
         session.user.email,
       ]
     );
+
+    if (suburb) {
+      invalidateStreetClustersForSuburb(suburb.trim()).catch(() => { });
+    }
 
     if (process.env.USE_OUTREACH_MV === 'true') {
       marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')

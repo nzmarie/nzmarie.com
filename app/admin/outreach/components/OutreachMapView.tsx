@@ -126,53 +126,18 @@ function NativeMarkerManager({
 
       const runIndex = street.runId ?? 1;
       const isSelected = selectedStreet === street.street;
-
-      let anchorColor: string;
-      if (statusFilter === 'sent') {
-        anchorColor = '#7c3aed';
-      } else if (statusFilter === 'junk') {
-        anchorColor = '#eab308';
-      } else if (statusFilter === 'unsent') {
-        anchorColor = '#dc2626';
-      } else {
-        const coords = street.addressCoords ?? [];
-        const hasUnsent = coords.some(a => a.status === 'unsent');
-        const hasJunk = coords.some(a => a.status === 'junk');
-        anchorColor = hasUnsent ? '#dc2626' : hasJunk ? '#eab308' : '#7c3aed';
-      }
-
-      // Get the first address for the street anchor marker
-      const firstAddress = street.addressCoords?.[0]?.address || 
-                          street.addresses?.[0] || 
-                          street.street;
-
-      const anchorMarker = new google.maps.Marker({
-        position: { lat: street.anchorLat, lng: street.anchorLng },
-        map,
-        title: firstAddress,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 6,
-          fillColor: anchorColor,
-          fillOpacity: 1.0,
-          strokeColor: '#ffffff',
-          strokeWeight: 1.5,
-        },
-        zIndex: isSelected ? 2000 : 1000,
-      });
-
       const streetName = street.street;
-      anchorMarker.addListener('click', () => {
-        onStreetSelectRef.current(suburb, streetName);
-      });
-      newMarkers.push(anchorMarker);
 
       const isInActiveRun = activeRunId != null && runIndex === activeRunId;
       const showDots = zoom >= 13 || isSelected || isInActiveRun || statusFilter !== 'all';
 
       if (showDots) {
+        const renderedAddresses = new Set<string>();
         for (const a of street.addressCoords ?? []) {
           if (a.lat == null || a.lng == null) continue;
+          const key = a.address.trim().toLowerCase();
+          if (renderedAddresses.has(key)) continue;
+          renderedAddresses.add(key);
 
           const isUnsent = a.status === 'unsent';
           const isSent = a.status === 'sent';
@@ -195,7 +160,7 @@ function NativeMarkerManager({
           const dotColor = statusColor(a.status);
           const statusLabel = isUnsent ? 'Unsent' : isJunk ? 'No junk mail' : 'Sent';
 
-          newMarkers.push(new google.maps.Marker({
+          const dotMarker = new google.maps.Marker({
             position: { lat: a.lat, lng: a.lng },
             map,
             title: `${a.address} · ${statusLabel}`,
@@ -208,8 +173,36 @@ function NativeMarkerManager({
               strokeWeight: 1.5,
             },
             zIndex: isUnsent ? 500 : isJunk ? 450 : 300,
-          }));
+          });
+          dotMarker.addListener('click', () => {
+            onStreetSelectRef.current(suburb, streetName);
+          });
+          newMarkers.push(dotMarker);
         }
+      } else {
+        const coords = street.addressCoords ?? [];
+        const hasUnsent = coords.some(a => a.status === 'unsent');
+        const hasJunk = coords.some(a => a.status === 'junk');
+        const anchorColor = hasUnsent ? '#dc2626' : hasJunk ? '#eab308' : '#7c3aed';
+
+        const anchorMarker = new google.maps.Marker({
+          position: { lat: street.anchorLat, lng: street.anchorLng },
+          map,
+          title: streetName,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 6,
+            fillColor: anchorColor,
+            fillOpacity: 1.0,
+            strokeColor: '#ffffff',
+            strokeWeight: 1.5,
+          },
+          zIndex: isSelected ? 2000 : 1000,
+        });
+        anchorMarker.addListener('click', () => {
+          onStreetSelectRef.current(suburb, streetName);
+        });
+        newMarkers.push(anchorMarker);
       }
     }
 

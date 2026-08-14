@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB, ensureOutreachTablesExist } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
 interface PropertyInput {
   louis_property_id: string;
@@ -29,13 +30,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No properties provided' }, { status: 400 });
     }
 
-    // Insert into the unified outreach_properties table. Use ON CONFLICT
-    // to skip duplicates by (property_address, campaign).
+    const affectedSuburbs = new Set<string>();
+
     const insertPromises = properties.map((property: PropertyInput) => {
-      // Default values for city/region if not provided
+      if (property.suburb) affectedSuburbs.add(property.suburb);
       const city = property.city ?? 'Auckland City';
       const region = 'Auckland';
-      // First check by louis_property_id to avoid duplicates
       if (property.louis_property_id) {
         return (async () => {
           const dup = await marieDB.query(
@@ -89,6 +89,10 @@ export async function POST(request: Request) {
 
     const results = await Promise.all(insertPromises);
     const successCount = results.filter(r => r.rows.length > 0).length;
+
+    for (const suburb of affectedSuburbs) {
+      invalidateStreetClustersForSuburb(suburb).catch(() => { });
+    }
 
     return NextResponse.json({
       success: true,

@@ -9,6 +9,7 @@ export interface AddressRow {
   id?: string | null;
   no_junk_mail?: boolean | null;
   sent?: boolean | null;
+  status?: string | null;
 }
 
 export interface StreetSummary {
@@ -30,8 +31,26 @@ export interface StreetSummary {
   }>;
 }
 
+export function resolveAddressStatus(
+  row: Pick<AddressRow, 'no_junk_mail' | 'sent'> & { status?: string | null }
+): 'unsent' | 'sent' | 'junk' {
+  if (row.sent || row.status === 'sent') return 'sent';
+  if (row.no_junk_mail) return 'junk';
+  return 'unsent';
+}
+
+export function mergeAddressStatus(
+  current: 'unsent' | 'sent' | 'junk',
+  next: 'unsent' | 'sent' | 'junk'
+): 'unsent' | 'sent' | 'junk' {
+  const order = { unsent: 0, junk: 1, sent: 2 } as const;
+  return order[current] >= order[next] ? current : next;
+}
+
 export function buildStreetSummaries(rows: AddressRow[], suburb: string, includeAddressCoords: boolean = false): StreetSummary[] {
   const map = new Map<string, StreetSummary>();
+  const streetAddressKey = new Map<string, Map<string, { lat: number; lng: number; address: string; sent: boolean; status: 'unsent' | 'sent' | 'junk' }>>();
+
   for (const r of rows) {
     let s = map.get(r.street);
     if (!s) {
@@ -64,14 +83,37 @@ export function buildStreetSummaries(rows: AddressRow[], suburb: string, include
         }
       }
       if (includeAddressCoords) {
-        const status: 'unsent' | 'sent' | 'junk' = r.no_junk_mail ? 'junk' : (r.sent ? 'sent' : 'unsent');
-        s.addressCoords!.push({
-          address: r.property_address,
-          lat,
-          lng,
-          sent: !!r.sent,
-          status,
-        });
+        const status = resolveAddressStatus(r as Pick<AddressRow, 'no_junk_mail' | 'sent'> & { status?: string | null });
+        const normalizedAddress = String(r.property_address ?? '').trim();
+        const dedupeKey = normalizedAddress.toLowerCase().replace(/\s+/g, ' ');
+
+        if (!streetAddressKey.has(r.street)) {
+          streetAddressKey.set(r.street, new Map());
+        }
+        const streetKeyMap = streetAddressKey.get(r.street)!;
+
+        const existing = streetKeyMap.get(dedupeKey);
+        if (existing) {
+          const mergedStatus = mergeAddressStatus(existing.status, status);
+          const merged = {
+            ...existing,
+            sent: existing.sent || !!r.sent || r.status === 'sent',
+            status: mergedStatus,
+            lat: existing.lat ?? lat,
+            lng: existing.lng ?? lng,
+          };
+          streetKeyMap.set(dedupeKey, merged);
+          s.addressCoords = Array.from(streetKeyMap.values());
+        } else {
+          streetKeyMap.set(dedupeKey, {
+            address: normalizedAddress,
+            lat,
+            lng,
+            sent: !!r.sent || r.status === 'sent',
+            status,
+          });
+          s.addressCoords = Array.from(streetKeyMap.values());
+        }
       }
     }
   }
