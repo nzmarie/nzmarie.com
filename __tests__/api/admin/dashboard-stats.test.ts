@@ -16,6 +16,10 @@ vi.mock('@/lib/redis', () => ({
   getCachedOrFetch: vi.fn((_key: string, fn: () => Promise<unknown>) => fn()),
 }));
 
+vi.mock('@/lib/campaign-tracker', () => ({
+  ensureCampaignTablesExist: vi.fn(),
+}));
+
 import { auth } from '@/lib/auth';
 import { isAdmin } from '@/lib/permissions';
 import { db } from '@/lib/drizzle';
@@ -65,7 +69,18 @@ describe('GET /api/admin/dashboard/stats', () => {
     expect(body.stats.highPriorityLeads).toBe(2);
     expect(body.stats.pendingOutreach).toBe(10);
     expect(body.stats.sentOutreach).toBe(20);
+    expect(body.stats.sentSummary).toEqual({
+      total_sent: 10,
+      suburb_count: 1,
+      suburbs: [{ suburb: 'Albany', sent_count: 10 }],
+    });
     expect(body.stats.outreachBySuburb).toHaveLength(1);
+    expect(body.stats.scanStats).toEqual({
+      total_scans: 0,
+      total_unique: 0,
+      campaigns: [],
+    });
+    expect(body.stats.downloadsBySuburb).toEqual([]);
     expect(body.stats.recentDownloads).toHaveLength(1);
   });
 
@@ -127,5 +142,101 @@ describe('GET /api/admin/dashboard/stats', () => {
     expect(res.status).toBe(200);
     expect(body.suburb).toBe('Takapuna');
     expect(body.stats.newLeads).toBe(3);
+  });
+
+  it('queries live outreach tables for sent summary', async () => {
+    const mockRow = {
+      new_leads: '1', high_priority_leads: '0', pending_outreach: '2',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      sent_summary_suburbs: [
+        { suburb: 'Albany', sent_count: 5 },
+        { suburb: 'Torbay', sent_count: 3 },
+      ],
+      sent_summary_suburb_count: '2',
+      sent_summary_total_sent: '8',
+    };
+
+    let capturedSql = '';
+    vi.mocked(db.execute).mockImplementation(((sql: any) => {
+      capturedSql = JSON.stringify(sql?.queryChunks ?? []);
+      return { rows: [mockRow] };
+    }) as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(capturedSql).toContain('FROM outreach_properties');
+    expect(capturedSql).toContain('FROM outreach_send_logs');
+    expect(capturedSql).toContain('FROM campaign_analytics');
+    expect(capturedSql).not.toContain('outreach_selected_properties');
+    expect(body.stats.sentSummary).toEqual({
+      total_sent: 8,
+      suburb_count: 2,
+      suburbs: [
+        { suburb: 'Albany', sent_count: 5 },
+        { suburb: 'Torbay', sent_count: 3 },
+      ],
+    });
+  });
+
+  it('returns scan stats and normalizes campaign names', async () => {
+    const mockRow = {
+      new_leads: '1', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      total_scans: '42',
+      total_unique_scans: '18',
+      scan_campaigns: [
+        { campaign_key: '2026_Q2_Torbay', campaign_name: 'Torbay campaign', total_pv: '30', total_uv: '12' },
+        { campaign_key: '2026_Q2_Albany', campaign_name: '', total_pv: '12', total_uv: '6' },
+      ],
+    };
+
+    vi.mocked(db.execute).mockResolvedValue({ rows: [mockRow] } as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.stats.scanStats).toEqual({
+      total_scans: 42,
+      total_unique: 18,
+      campaigns: [
+        { campaign_key: '2026_Q2_Torbay', campaign_name: 'Torbay Campaign', total_pv: 30, total_uv: 12 },
+        { campaign_key: '2026_Q2_Albany', campaign_name: '2026 Q2 Albany', total_pv: 12, total_uv: 6 },
+      ],
+    });
+  });
+
+  it('returns downloads by suburb breakdown', async () => {
+    const mockRow = {
+      new_leads: '1', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '2', total_downloads: '12', month_downloads: '5',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      downloads_by_suburb: [
+        { suburb: 'Torbay', download_count: '7' },
+        { suburb: 'Albany', download_count: '5' },
+      ],
+    };
+
+    vi.mocked(db.execute).mockResolvedValue({ rows: [mockRow] } as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.stats.totalDownloads).toBe(12);
+    expect(body.stats.downloadsBySuburb).toEqual([
+      { suburb: 'Torbay', download_count: 7 },
+      { suburb: 'Albany', download_count: 5 },
+    ]);
   });
 });

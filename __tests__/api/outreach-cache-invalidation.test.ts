@@ -210,7 +210,7 @@ describe('Outreach Cache Invalidation', () => {
       mockInvalidate.mockRejectedValue(new Error('Redis unavailable'));
 
       const resultData = { id: 'prop-123', suburb: 'Torbay', status: 'sent' };
-      let apiResponse = { success: false };
+      const apiResponse = { success: false };
 
       if (resultData?.suburb) {
         // The actual code uses .catch(() => { }) to prevent blocking

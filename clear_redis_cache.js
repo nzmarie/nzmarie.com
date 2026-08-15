@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const Redis = require('ioredis');
 
 const redis = new Redis({

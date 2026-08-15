@@ -8,6 +8,35 @@ import { SkeletonDashboard } from "@/components/admin/Skeleton";
 import { SuburbFilter } from "@/components/admin/SuburbFilter";
 import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 
+interface SentSummaryItem {
+  suburb: string;
+  sent_count: number;
+}
+
+interface SentSummary {
+  total_sent: number;
+  suburb_count: number;
+  suburbs: SentSummaryItem[];
+}
+
+interface ScanCampaign {
+  campaign_key: string;
+  campaign_name: string;
+  total_pv: number;
+  total_uv: number;
+}
+
+interface ScanStats {
+  total_scans: number;
+  total_unique: number;
+  campaigns: ScanCampaign[];
+}
+
+interface SuburbDownload {
+  suburb: string;
+  download_count: number;
+}
+
 interface DashboardStats {
   newLeads: number;
   highPriorityLeads: number;
@@ -23,6 +52,9 @@ interface DashboardStats {
   qrCodesTotal: number;
   pdfReportsTotal: number;
   outreachBySuburb: OutreachSuburb[];
+  sentSummary: SentSummary;
+  scanStats: ScanStats;
+  downloadsBySuburb: SuburbDownload[];
   recentDownloads: RecentDownload[];
 }
 
@@ -194,6 +226,105 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-6 flex flex-col justify-between min-h-[192px]">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-2xl">📬</span>
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                Sent
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-900 mb-1">
+              {stats?.sentSummary?.total_sent ?? 0}
+            </div>
+            <div className="text-sm text-slate-600">Total Sent</div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap gap-1.5">
+              {stats?.sentSummary?.suburbs && stats.sentSummary.suburbs.length > 0 ? (
+                stats.sentSummary.suburbs.map((item) => (
+                  <span
+                    key={item.suburb}
+                    className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
+                  >
+                    {item.suburb}: {item.sent_count}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                  No suburb with sent &gt; 1
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-6 flex flex-col justify-between min-h-[192px]">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-2xl">👁</span>
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                QR Scans
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-900 mb-1">
+              {stats?.scanStats?.total_scans ?? 0}
+            </div>
+            <div className="text-sm text-slate-600">Total Scans</div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap gap-1.5">
+              {stats?.scanStats?.campaigns && stats.scanStats.campaigns.length > 0 ? (
+                stats.scanStats.campaigns.map((c) => (
+                  <span
+                    key={c.campaign_key}
+                    className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-medium border border-indigo-100"
+                  >
+                    {c.campaign_name || c.campaign_key}: {c.total_pv}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                  No scans yet
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-6 flex flex-col justify-between min-h-[192px]">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-2xl">📥</span>
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">
+                Downloads
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-900 mb-1">
+              {stats?.totalDownloads ?? 0}
+            </div>
+            <div className="text-sm text-slate-600">Total Downloads</div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap gap-1.5">
+              {stats?.downloadsBySuburb && stats.downloadsBySuburb.length > 0 ? (
+                stats.downloadsBySuburb.map((item) => (
+                  <span
+                    key={item.suburb}
+                    className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-md font-medium border border-green-100"
+                  >
+                    {item.suburb}: {item.download_count}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                  No downloads yet
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
           <p className="text-xs text-slate-500 font-medium">New Leads</p>
           <p className="text-2xl font-bold text-slate-800 mt-2">
@@ -208,22 +339,6 @@ export default function AdminDashboardPage() {
             {stats?.highPriorityLeads ?? 0}
           </p>
           <p className="text-xs text-slate-400 mt-1">Urgent</p>
-        </div>
-
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">Downloads</p>
-          <p className="text-2xl font-bold text-indigo-600 mt-2">
-            {stats?.todayDownloads ?? 0}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">Today</p>
-        </div>
-
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
-          <p className="text-xs text-slate-500 font-medium">Outreach</p>
-          <p className="text-2xl font-bold text-amber-600 mt-2">
-            {stats?.pendingOutreach ?? 0}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">Pending</p>
         </div>
 
         <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100">
@@ -242,6 +357,39 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-slate-400 mt-1">Follow-ups</p>
         </div>
       </div>
+
+      {stats?.outreachBySuburb && stats.outreachBySuburb.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Outreach by Suburb
+            </h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {stats.outreachBySuburb.map((item) => (
+                <div key={item.suburb} className="rounded-lg border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-800 mb-3">{item.suburb}</div>
+                  <div className="flex gap-3 text-sm">
+                    <div className="flex-1 bg-blue-50 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-blue-700">{item.pending_count}</div>
+                      <div className="text-xs text-blue-600">Pending</div>
+                    </div>
+                    <div className="flex-1 bg-emerald-50 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-emerald-700">{item.sent_count}</div>
+                      <div className="text-xs text-emerald-600">Sent</div>
+                    </div>
+                    <div className="flex-1 bg-slate-100 rounded p-2 text-center">
+                      <div className="text-lg font-bold text-slate-700">{item.total_count}</div>
+                      <div className="text-xs text-slate-600">Total</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-100">
@@ -373,39 +521,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
-
-      {stats?.outreachBySuburb && stats.outreachBySuburb.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-100">
-          <div className="p-6 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Outreach by Suburb
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {stats.outreachBySuburb.map((item) => (
-                <div key={item.suburb} className="rounded-lg border border-slate-200 p-4">
-                  <div className="text-sm font-semibold text-slate-800 mb-3">{item.suburb}</div>
-                  <div className="flex gap-3 text-sm">
-                    <div className="flex-1 bg-blue-50 rounded p-2 text-center">
-                      <div className="text-lg font-bold text-blue-700">{item.pending_count}</div>
-                      <div className="text-xs text-blue-600">Pending</div>
-                    </div>
-                    <div className="flex-1 bg-emerald-50 rounded p-2 text-center">
-                      <div className="text-lg font-bold text-emerald-700">{item.sent_count}</div>
-                      <div className="text-xs text-emerald-600">Sent</div>
-                    </div>
-                    <div className="flex-1 bg-slate-100 rounded p-2 text-center">
-                      <div className="text-lg font-bold text-slate-700">{item.total_count}</div>
-                      <div className="text-xs text-slate-600">Total</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {stats?.recentDownloads && stats.recentDownloads.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-100">
