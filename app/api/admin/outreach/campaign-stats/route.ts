@@ -90,7 +90,7 @@ export async function GET(request: Request) {
     const [dailyResult, pendingDailyResult, statusResult, remainingResult, scanResult, bizScanResult] = await Promise.all([
       marieDB.query(
         `SELECT TO_CHAR(sl.sent_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS send_date,
-                COUNT(*)::int AS total_sent
+                COUNT(DISTINCT sl.outreach_property_id)::int AS total_sent
          FROM outreach_send_logs sl
          WHERE sl.campaign_key = $1 AND sl.sent_at IS NOT NULL
          GROUP BY TO_CHAR(sl.sent_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')

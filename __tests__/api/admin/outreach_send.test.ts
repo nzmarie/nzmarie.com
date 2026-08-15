@@ -68,6 +68,41 @@ describe('Outreach Send and History API Routes', () => {
       expect(data.success).toBe(true);
       expect(data.count).toBe(1);
     });
+
+    it('re-tags the campaign key to the property suburb when the client sends a mismatched campaign', async () => {
+      vi.mocked(auth).mockResolvedValueOnce({
+        user: { email: 'nzlouis.com@gmail.com' },
+      } as any);
+
+      const mockQuery = vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'prop-torbay-1', suburb: 'Torbay' }],
+        } as any)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'log-1', outreach_property_id: 'prop-torbay-1', campaign_key: '2026_Q2_Torbay' }],
+        } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const request = new Request('http://localhost:3000/api/admin/outreach/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_ids: ['prop-torbay-1'],
+          campaign_key: '2026_Q2_Fairview Heights',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const insertCall = mockQuery.mock.calls[1];
+      expect(insertCall[0]).toContain('INSERT INTO outreach_send_logs');
+      expect(insertCall[1]?.[3]).toBe('2026_Q2_Torbay');
+
+      const updateCall = mockQuery.mock.calls[2];
+      expect(updateCall[0]).toContain('UPDATE outreach_properties');
+      expect(updateCall[1]?.[0]).toBe('2026_Q2_Torbay');
+    });
   });
 
   describe('GET /api/admin/outreach/[id]/history', () => {

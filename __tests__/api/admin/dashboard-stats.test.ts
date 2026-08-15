@@ -170,7 +170,7 @@ describe('GET /api/admin/dashboard/stats', () => {
 
     expect(res.status).toBe(200);
     expect(capturedSql).toContain('FROM outreach_properties');
-    expect(capturedSql).toContain('FROM outreach_send_logs');
+    expect(capturedSql).toContain('WHERE LOWER(status) = \'sent\'');
     expect(capturedSql).toContain('FROM campaign_analytics');
     expect(capturedSql).not.toContain('outreach_selected_properties');
     expect(body.stats.sentSummary).toEqual({

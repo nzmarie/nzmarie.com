@@ -130,9 +130,9 @@ export async function GET(request: Request) {
               SELECT
                 suburb,
                 COUNT(*) as sent_count
-              FROM outreach_send_logs
+              FROM outreach_properties
+              WHERE LOWER(status) = 'sent'
               GROUP BY suburb
-              HAVING COUNT(*) > 1
               ORDER BY sent_count DESC, suburb ASC
             ),
             scans_summary_cte AS (

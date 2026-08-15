@@ -4,6 +4,21 @@ import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 
+// Forces the suburb segment of a campaign key (e.g. "2026_Q2_Fairview Heights")
+// to match the property being sent, so sends are never logged under the wrong
+// suburb's campaign. Keys without a suburb segment (e.g. "2026_Q2") are kept.
+function campaignKeyForSuburb(campaignKey: string, suburb: string): string {
+  const trimmed = campaignKey.trim();
+  const parts = trimmed.split('_');
+  if (parts.length >= 3) {
+    const last = parts[parts.length - 1];
+    if (last.trim().toLowerCase() !== suburb.trim().toLowerCase()) {
+      return `${parts.slice(0, parts.length - 1).join('_')}_${suburb}`;
+    }
+  }
+  return trimmed;
+}
+
 export async function POST(request: Request) {
   const session = await auth();
 
@@ -56,6 +71,7 @@ export async function POST(request: Request) {
       if (prop.suburb) {
         affectedSuburbs.add(prop.suburb);
       }
+      const normalizedKey = campaignKeyForSuburb(campaign_key, prop.suburb);
       const logRes = await marieDB.query(
         `INSERT INTO outreach_send_logs (
           outreach_property_id,
@@ -72,7 +88,7 @@ export async function POST(request: Request) {
           prop.id,
           suburb_report_id || null,
           report_title,
-          campaign_key,
+          normalizedKey,
           prop.suburb,
           sendUser,
           notes || null,
@@ -88,7 +104,7 @@ export async function POST(request: Request) {
              sent_at = NOW(),
              sent_by = $2
          WHERE id = $3`,
-        [campaign_key, sendUser, prop.id]
+        [normalizedKey, sendUser, prop.id]
       );
 
       insertedLogs.push(logRes.rows[0]);
