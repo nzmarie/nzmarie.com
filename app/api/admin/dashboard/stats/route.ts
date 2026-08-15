@@ -118,7 +118,7 @@ export async function GET(request: Request) {
             outreach_by_suburb_cte AS (
               SELECT
                 suburb,
-                COUNT(*) FILTER (WHERE LOWER(status) = 'pending') as pending_count,
+                COUNT(*) FILTER (WHERE LOWER(status) IN ('pending', 'sent')) as pending_count,
                 COUNT(*) FILTER (WHERE LOWER(status) = 'sent') as sent_count,
                 COUNT(*) as total_count
               FROM outreach_properties

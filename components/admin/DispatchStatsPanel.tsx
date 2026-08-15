@@ -109,8 +109,8 @@ function CampaignOverview({ summary }: { summary: Summary }) {
   const total = summary.pending_count;
   if (total === 0) return null;
 
-  // remaining_count is computed server-side as the distinct count of pending
-  // addresses with no send log and no no-junk flag. Fall back to the old
+  // remaining_count is computed server-side as the distinct count of unsent
+  // addresses (no send log and no no-junk flag). Fall back to the old
   // subtraction when the field is absent (older cached responses).
   const remaining = summary.remaining_count ?? summary.pending_count - summary.sent_count - summary.no_junk_mail_count;
 

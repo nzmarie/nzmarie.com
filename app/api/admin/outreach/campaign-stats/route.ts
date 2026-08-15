@@ -105,10 +105,11 @@ export async function GET(request: Request) {
             END) AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD'
          ) AS day,
          COUNT(*)::int AS daily_pending,
-         COUNT(*) FILTER (WHERE p.no_junk_mail = TRUE)::int AS daily_no_junk
+         COUNT(*) FILTER (WHERE COALESCE(p.no_junk_mail, false) = TRUE
+                          AND LOWER(op.status) = 'pending')::int AS daily_no_junk
          FROM outreach_properties op
          LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
-         WHERE op.suburb = $1 AND op.status = 'pending'
+         WHERE op.suburb = $1 AND LOWER(op.status) IN ('pending', 'sent')
          GROUP BY day
          ORDER BY day ASC`,
         [suburb]
@@ -124,7 +125,8 @@ export async function GET(request: Request) {
         `SELECT COUNT(DISTINCT op.id)::int AS remaining
          FROM outreach_properties op
          LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
-         WHERE op.suburb = $1 AND op.status = 'pending'
+         WHERE op.suburb = $1
+           AND LOWER(op.status) = 'pending'
            AND COALESCE(p.no_junk_mail, false) = false
            AND NOT EXISTS (
              SELECT 1 FROM outreach_send_logs sl WHERE sl.outreach_property_id = op.id
