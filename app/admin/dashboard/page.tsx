@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 import { SuburbFilter } from "@/components/admin/SuburbFilter";
+import DispatchTrendSection, { DispatchTrend } from "@/components/admin/DispatchTrendSection";
 import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 
 interface SentSummaryItem {
@@ -56,6 +57,7 @@ interface DashboardStats {
   scanStats: ScanStats;
   downloadsBySuburb: SuburbDownload[];
   recentDownloads: RecentDownload[];
+  dispatchTrend: DispatchTrend;
 }
 
 interface OutreachSuburb {
@@ -357,6 +359,8 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-slate-400 mt-1">Follow-ups</p>
         </div>
       </div>
+
+      {stats?.dispatchTrend && <DispatchTrendSection trend={stats.dispatchTrend} />}
 
       {stats?.outreachBySuburb && stats.outreachBySuburb.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-100">
