@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  query += ` ORDER BY year DESC, quarter DESC, suburb ASC`;
+  query += ` ORDER BY uploaded_at DESC`;
 
   try {
     const result = await marieDB.query(query, params);

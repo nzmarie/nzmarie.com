@@ -267,10 +267,10 @@ export default function PDFManagerPageClient() {
     try {
       const uploadResults = [] as Array<{ suburb: string; quarter: string; year: string; label: string; fileName: string; fileSize: number; fileUrl: string }>;
       for (const { file, label } of selectedFiles) {
-        const presignRes = await fetch('/api/admin/pdf/sign-upload', {
+        const presignRes = await fetch('/api/admin/pdf/upload-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: file.name, fileType: file.type || 'application/pdf' }),
+          body: JSON.stringify({ suburb, quarter, year: Number(year), fileName: file.name, label }),
         });
         const signedData = await presignRes.json();
         if (!presignRes.ok || !signedData.url) {
