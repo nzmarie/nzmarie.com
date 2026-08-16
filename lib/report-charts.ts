@@ -106,7 +106,7 @@ function monotonePath(points: { x: number; y: number }[]): string {
   return d;
 }
 
-function generateSVG(
+export function generateSVG(
   suburbName: string,
   subData: { quarter: string; median: number | null }[],
   distData: { quarter: string; median: number | null }[]
@@ -169,17 +169,18 @@ function generateSVG(
   ).join('');
 
   const showDistrict = cleanDist.length > 0;
+  const displayName = suburbName === 'North Shore City' ? 'North Shore' : suburbName;
   const titleText = suburbName === 'North Shore City'
-    ? `${suburbName} — Median Price`
-    : `${suburbName} vs North Shore City — Median Price`;
+    ? `${displayName} — Median Price`
+    : `${displayName} vs North Shore — Median Price`;
 
   const legendHtml = `<rect x="${W / 2 - 120}" y="${H - 48}" width="${showDistrict ? 240 : 120}" height="26" rx="4" fill="white" stroke="#f1f5f9" stroke-width="1"/>
 <line x1="${W / 2 - 108}" y1="${H - 39}" x2="${W / 2 - 85}" y2="${H - 39}" stroke="${subColor}" stroke-width="3" stroke-linecap="round"/>
 <circle cx="${W / 2 - 96.5}" cy="${H - 39}" r="3.5" fill="${subColor}" stroke="white" stroke-width="1"/>
-<text x="${W / 2 - 75}" y="${H - 35}" fill="#374151" font-size="10">${suburbName}</text>${showDistrict ? `
+<text x="${W / 2 - 75}" y="${H - 35}" fill="#374151" font-size="10">${displayName}</text>${showDistrict ? `
 <line x1="${W / 2 + 5}" y1="${H - 39}" x2="${W / 2 + 28}" y2="${H - 39}" stroke="${distColor}" stroke-width="2" stroke-dasharray="5,5" stroke-linecap="round"/>
 <circle cx="${W / 2 + 16.5}" cy="${H - 39}" r="3" fill="${distColor}" stroke="white" stroke-width="1"/>
-<text x="${W / 2 + 38}" y="${H - 35}" fill="#374151" font-size="10">North Shore City</text>` : ''}`;
+<text x="${W / 2 + 38}" y="${H - 35}" fill="#374151" font-size="10">North Shore</text>` : ''}`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family: Arial, sans-serif;">
 <rect width="${W}" height="${H}" fill="white"/>

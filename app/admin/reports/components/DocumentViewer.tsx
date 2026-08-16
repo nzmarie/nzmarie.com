@@ -9,6 +9,7 @@ import ConfirmModal from './ConfirmModal';
 import EmptyState from './EmptyState';
 import EditHeaderFooter from './EditHeaderFooter';
 import { useReportStore } from '../stores/report-store';
+import { useCtrlS } from '../hooks/useCtrlS';
 import type { ReportDocument, ReportEditorContent } from '@/types/report';
 
 export default function DocumentViewer({ docId, onNavigate }: { docId: string; onNavigate?: (id: string | null) => void }) {
@@ -109,6 +110,8 @@ export default function DocumentViewer({ docId, onNavigate }: { docId: string; o
       console.error('Failed to save document', err);
     }
   }, [docId, title, doc, storeDoc, updateDocument]);
+
+  useCtrlS(handleSaveNow);
 
   const handleHeaderFooterSave = useCallback((h: string, f: string) => {
     setHeaderContent(h);

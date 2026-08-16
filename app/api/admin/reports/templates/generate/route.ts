@@ -200,6 +200,7 @@ function buildBlocks(
   endQuarter?: string
 ): unknown[] {
   const blocks: unknown[] = [];
+  const displayName = suburbName === 'North Shore City' ? 'North Shore' : suburbName;
   const displayQuarter = endQuarter && endQuarter !== quarter
     ? `${formatQuarterLabel(quarter)} – ${formatQuarterLabel(endQuarter)}`
     : formatQuarterLabel(quarter);
@@ -208,7 +209,7 @@ function buildBlocks(
   const daysToSellFromIntro = extractDaysToSellDescription(suburbIntroContent);
 
   // Page 1: Cover
-  blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${suburbName}`] });
+  blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${displayName}`] });
   blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
   // Add introduction content, stripping any Days to Sell heading/paragraph (handled by KPI card instead)
   const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
@@ -217,7 +218,7 @@ function buildBlocks(
   }
 
   // Page 2: Quarterly Data — custom card block
-  blocks.push({ type: 'heading', props: { level: 2 }, content: [`${suburbName} Quarterly Data`] });
+  blocks.push({ type: 'heading', props: { level: 2 }, content: [`${displayName} Quarterly Data`] });
 
   if (marketTrends && marketTrends.length > 0) {
     // Prefer quarter-level aggregates computed in SQL when available
@@ -315,7 +316,7 @@ function buildBlocks(
     blocks.push({
       type: 'quarterlyData',
       props: {
-        suburbName,
+suburbName: displayName,
         // keep the human-readable formatted value for existing consumers
         totalVolume: fmtM(kpiTotalVolume),
         // also include raw numeric values to avoid downstream formatting ambiguities
@@ -340,7 +341,7 @@ function buildBlocks(
 
   // Page 3: REINZ Market Trends
   blocks.push({ type: 'heading', props: { level: 2 }, content: ['REINZ Market Trends'] });
-  blocks.push({ type: 'paragraph', content: [`Quarterly market data for ${suburbName} compared with North Shore City.`] });
+  blocks.push({ type: 'paragraph', content: [`Quarterly market data for ${displayName} compared with North Shore.`] });
 
   if (chartImageUrl) {
     blocks.push({ type: 'image', props: { url: chartImageUrl, caption: '', name: 'Median price trend chart', showPreview: true, previewWidth: 700, textAlignment: 'left', backgroundColor: 'default' } });
@@ -377,8 +378,8 @@ function buildBlocks(
     const qRows = [
       { cells: [
         ['Metric'],
-        [suburbName],
-        ['North Shore City'],
+        [displayName],
+        ['North Shore'],
       ]},
       { cells: [
         ['Median Price'],
@@ -407,8 +408,8 @@ function buildBlocks(
     const mRows = [
       { cells: [
         ['Month'],
-        [`${suburbName} Median`],
-        [`${suburbName} Sales`],
+        [`${displayName} Median`],
+        [`${displayName} Sales`],
         ['District Median'],
       ]},
     ];
@@ -430,7 +431,7 @@ function buildBlocks(
 
     const lastSub = suburbData[suburbData.length - 1];
     if (lastSub && lastSub.price_diff_1yr_pct != null) {
-      blocks.push({ type: 'paragraph', content: [`${suburbName} median price is ${lastSub.price_diff_1yr_pct >= 0 ? 'up' : 'down'} ${Math.abs(lastSub.price_diff_1yr_pct).toFixed(1)}% year-on-year, with a median of ${fmtM(subMedian)}.`] });
+      blocks.push({ type: 'paragraph', content: [`${displayName} median price is ${lastSub.price_diff_1yr_pct >= 0 ? 'up' : 'down'} ${Math.abs(lastSub.price_diff_1yr_pct).toFixed(1)}% year-on-year, with a median of ${fmtM(subMedian)}.`] });
       if (lastSub.days_to_sell != null) {
         blocks.push({ type: 'paragraph', content: [`Average days to sell: ${lastSub.days_to_sell} days.`] });
       }
@@ -444,7 +445,7 @@ function buildBlocks(
 
   if (lastSold) {
     blocks.push({ type: 'heading', props: { level: 3 }, content: ['Last Sold Data For Sale'] });
-    blocks.push({ type: 'paragraph', content: [`Active listings in ${suburbName}: ${lastSold.total} properties`] });
+    blocks.push({ type: 'paragraph', content: [`Active listings in ${displayName}: ${lastSold.total} properties`] });
     const lsRows = [
       { cells: [
         ['Period'],
@@ -526,6 +527,7 @@ export async function POST(request: Request) {
     if (suburb.name === 'North Shore') {
       suburb = { ...suburb, name: 'North Shore City' };
     }
+    const displayName = suburb.name === 'North Shore City' ? 'North Shore' : suburb.name;
 
     const adminResult = await marieQuery<{ id: string }>(
       `SELECT id FROM admin_users WHERE email = $1 LIMIT 1`,
@@ -549,7 +551,7 @@ export async function POST(request: Request) {
 
     const quarterAggs = aggregateToQuarterly(monthlyRaw);
 
-    const title = `${suburb.name} ${formatQuarterLabel(reportQuarter)} Market Report`;
+    const title = `${displayName} ${formatQuarterLabel(reportQuarter)} Market Report`;
     const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
 
     const result = await marieQuery<{ id: string }>(

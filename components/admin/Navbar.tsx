@@ -7,6 +7,10 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { isSuperAdmin } from '@/lib/permissions';
 
+function isPathActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(href + '/');
+}
+
 export function AdminNavbar() {
   const { data: session } = useSession();
   const pathname = usePathname();
@@ -16,10 +20,14 @@ export function AdminNavbar() {
   const ticking = useRef(false);
   const [hidden, setHidden] = useState(false);
 
-  const handleScroll = useCallback(() => {
+  const handleScroll = useCallback((e: Event) => {
+    const target = e.target;
     if (!ticking.current) {
+      ticking.current = true;
       requestAnimationFrame(() => {
-        const y = window.scrollY;
+        // Reports page scrolls in an inner container (reports layout <main>), not the window.
+        // Capture-phase listener lets us detect its scrollTop; fall back to window.scrollY otherwise.
+        const y = target instanceof HTMLElement ? target.scrollTop : window.scrollY;
         const delta = y - lastScrollY.current;
         lastScrollY.current = y;
         if (delta > 10 && y > 60) {
@@ -29,13 +37,12 @@ export function AdminNavbar() {
         }
         ticking.current = false;
       });
-      ticking.current = true;
     }
   }, []);
 
   useEffect(() => {
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true } as EventListenerOptions);
   }, [handleScroll]);
 
   const superAdmin = session?.user?.email ? isSuperAdmin(session.user.email) : false;
@@ -54,7 +61,7 @@ export function AdminNavbar() {
   ];
 
   function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-    const isActive = pathname === href;
+    const isActive = isPathActive(pathname, href);
 
     return (
       <Link
@@ -204,7 +211,7 @@ export function AdminNavbar() {
                 {navLinks.map(link => {
                   if (!link.alwaysShow && !superAdmin) return null;
 
-                  const isActive = pathname === link.href;
+                  const isActive = isPathActive(pathname, link.href);
 
                   return (
                     <Link
