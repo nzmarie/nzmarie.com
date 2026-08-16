@@ -63,6 +63,23 @@ function dotScaleForZoom(zoom: number, isUnsent: boolean): number | null {
   return isUnsent ? 6 : 5;
 }
 
+function buildAddressInfoWindowContent(address: string, statusLabel: string, color: string): HTMLElement {
+  const container = document.createElement('div');
+  container.style.cssText = 'padding:8px 10px;min-width:180px;font-family:inherit;';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;font-weight:700;font-size:13px;color:#1f2937;';
+  const dot = document.createElement('span');
+  dot.style.cssText = `display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;flex-shrink:0;`;
+  row.appendChild(dot);
+  row.appendChild(document.createTextNode(address));
+  container.appendChild(row);
+  const status = document.createElement('div');
+  status.style.cssText = 'font-size:11px;color:#6b7280;margin-top:2px;';
+  status.textContent = statusLabel;
+  container.appendChild(status);
+  return container;
+}
+
 function NativeMarkerManager({
   map,
   groups,
@@ -90,6 +107,21 @@ function NativeMarkerManager({
   }, [map]);
 
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+
+  useEffect(() => {
+    const listener = map.addListener('click', () => {
+      infoWindowRef.current?.close();
+    });
+    return () => google.maps.event.removeListener(listener);
+  }, [map]);
+
+  useEffect(() => {
+    return () => {
+      infoWindowRef.current?.close();
+      infoWindowRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     for (const m of markersRef.current) m.setMap(null);
@@ -176,6 +208,10 @@ function NativeMarkerManager({
           });
           dotMarker.addListener('click', () => {
             onStreetSelectRef.current(suburb, streetName);
+            if (!infoWindowRef.current) infoWindowRef.current = new google.maps.InfoWindow();
+            infoWindowRef.current.setContent(buildAddressInfoWindowContent(a.address, statusLabel, dotColor));
+            infoWindowRef.current.setPosition({ lat: a.lat, lng: a.lng });
+            infoWindowRef.current.open(map);
           });
           newMarkers.push(dotMarker);
         }

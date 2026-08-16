@@ -110,6 +110,13 @@ function installMockMap() {
       LatLng: class {},
       SymbolPath: { CIRCLE: 'CIRCLE' },
       Marker: MarkerMock,
+      InfoWindow: class {
+        constructor() {}
+        setContent() {}
+        setPosition() {}
+        open() {}
+        close() {}
+      },
       event: { removeListener: vi.fn(), addListenerOnce: vi.fn() },
     },
   };
@@ -397,5 +404,89 @@ describe('OutreachMapView', () => {
       // Verify address markers contain actual addresses with status
       expect(markerTitles.some(t => t.includes('1 Glamorgan Drive') && t.includes('Unsent'))).toBeTruthy();
     });
+  });
+
+  it('opens an info window with the address when a dot marker is clicked', async () => {
+    installMockMap();
+    const openedContents: Array<Node | string> = [];
+    const InfoWindowMock = class {
+      static instances: unknown[] = [];
+      content: unknown = null;
+      constructor() {
+        InfoWindowMock.instances.push(this);
+      }
+      setContent(c: Node | string) {
+        this.content = c;
+      }
+      setPosition() {}
+      open() {
+        openedContents.push(this.content as Node | string);
+      }
+      close() {}
+    };
+    (globalThis.google as any).maps.InfoWindow = InfoWindowMock;
+
+    const dotClickHandlers: Array<() => void> = [];
+    const OriginalMarker = (globalThis.google as any).maps.Marker;
+    (globalThis.google as any).maps.Marker = class extends OriginalMarker {
+      constructor(opts: any) {
+        super(opts);
+        if (opts.title && opts.title.includes('·')) {
+          dotClickHandlers.push(() => this.listeners['click']?.());
+        }
+      }
+    };
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        suburb: 'Torbay',
+        groups: [
+          {
+            suburb: 'Torbay',
+            streets: [
+              {
+                street: 'Glamorgan Drive',
+                suburb: 'Torbay',
+                anchorLat: -36.69,
+                anchorLng: 174.74,
+                pendingCount: 2,
+                runId: 1,
+                addressCoords: [
+                  { address: '1 Glamorgan Drive', lat: -36.69, lng: 174.74, sent: false, status: 'unsent' },
+                  { address: '5 Glamorgan Drive', lat: -36.692, lng: 174.741, sent: false, status: 'unsent' },
+                ],
+              },
+            ],
+          },
+        ],
+        runs: [{ runId: 1, totalPending: 2 }],
+      }),
+    }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={1}
+        sentStatus="unsent"
+        selectedStreet="Glamorgan Drive"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(dotClickHandlers.length).toBeGreaterThan(0);
+    });
+
+    dotClickHandlers[0]();
+
+    expect(openedContents.length).toBe(1);
+    const text = typeof openedContents[0] === 'string' ? openedContents[0] : (openedContents[0] as Node).textContent ?? '';
+    expect(text).toContain('1 Glamorgan Drive');
+    expect(text).toContain('Unsent');
+    expect((InfoWindowMock as unknown as { instances: unknown[] }).instances.length).toBe(1);
   });
 });
