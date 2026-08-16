@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
 import { isAdmin } from '@/lib/permissions';
-import { FaUpload, FaDownload, FaTimes, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash } from 'react-icons/fa';
+import { FaUpload, FaDownload, FaTimes, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash, FaExternalLinkAlt } from 'react-icons/fa';
 
 interface SuburbReport {
   id: string;
@@ -533,7 +533,18 @@ export default function PDFManagerPageClient() {
                               <div className="flex items-center justify-center gap-2">
                                 <a
                                   href={report.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                                  title="Review file"
+                                >
+                                  <FaExternalLinkAlt className="text-xs" />
+                                </a>
+                                <a
+                                  href={report.file_url}
                                   download={report.file_name}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                   className="inline-flex items-center rounded-lg bg-sky-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-sky-700"
                                   title="Download file"
                                 >
@@ -632,7 +643,7 @@ export default function PDFManagerPageClient() {
                         </div>
                         <div className="flex gap-2">
                           <a href={record.file_url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">View</a>
-                          <a href={record.file_url} download={record.file_name} className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700">Download</a>
+                          <a href={record.file_url} download={record.file_name} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700">Download</a>
                           <button type="button" onClick={() => handleQrDelete(record)} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">Delete</button>
                         </div>
                       </div>
