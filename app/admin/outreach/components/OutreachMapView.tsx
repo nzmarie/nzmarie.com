@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider, Map as GoogleMap, useMap } from '@vis.gl/react-google-maps';
+import { FaExpand, FaCompress } from 'react-icons/fa';
 import {
   statusColor,
   type AddressStatus,
@@ -63,9 +64,9 @@ function dotScaleForZoom(zoom: number, isUnsent: boolean): number | null {
   return isUnsent ? 6 : 5;
 }
 
-function buildAddressInfoWindowContent(address: string, statusLabel: string, color: string): HTMLElement {
+function buildAddressInfoWindowContent(address: string, statusLabel: string, color: string, suburb?: string): HTMLElement {
   const container = document.createElement('div');
-  container.style.cssText = 'padding:8px 10px;min-width:180px;font-family:inherit;';
+  container.style.cssText = 'padding:8px 10px;min-width:190px;font-family:inherit;';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;align-items:center;font-weight:700;font-size:13px;color:#1f2937;';
   const dot = document.createElement('span');
@@ -77,6 +78,13 @@ function buildAddressInfoWindowContent(address: string, statusLabel: string, col
   status.style.cssText = 'font-size:11px;color:#6b7280;margin-top:2px;';
   status.textContent = statusLabel;
   container.appendChild(status);
+  const link = document.createElement('a');
+  link.href = `https://www.google.com/maps?q=${encodeURIComponent([address, suburb].filter(Boolean).join(', '))}`;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = 'Google Maps ↗';
+  link.style.cssText = 'display:inline-block;margin-top:6px;font-size:12px;font-weight:600;color:#2563eb;text-decoration:none;';
+  container.appendChild(link);
   return container;
 }
 
@@ -209,7 +217,7 @@ function NativeMarkerManager({
           dotMarker.addListener('click', () => {
             onStreetSelectRef.current(suburb, streetName);
             if (!infoWindowRef.current) infoWindowRef.current = new google.maps.InfoWindow();
-            infoWindowRef.current.setContent(buildAddressInfoWindowContent(a.address, statusLabel, dotColor));
+            infoWindowRef.current.setContent(buildAddressInfoWindowContent(a.address, statusLabel, dotColor, suburb));
             infoWindowRef.current.setPosition({ lat: a.lat, lng: a.lng });
             infoWindowRef.current.open(map);
           });
@@ -316,6 +324,7 @@ function MapInner({
           defaultCenter={{ lat: -36.6966, lng: 174.7454 }}
           defaultZoom={12}
           mapTypeControl={true}
+          fullscreenControl={false}
           gestureHandling="greedy"
           style={{ width: '100%', height: '100%' }}
         />
@@ -346,8 +355,28 @@ export default function OutreachMapView({
 }: OutreachMapViewProps) {
   const [coordsData, setCoordsData] = useState<ClusterPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+      return;
+    }
+    const requestFullscreen =
+      el.requestFullscreen ??
+      (el as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen;
+    requestFullscreen?.call(el);
+  }, []);
 
   const statusFilter = externalStatusFilter;
 
@@ -520,6 +549,31 @@ export default function OutreachMapView({
           error={error}
           statusFilter={statusFilter}
         />
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 1000,
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#334155',
+          }}
+        >
+          {isFullscreen ? <FaCompress /> : <FaExpand />}
+        </button>
       </div>
     </APIProvider>
   );

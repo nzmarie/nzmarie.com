@@ -487,6 +487,9 @@ describe('OutreachMapView', () => {
     const text = typeof openedContents[0] === 'string' ? openedContents[0] : (openedContents[0] as Node).textContent ?? '';
     expect(text).toContain('1 Glamorgan Drive');
     expect(text).toContain('Unsent');
+    expect(text).toContain('Google Maps');
+    const anchor = openedContents[0] instanceof Element ? openedContents[0].querySelector('a') : null;
+    expect(anchor?.getAttribute('href')).toContain('https://www.google.com/maps?q=');
     expect((InfoWindowMock as unknown as { instances: unknown[] }).instances.length).toBe(1);
   });
 });
