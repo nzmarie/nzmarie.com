@@ -1057,6 +1057,123 @@ describe('Outreach page - Card view run ordering', () => {
     }, { timeout: 3000 });
   });
 
+  it('does not show "Displaying 1 to 0 of 0 properties" when the default report lands after the Today Run auto-selects a stale suburb\u0027s streets', async () => {
+    const northcrossStreets = [
+      { street: 'Oteha Valley Road', suburb: 'Northcross', lat: -36.69, lng: 174.71, pendingCount: 1, addresses: ['35 Oteha Valley Road'] },
+    ];
+    const torbayStreets = [
+      { street: 'Acacia Road', suburb: 'Torbay', lat: -36.6958, lng: 174.7453, pendingCount: 4, addresses: ['1 Acacia Road', '3 Acacia Road', '5 Garden Lane', '7 Helen Ryburn Place'] },
+    ];
+    const torbayItems = [
+      { id: 't1', property_address: '1 Acacia Road', street: 'Acacia Road', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:00:00Z' },
+      { id: 't2', property_address: '3 Acacia Road', street: 'Acacia Road', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:01:00Z' },
+      { id: 't3', property_address: '5 Garden Lane', street: 'Garden Lane', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:02:00Z' },
+      { id: 't4', property_address: '7 Helen Ryburn Place', street: 'Helen Ryburn Place', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:03:00Z' },
+    ];
+    const northcrossItems = [
+      { id: 'n1', property_address: '35 Oteha Valley Road', street: 'Oteha Valley Road', suburb: 'Northcross', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:04:00Z' },
+    ];
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        // Default report lands LATE, after the user clicks Unsent, so the
+        // first Pending fetch is made against the initial suburb (Northcross).
+        return new Promise((resolve) => {
+          setTimeout(() => resolve({ ok: true, json: async () => ({ success: true, defaultReport: { suburb: 'Torbay', label: '2026-Q2' } }) }), 600);
+        });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        const u = new URL(s, 'http://localhost');
+        const suburb = u.searchParams.get('suburb');
+        if (suburb === 'Northcross') {
+          // Resolves immediately, BEFORE the default report, auto-selecting the
+          // Northcross run streets into the shared runStreetFilter.
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              suburb: 'Northcross',
+              groups: [{ groupId: 1, streets: northcrossStreets, totalPending: 1, extentMeters: 500 }],
+              runs: [{ runId: 1, groups: [{ groupId: 1, streets: northcrossStreets, totalPending: 1, extentMeters: 500 }], totalPending: 1, streetCount: 1 }],
+              totalPending: 1,
+              unclusteredStreets: [],
+              allStreets: [{ street: 'Oteha Valley Road', count: 1 }],
+            }),
+          });
+        }
+        if (suburb === 'Torbay') {
+          // Torbay street-clusters resolve very late, so the stale Northcross
+          // streets remain active while the list refetches for Torbay.
+          return new Promise((resolve) => {
+            setTimeout(() => resolve({
+              ok: true,
+              json: async () => ({
+                success: true,
+                suburb: 'Torbay',
+                groups: [{ groupId: 1, streets: torbayStreets, totalPending: 4, extentMeters: 500 }],
+                runs: [{ runId: 1, groups: [{ groupId: 1, streets: torbayStreets, totalPending: 4, extentMeters: 500 }], totalPending: 4, streetCount: 3 }],
+                totalPending: 4,
+                unclusteredStreets: [],
+                allStreets: torbayStreets.map((st) => ({ street: st.street, count: 1 })),
+              }),
+            }), 3000);
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, suburb, groups: [], runs: [], totalPending: 0, unclusteredStreets: [], allStreets: [] }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        const u = new URL(s, 'http://localhost');
+        const suburb = u.searchParams.get('suburb') || '';
+        const streets = u.searchParams.get('streets') || '';
+        const sentStatus = u.searchParams.get('sent_status') || '';
+        const isUnsentTorbay = sentStatus === 'unsent' && suburb === 'Torbay';
+        const staleStreets = streets.includes('Oteha Valley Road');
+        if (isUnsentTorbay && staleStreets) {
+          // The real bug: the list is filtered to Torbay but the streets belong
+          // to Northcross, so zero addresses match.
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 500, total: 0, totalPages: 0 } }) });
+        }
+        if (isUnsentTorbay) {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, data: torbayItems, pagination: { page: 1, limit: 500, total: 4, totalPages: 1 } }) });
+        }
+        if (sentStatus === 'unsent' && suburb === 'Northcross') {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true, data: northcrossItems, pagination: { page: 1, limit: 500, total: 1, totalPages: 1 } }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    // Click Unsent before the default report (600ms) has resolved.
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    // The list must never show the empty "Displaying 1 to 0 of 0 properties"
+    // state during the whole sequence, even while the stale Northcross streets
+    // are active and the Torbay street-clusters have not resolved yet.
+    await waitFor(() => {
+      expect(screen.getByText('35 Oteha Valley Road')).toBeTruthy();
+    }, { timeout: 2000 });
+
+    // Give the default report time to land and the refetch to run.
+    await new Promise((r) => setTimeout(r, 900));
+
+    expect(screen.queryByText('Displaying 1 to 0 of 0 properties')).toBeNull();
+    // Eventually the Torbay Today Run data resolves and shows the real addresses.
+    await waitFor(() => {
+      expect(screen.getByText('1 Acacia Road')).toBeTruthy();
+    }, { timeout: 4000 });
+  });
+
   describe('Filter by Street', () => {
     const streetMemFetch = () => {
       (global.fetch as any) = vi.fn((url: RequestInfo) => {

@@ -278,6 +278,12 @@ export default function OutreachPage() {
   const [todayRunError, setTodayRunError] = useState<string | null>(null);
   const [todayRunRefreshKey, setTodayRunRefreshKey] = useState(0);
   const [todayRunStartStreet, setTodayRunStartStreet] = useState<string>('');
+  // Tracks the (suburb + quarter) the current Today's Run street set belongs to.
+  // When either changes, the previously auto-selected run streets must be cleared
+  // so the list fetch for the new suburb/quarter can't be filtered by the old
+  // suburb's streets (which would return zero addresses and show "Displaying 1 to
+  // 0 of 0 properties" while the new street-clusters data is loading).
+  const todayRunSuburbQuarterRef = useRef<string>('');
 
   useEffect(() => {
     window.localStorage.setItem('today_run_budget_v2', String(todayRunBudget));
@@ -1126,6 +1132,7 @@ export default function OutreachPage() {
       setTodayRunStartStreet('');
       setTodayRunData(null);
       setTodayRunError(null);
+      todayRunSuburbQuarterRef.current = '';
       return;
     }
 
@@ -1133,6 +1140,17 @@ export default function OutreachPage() {
       setTodayRunData(null);
       setTodayRunError(null);
       return;
+    }
+
+    // The Today Run auto-select feeds the first run's streets back into
+    // runStreetFilter. If the suburb or report quarter changes (e.g. the default
+    // report lands after the first fetch), the previously selected streets no
+    // longer belong to the new suburb/quarter and would filter the list to zero
+    // addresses. Drop them until the new street-cluster data auto-selects.
+    const todayRunKey = `${todayRunSuburb}|${reportQuarterFilter || ''}`;
+    if (todayRunSuburbQuarterRef.current !== todayRunKey) {
+      todayRunSuburbQuarterRef.current = todayRunKey;
+      setRunStreetFilter([]);
     }
 
     const effectiveStartStreet =
