@@ -117,6 +117,10 @@ function installMockMap() {
         open() {}
         close() {}
       },
+      Circle: class {
+        constructor() {}
+        setMap() {}
+      },
       event: { removeListener: vi.fn(), addListenerOnce: vi.fn() },
     },
   };
@@ -491,5 +495,70 @@ describe('OutreachMapView', () => {
     const anchor = openedContents[0] instanceof Element ? openedContents[0].querySelector('a') : null;
     expect(anchor?.getAttribute('href')).toContain('https://www.google.com/maps?q=');
     expect((InfoWindowMock as unknown as { instances: unknown[] }).instances.length).toBe(1);
+  });
+
+  it('shows the nearest unsent address after locating', async () => {
+    installMockMap();
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: vi.fn((success: (pos: { coords: { latitude: number; longitude: number; accuracy: number } }) => void) =>
+          success({ coords: { latitude: -36.6895, longitude: 174.7395, accuracy: 30 } })
+        ),
+      },
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        suburb: 'Torbay',
+        groups: [
+          {
+            suburb: 'Torbay',
+            streets: [
+              {
+                street: 'Glamorgan Drive',
+                suburb: 'Torbay',
+                anchorLat: -36.69,
+                anchorLng: 174.74,
+                pendingCount: 1,
+                runId: 1,
+                addressCoords: [
+                  { address: '1 Glamorgan Drive', lat: -36.69, lng: 174.74, sent: false, status: 'unsent' },
+                ],
+              },
+            ],
+          },
+        ],
+        runs: [{ runId: 1, totalPending: 1 }],
+      }),
+    }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={null}
+        sentStatus="unsent"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Locate me' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Locate me' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Nearest unsent/)).toBeTruthy();
+    });
+
+    const nearestText = screen.getByText(/Nearest unsent/).textContent ?? '';
+    expect(nearestText).toContain('1 Glamorgan Drive');
+    const distanceText = screen.getByText(/Distance/).textContent ?? '';
+    expect(distanceText).toContain('m');
   });
 });

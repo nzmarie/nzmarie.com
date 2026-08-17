@@ -4,6 +4,7 @@ import {
   getRunColor,
   computeBoundsFromCoords,
   boundsCenter,
+  haversineMeters,
   statusColor,
   getStreetLabelState,
   getStreetLabelColor,
@@ -62,6 +63,24 @@ describe('boundsCenter', () => {
 
   it('returns null when bounds is null', () => {
     expect(boundsCenter(null)).toBeNull();
+  });
+});
+
+describe('haversineMeters', () => {
+  it('returns ~0 for identical points', () => {
+    expect(haversineMeters({ lat: -36.7, lng: 174.7 }, { lat: -36.7, lng: 174.7 })).toBeLessThan(1);
+  });
+
+  it('returns ~111km per degree of latitude', () => {
+    const d = haversineMeters({ lat: 0, lng: 0 }, { lat: 1, lng: 0 });
+    expect(d).toBeGreaterThan(110000);
+    expect(d).toBeLessThan(112000);
+  });
+
+  it('is symmetric', () => {
+    const a = haversineMeters({ lat: -36.7, lng: 174.7 }, { lat: -36.75, lng: 174.75 });
+    const b = haversineMeters({ lat: -36.75, lng: 174.75 }, { lat: -36.7, lng: 174.7 });
+    expect(Math.abs(a - b)).toBeLessThan(1);
   });
 });
 

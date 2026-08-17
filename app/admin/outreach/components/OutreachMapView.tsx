@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider, Map as GoogleMap, useMap } from '@vis.gl/react-google-maps';
-import { FaExpand, FaCompress } from 'react-icons/fa';
+import { FaExpand, FaCompress, FaCrosshairs, FaSpinner } from 'react-icons/fa';
 import {
   statusColor,
+  haversineMeters,
   type AddressStatus,
 } from '@/lib/outreach-map';
 
@@ -86,6 +87,39 @@ function buildAddressInfoWindowContent(address: string, statusLabel: string, col
   link.style.cssText = 'display:inline-block;margin-top:6px;font-size:12px;font-weight:600;color:#2563eb;text-decoration:none;';
   container.appendChild(link);
   return container;
+}
+
+interface NearestUnsentResult {
+  address: string;
+  distanceM: number;
+  lat: number;
+  lng: number;
+}
+
+function computeNearestUnsent(
+  userLocation: { lat: number; lng: number },
+  coordsData: ClusterPayload | null
+): NearestUnsentResult | null {
+  if (!coordsData) return null;
+  let best: NearestUnsentResult | null = null;
+  for (const g of coordsData.groups ?? []) {
+    for (const s of g.streets ?? []) {
+      for (const a of s.addressCoords ?? []) {
+        if (a.lat == null || a.lng == null) continue;
+        if (a.status !== 'unsent') continue;
+        const d = haversineMeters(userLocation, { lat: a.lat, lng: a.lng });
+        if (!best || d < best.distanceM) {
+          best = { address: a.address, distanceM: d, lat: a.lat, lng: a.lng };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function formatDistance(m: number): string {
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toFixed(1)} km`;
 }
 
 function NativeMarkerManager({
@@ -356,29 +390,99 @@ export default function OutreachMapView({
   const [coordsData, setCoordsData] = useState<ClusterPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const [nearest, setNearest] = useState<{ address: string; distanceM: number } | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
+  const userMarkerRef = useRef<google.maps.Marker | null>(null);
+  const userCircleRef = useRef<google.maps.Circle | null>(null);
 
   const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen?.();
+    setIsFullscreen((f) => !f);
+  }, []);
+
+  const handleLocate = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocateError('Geolocation is not supported by this browser');
       return;
     }
-    const requestFullscreen =
-      el.requestFullscreen ??
-      (el as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen;
-    requestFullscreen?.call(el);
+    setLocating(true);
+    setLocateError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        setLocating(false);
+      },
+      (err) => {
+        setLocateError(err.message || 'Unable to determine your location');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
   }, []);
 
   const statusFilter = externalStatusFilter;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userLocation) return;
+
+    const marker = new google.maps.Marker({
+      position: { lat: userLocation.lat, lng: userLocation.lng },
+      map,
+      title: 'Your location',
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: '#2563eb',
+        fillOpacity: 1.0,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
+      },
+      zIndex: 3000,
+    });
+    userMarkerRef.current = marker;
+
+    let circle: google.maps.Circle | null = null;
+    if (userLocation.accuracy) {
+      circle = new google.maps.Circle({
+        map,
+        center: { lat: userLocation.lat, lng: userLocation.lng },
+        radius: userLocation.accuracy,
+        fillColor: '#2563eb',
+        fillOpacity: 0.12,
+        strokeColor: '#2563eb',
+        strokeOpacity: 0.4,
+        strokeWeight: 1,
+      });
+      userCircleRef.current = circle;
+    }
+
+    const nearestPoint = computeNearestUnsent(userLocation, coordsData);
+    setNearest(nearestPoint ? { address: nearestPoint.address, distanceM: nearestPoint.distanceM } : null);
+
+    const pts: { lat: number; lng: number }[] = [{ lat: userLocation.lat, lng: userLocation.lng }];
+    if (nearestPoint) pts.push({ lat: nearestPoint.lat, lng: nearestPoint.lng });
+    const bounds = new google.maps.LatLngBounds();
+    for (const p of pts) bounds.extend(new google.maps.LatLng(p.lat, p.lng));
+    map.fitBounds(bounds);
+
+    return () => {
+      marker.setMap(null);
+      circle?.setMap(null);
+      userMarkerRef.current = null;
+      userCircleRef.current = null;
+    };
+  }, [userLocation, coordsData]);
+
+  useEffect(() => {
+    return () => {
+      userMarkerRef.current?.setMap(null);
+      userCircleRef.current?.setMap(null);
+    };
+  }, []);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -539,7 +643,18 @@ export default function OutreachMapView({
 
   return (
     <APIProvider apiKey={apiKey} libraries={['places']}>
-      <div ref={containerRef} style={{ position: 'relative', height: '100%', background: '#fff' }}>
+      <div
+        ref={containerRef}
+        style={{
+          position: isFullscreen ? 'fixed' : 'relative',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: isFullscreen ? '100vh' : '100%',
+          zIndex: isFullscreen ? 9999 : undefined,
+          background: '#fff',
+        }}
+      >
         <MapInner
           coordsData={coordsData}
           activeRunId={activeRunId}
@@ -574,6 +689,69 @@ export default function OutreachMapView({
         >
           {isFullscreen ? <FaCompress /> : <FaExpand />}
         </button>
+        <button
+          type="button"
+          onClick={handleLocate}
+          disabled={locating}
+          aria-label="Locate me"
+          title="Locate me"
+          style={{
+            position: 'absolute',
+            top: 56,
+            right: 12,
+            zIndex: 1000,
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#334155',
+          }}
+        >
+          {locating ? <FaSpinner className="animate-spin" /> : <FaCrosshairs />}
+        </button>
+        {(userLocation || locateError) && (
+          <div style={{
+            position: 'absolute',
+            left: 12,
+            bottom: 140,
+            zIndex: 1000,
+            maxWidth: 260,
+            background: 'rgba(255,255,255,0.97)',
+            border: locateError ? '1px solid #fecaca' : '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: '8px 12px',
+            fontSize: '12px',
+            color: '#1f2937',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}>
+            {locateError ? (
+              <div style={{ color: '#dc2626' }}>{locateError}</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 3 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563eb', border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.3)', flexShrink: 0 }} />
+                  Your location
+                </div>
+                {nearest ? (
+                  <>
+                    <div>
+                      Nearest unsent: <strong>{nearest.address}</strong>
+                    </div>
+                    <div style={{ color: '#6b7280' }}>Distance {formatDistance(nearest.distanceM)}</div>
+                  </>
+                ) : (
+                  <div style={{ color: '#6b7280' }}>No unsent addresses nearby</div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </APIProvider>
   );
