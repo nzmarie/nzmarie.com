@@ -492,8 +492,15 @@ describe('OutreachMapView', () => {
     expect(text).toContain('1 Glamorgan Drive');
     expect(text).toContain('Unsent');
     expect(text).toContain('Google Maps');
-    const anchor = openedContents[0] instanceof Element ? openedContents[0].querySelector('a') : null;
-    expect(anchor?.getAttribute('href')).toContain('https://www.google.com/maps?q=');
+    // The address itself must be a clickable Google Maps link.
+    const addressLink = openedContents[0] instanceof Element ? openedContents[0].querySelector('a') : null;
+    expect(addressLink?.textContent).toContain('1 Glamorgan Drive');
+    const addressHref = decodeURIComponent(addressLink?.getAttribute('href') ?? '');
+    expect(addressHref).toContain('https://www.google.com/maps?q=');
+    expect(addressHref).toContain('1 Glamorgan Drive');
+    expect(addressHref).toContain('Torbay');
+    expect(addressLink?.getAttribute('target')).toBe('_blank');
+    expect(addressLink?.getAttribute('rel')).toContain('noopener');
     expect((InfoWindowMock as unknown as { instances: unknown[] }).instances.length).toBe(1);
   });
 
@@ -560,5 +567,92 @@ describe('OutreachMapView', () => {
     expect(nearestText).toContain('1 Glamorgan Drive');
     const distanceText = screen.getByText(/Distance/).textContent ?? '';
     expect(distanceText).toContain('m');
+
+    // The nearest-unsent address must be a clickable Google Maps link (same
+    // behaviour as clicking an unsent red-dot marker's InfoWindow link).
+    const nearestLink = screen.getByRole('link', { name: /1 Glamorgan Drive/ });
+    const nearestHref = decodeURIComponent(nearestLink.getAttribute('href') ?? '');
+    expect(nearestHref).toContain('https://www.google.com/maps?q=');
+    expect(nearestHref).toContain('1 Glamorgan Drive');
+    expect(nearestHref).toContain('Torbay');
+    expect(nearestLink.getAttribute('target')).toBe('_blank');
+    expect(nearestLink.getAttribute('rel')).toContain('noopener');
+  });
+
+  it('closes the location panel when its close button is clicked', async () => {
+    installMockMap();
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: vi.fn((success: (pos: { coords: { latitude: number; longitude: number; accuracy: number } }) => void) =>
+          success({ coords: { latitude: -36.6895, longitude: 174.7395, accuracy: 30 } })
+        ),
+      },
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => coordsPayload([{ runId: 1, totalPending: 1 }]),
+    }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={null}
+        sentStatus="unsent"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Locate me' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Locate me' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Your location')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close location info' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Your location')).toBeNull();
+    });
+  });
+
+  it('closes the legend when its close button is clicked', async () => {
+    installMockMap();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => coordsPayload([{ runId: 1, totalPending: 12 }]),
+    }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <OutreachMapView
+        suburb="Torbay"
+        activeRunId={null}
+        sentStatus="unsent"
+        onRunSelect={vi.fn()}
+        onStreetSelect={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Unsent')).toBeTruthy();
+    });
+    expect(screen.getByText('Sent')).toBeTruthy();
+    expect(screen.getByText('No junk mail')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close legend' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Unsent')).toBeNull();
+      expect(screen.queryByText('Sent')).toBeNull();
+      expect(screen.queryByText('No junk mail')).toBeNull();
+    });
   });
 });

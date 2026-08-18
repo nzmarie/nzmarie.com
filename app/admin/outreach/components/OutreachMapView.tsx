@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider, Map as GoogleMap, useMap } from '@vis.gl/react-google-maps';
-import { FaExpand, FaCompress, FaCrosshairs, FaSpinner } from 'react-icons/fa';
+import { FaExpand, FaCompress, FaCrosshairs, FaSpinner, FaTimes } from 'react-icons/fa';
 import {
   statusColor,
   haversineMeters,
@@ -73,7 +73,13 @@ function buildAddressInfoWindowContent(address: string, statusLabel: string, col
   const dot = document.createElement('span');
   dot.style.cssText = `display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;flex-shrink:0;`;
   row.appendChild(dot);
-  row.appendChild(document.createTextNode(address));
+  const addressLink = document.createElement('a');
+  addressLink.href = `https://www.google.com/maps?q=${encodeURIComponent([address, suburb].filter(Boolean).join(', '))}`;
+  addressLink.target = '_blank';
+  addressLink.rel = 'noopener noreferrer';
+  addressLink.textContent = address;
+  addressLink.style.cssText = 'color:#2563eb;text-decoration:underline;font-weight:700;';
+  row.appendChild(addressLink);
   container.appendChild(row);
   const status = document.createElement('div');
   status.style.cssText = 'font-size:11px;color:#6b7280;margin-top:2px;';
@@ -91,6 +97,7 @@ function buildAddressInfoWindowContent(address: string, statusLabel: string, col
 
 interface NearestUnsentResult {
   address: string;
+  suburb: string;
   distanceM: number;
   lat: number;
   lng: number;
@@ -109,7 +116,7 @@ function computeNearestUnsent(
         if (a.status !== 'unsent') continue;
         const d = haversineMeters(userLocation, { lat: a.lat, lng: a.lng });
         if (!best || d < best.distanceM) {
-          best = { address: a.address, distanceM: d, lat: a.lat, lng: a.lng };
+          best = { address: a.address, suburb: s.suburb || g.suburb || '', distanceM: d, lat: a.lat, lng: a.lng };
         }
       }
     }
@@ -313,6 +320,7 @@ function MapInner({
   statusFilter: 'all' | 'unsent' | 'sent' | 'junk';
 }) {
   const map = useMap();
+  const [legendVisible, setLegendVisible] = useState(true);
 
   useEffect(() => {
     if (map) onMapLoad(map);
@@ -330,7 +338,7 @@ function MapInner({
         </div>
       )}
 
-      {coordsData && (
+      {coordsData && legendVisible && (
         <div style={{
           position: 'absolute', left: 12, bottom: 28, zIndex: 50,
           background: 'rgba(255,255,255,.95)', border: '1px solid #e5e7eb',
@@ -338,6 +346,21 @@ function MapInner({
           display: 'flex', flexDirection: 'column', gap: 3,
           boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none',
         }}>
+          <button
+            type="button"
+            onClick={() => setLegendVisible(false)}
+            aria-label="Close legend"
+            title="Close legend"
+            style={{
+              position: 'absolute', top: 2, right: 2,
+              pointerEvents: 'auto', width: 18, height: 18, borderRadius: '50%',
+              border: 'none', background: '#e5e7eb', color: '#4b5563',
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 9, lineHeight: 1,
+            }}
+          >
+            <FaTimes />
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#dc2626', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', flexShrink: 0 }} />
             Unsent
@@ -393,7 +416,8 @@ export default function OutreachMapView({
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
-  const [nearest, setNearest] = useState<{ address: string; distanceM: number } | null>(null);
+  const [locationPanelOpen, setLocationPanelOpen] = useState(true);
+  const [nearest, setNearest] = useState<{ address: string; suburb: string; distanceM: number } | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -413,6 +437,7 @@ export default function OutreachMapView({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        setLocationPanelOpen(true);
         setLocating(false);
       },
       (err) => {
@@ -461,7 +486,7 @@ export default function OutreachMapView({
     }
 
     const nearestPoint = computeNearestUnsent(userLocation, coordsData);
-    setNearest(nearestPoint ? { address: nearestPoint.address, distanceM: nearestPoint.distanceM } : null);
+    setNearest(nearestPoint ? { address: nearestPoint.address, suburb: nearestPoint.suburb, distanceM: nearestPoint.distanceM } : null);
 
     const pts: { lat: number; lng: number }[] = [{ lat: userLocation.lat, lng: userLocation.lng }];
     if (nearestPoint) pts.push({ lat: nearestPoint.lat, lng: nearestPoint.lng });
@@ -715,7 +740,7 @@ export default function OutreachMapView({
         >
           {locating ? <FaSpinner className="animate-spin" /> : <FaCrosshairs />}
         </button>
-        {(userLocation || locateError) && (
+        {(userLocation || locateError) && locationPanelOpen && (
           <div style={{
             position: 'absolute',
             left: 12,
@@ -730,18 +755,41 @@ export default function OutreachMapView({
             color: '#1f2937',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           }}>
+            <button
+              type="button"
+              onClick={() => setLocationPanelOpen(false)}
+              aria-label="Close location info"
+              title="Close location info"
+              style={{
+                position: 'absolute', top: 6, right: 6,
+                width: 20, height: 20, borderRadius: '50%',
+                border: 'none', background: '#e2e8f0', color: '#4b5563',
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 10, lineHeight: 1,
+              }}
+            >
+              <FaTimes />
+            </button>
             {locateError ? (
-              <div style={{ color: '#dc2626' }}>{locateError}</div>
+              <div style={{ color: '#dc2626', paddingRight: 20 }}>{locateError}</div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 3 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 3, paddingRight: 18 }}>
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563eb', border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.3)', flexShrink: 0 }} />
                   Your location
                 </div>
                 {nearest ? (
                   <>
                     <div>
-                      Nearest unsent: <strong>{nearest.address}</strong>
+                      Nearest unsent:{' '}
+                      <a
+                        href={`https://www.google.com/maps?q=${encodeURIComponent([nearest.address, nearest.suburb].filter(Boolean).join(', '))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        {nearest.address}
+                      </a>
                     </div>
                     <div style={{ color: '#6b7280' }}>Distance {formatDistance(nearest.distanceM)}</div>
                   </>
