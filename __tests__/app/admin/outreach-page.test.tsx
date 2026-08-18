@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import OutreachPage from '../../../app/admin/outreach/page';
 
@@ -21,6 +21,8 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonOutreach: () => <div>Loading Outreach</div>,
+  SkeletonOutreachCard: () => <div>Loading Card</div>,
+  SkeletonOutreachListRow: () => <div>Loading Row</div>,
 }));
 
 vi.mock('@/components/admin/InlineAddressInput', () => ({
@@ -1172,6 +1174,76 @@ describe('Outreach page - Card view run ordering', () => {
     await waitFor(() => {
       expect(screen.getByText('1 Acacia Road')).toBeTruthy();
     }, { timeout: 4000 });
+  });
+
+  it('keeps the correct total in infinite scroll mode after loading more pages', async () => {
+    let ioCallback: ((entries: IntersectionObserverEntry[]) => void) | null = null;
+    global.IntersectionObserver = vi.fn().mockImplementation((cb) => {
+      ioCallback = cb;
+      return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    }) as unknown as typeof IntersectionObserver;
+
+    const pageItems: Record<number, any[]> = {};
+    for (let i = 0; i < 45; i++) {
+      const p = Math.floor(i / 9) + 1;
+      (pageItems[p] = pageItems[p] || []).push({
+        id: `out-${i + 1}`,
+        property_address: `${i + 1} Test Street`,
+        street: 'Test Street',
+        suburb: 'Torbay',
+        city: 'Auckland',
+        region: 'Auckland',
+        status: 'pending',
+        created_at: '2026-07-01T09:00:00Z',
+      });
+    }
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        const u = new URL(s, 'http://localhost');
+        const page = parseInt(u.searchParams.get('page') || '1', 10);
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: pageItems[page] || [],
+            // The real API only returns the total on page 1 (offset 0); later
+            // pages return total 0 to skip a full-table COUNT per scroll.
+            pagination: { page, limit: 9, total: page === 1 ? 45 : 0, totalPages: page === 1 ? 5 : undefined },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 9, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 9 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Scroll: the infinite-scroll sentinel fires → loadMore fetches page 2,
+    // which the API answers with total 0.
+    act(() => {
+      ioCallback?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 18 of 45 properties/).length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 3000 });
+    expect(screen.queryByText(/Displaying 1 to 18 of 0 properties/)).toBeNull();
+
+    global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
   });
 
   describe('Filter by Street', () => {

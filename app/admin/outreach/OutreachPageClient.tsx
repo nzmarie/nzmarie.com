@@ -626,7 +626,7 @@ export default function OutreachPage() {
 
   const likedStreetTotalCount = likedStreetModeApplied && likedSelectedStreet
     ? likedStreetsSummary.find((s) => s.street === likedSelectedStreet)?.count ?? 0
-    : displayPagination?.total || 0;
+    : displayPagination?.total || lastValidTotalRef.current;
   const likedStreetDisplayCount = likedStreetModeApplied && likedSelectedStreet
     ? filteredLikedItems?.length ?? 0
     : displayItems.length;
@@ -763,7 +763,9 @@ export default function OutreachPage() {
         const cp = cacheRef.current.get(ck);
         if (!cp) break;
         allItems.push(...cp.items);
-        lastTotal = cp.pagination?.total ?? lastTotal;
+        // Page 2+ responses carry total 0 (the API only counts on page 1),
+        // so fall back to the last known non-zero total instead of zeroing it.
+        lastTotal = cp.pagination?.total || lastTotal;
         page++;
       }
       setItems(allItems);
@@ -855,11 +857,19 @@ export default function OutreachPage() {
     setLoadingMore(true);
     const nextPage = pageRef.current + 1;
     const key = buildCacheKey(nextPage);
+    // The API only computes the real total on page 1 (offset 0); subsequent
+    // pages return total 0 to avoid a full-table COUNT on every infinite-scroll
+    // request. Keep the last known non-zero total so the "of N properties"
+    // counter never shows "of 0" after more pages load.
+    const mergePaginationTotal = (prev: PaginationMeta | null, next: PaginationMeta | null): PaginationMeta | null => {
+      if (!next) return prev;
+      return { ...next, total: next.total > 0 ? next.total : (prev?.total ?? 0) };
+    };
     const cached = cacheRef.current.get(key);
     if (cached) {
       setItems((prev) => [...prev, ...cached.items]);
       pageRef.current = nextPage;
-      setPagination(cached.pagination);
+      setPagination((prev) => mergePaginationTotal(prev, cached.pagination));
       setHasMore(cached.hasMore);
       hasMoreRef.current = cached.hasMore;
       loadingMoreRef.current = false;
@@ -879,7 +889,7 @@ export default function OutreachPage() {
         setHasMore(false);
         hasMoreRef.current = false;
       }
-      setPagination(result.pagination);
+      setPagination((prev) => mergePaginationTotal(prev, result.pagination));
     } catch (error) {
       if ((error as Error)?.name !== 'AbortError') {
         console.error('Error loading more:', error);
