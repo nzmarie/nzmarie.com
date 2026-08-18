@@ -1246,6 +1246,118 @@ describe('Outreach page - Card view run ordering', () => {
     global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
   });
 
+  it('shows the correct total on the liked tab in infinite scroll mode after loading more pages', async () => {
+    let ioCallback: ((entries: IntersectionObserverEntry[]) => void) | null = null;
+    global.IntersectionObserver = vi.fn().mockImplementation((cb) => {
+      ioCallback = cb;
+      return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    }) as unknown as typeof IntersectionObserver;
+
+    const likedItems: any[] = [];
+    for (let i = 0; i < 134; i++) {
+      likedItems.push({
+        id: `lk-${i + 1}`,
+        property_address: `${i + 1} Liked Street`,
+        street: 'Liked Street',
+        suburb: 'Northcross',
+        city: 'Auckland',
+        region: 'Auckland',
+        status: 'liked',
+        created_at: '2026-07-01T09:00:00Z',
+      });
+    }
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        const u = new URL(s, 'http://localhost');
+        const page = parseInt(u.searchParams.get('page') || '1', 10);
+        const limit = parseInt(u.searchParams.get('limit') || '9', 10);
+        const slice = likedItems.slice((page - 1) * limit, page * limit);
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: slice,
+            pagination: { page, limit, total: page === 1 ? 134 : 0, totalPages: page === 1 ? 15 : undefined },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 9, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    // The liked tab is the default and infinite scroll is the default mode.
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 9 of 134 properties/).length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 3000 });
+
+    act(() => {
+      ioCallback?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 18 of 134 properties/).length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 3000 });
+    expect(screen.queryByText(/Displaying 1 to 18 of 0 properties/)).toBeNull();
+
+    global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+  });
+
+  it('does not show "Displaying 1 to 9 of 0 properties" on the liked tab when the page-1 total is 0', async () => {
+    const likedItems: any[] = [];
+    for (let i = 0; i < 9; i++) {
+      likedItems.push({
+        id: `lk-${i + 1}`,
+        property_address: `${i + 1} Liked Street`,
+        street: 'Liked Street',
+        suburb: 'Northcross',
+        city: 'Auckland',
+        region: 'Auckland',
+        status: 'liked',
+        created_at: '2026-07-01T09:00:00Z',
+      });
+    }
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: likedItems,
+            pagination: { page: 1, limit: 9, total: 0, totalPages: 0 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 9, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    // The liked tab is the default; items load but the (glitched) page-1 total
+    // is 0. The counter must fall back to the loaded item count instead of
+    // showing the broken "Displaying 1 to 9 of 0 properties".
+    await waitFor(() => {
+      expect(screen.getAllByText(/Displaying 1 to 9 of 9 properties/).length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 3000 });
+    expect(screen.queryByText(/Displaying 1 to 9 of 0 properties/)).toBeNull();
+  });
+
   describe('Filter by Street', () => {
     const streetMemFetch = () => {
       (global.fetch as any) = vi.fn((url: RequestInfo) => {

@@ -599,9 +599,13 @@ export default function OutreachPage() {
   }, []);
   const displayPagination = isClassic ? classicPagination : pagination;
   const rawDisplayTotal = displayPagination?.total || 0;
-  // Keep the last non-zero total so the display never flickers to "0" during
-  // a Classic Pages fetch transition (e.g. after a page or viewMode change).
-  if (rawDisplayTotal > 0) lastValidTotalRef.current = rawDisplayTotal;
+  // Keep the last non-zero total from BOTH pagination sources (the one
+  // currently displayed and the other mode's) so a later infinite/classic
+  // switch can never drop the "of N properties" counter back to "0" — e.g.
+  // when Classic Pages just fetched total=134 but Infinite Scroll's pagination
+  // is briefly stale/0.
+  if (pagination?.total) lastValidTotalRef.current = pagination.total;
+  if (classicPagination?.total) lastValidTotalRef.current = classicPagination.total;
   const stableDisplayTotal = rawDisplayTotal > 0 ? rawDisplayTotal : lastValidTotalRef.current;
   const totalPages = Math.max(1, Math.ceil(stableDisplayTotal / pageSize));
   const availableStreets = useMemo(() => {
@@ -626,7 +630,7 @@ export default function OutreachPage() {
 
   const likedStreetTotalCount = likedStreetModeApplied && likedSelectedStreet
     ? likedStreetsSummary.find((s) => s.street === likedSelectedStreet)?.count ?? 0
-    : displayPagination?.total || lastValidTotalRef.current;
+    : displayPagination?.total || lastValidTotalRef.current || displayItems.length;
   const likedStreetDisplayCount = likedStreetModeApplied && likedSelectedStreet
     ? filteredLikedItems?.length ?? 0
     : displayItems.length;
@@ -757,7 +761,7 @@ export default function OutreachPage() {
       // Accumulate all cached consecutive pages for infinite scroll
       const allItems = [...cached1.items];
       let page = 2;
-      let lastTotal = cached1.pagination?.total ?? cached1.items.length;
+      let lastTotal = cached1.pagination?.total || lastValidTotalRef.current || cached1.items.length;
       while (true) {
         const ck = buildCacheKey(page);
         const cp = cacheRef.current.get(ck);
@@ -863,7 +867,8 @@ export default function OutreachPage() {
     // counter never shows "of 0" after more pages load.
     const mergePaginationTotal = (prev: PaginationMeta | null, next: PaginationMeta | null): PaginationMeta | null => {
       if (!next) return prev;
-      return { ...next, total: next.total > 0 ? next.total : (prev?.total ?? 0) };
+      const known = prev?.total || lastValidTotalRef.current || 0;
+      return { ...next, total: next.total > 0 ? next.total : known };
     };
     const cached = cacheRef.current.get(key);
     if (cached) {
