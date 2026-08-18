@@ -53,4 +53,9 @@ describe('sortSuburbs', () => {
   it('SUBURB_PRIORITY_ORDER contains 34 entries', () => {
     expect(SUBURB_PRIORITY_ORDER.length).toBe(34);
   });
+
+  it('places Long Bay immediately after Browns Bay', () => {
+    expect(SUBURB_PRIORITY_ORDER.indexOf('Long Bay')).toBe(SUBURB_PRIORITY_ORDER.indexOf('Browns Bay') + 1);
+    expect(sortSuburbs(['Albany', 'Long Bay', 'Browns Bay', 'Pinehill'])).toEqual(['Browns Bay', 'Long Bay', 'Pinehill', 'Albany']);
+  });
 });
