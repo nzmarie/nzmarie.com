@@ -352,6 +352,63 @@ describe('GET /api/admin/dashboard/stats', () => {
     ]);
   });
 
+  it('orders dispatch by suburb by most recent sent date first', async () => {
+    const mockRow = {
+      new_leads: '1', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      sent_monthly: [], junk_monthly: [], sent_quarterly: [], junk_quarterly: [],
+      sent_daily: [], junk_daily: [], sent_weekly: [], junk_weekly: [],
+      dispatch_by_suburb: [
+        { suburb: 'Albany', sent_count: '3', junk_count: '1', total_count: '4', first_sent_at: null, last_sent_at: null },
+        { suburb: 'Browns Bay', sent_count: '5', junk_count: '0', total_count: '5', first_sent_at: '2026-07-01T00:00:00.000Z', last_sent_at: '2026-07-20T00:00:00.000Z' },
+        { suburb: 'Torbay', sent_count: '15', junk_count: '2', total_count: '20', first_sent_at: '2026-07-02T01:00:00.000Z', last_sent_at: '2026-08-10T01:00:00.000Z' },
+      ],
+    };
+
+    vi.mocked(db.execute).mockResolvedValue({ rows: [mockRow] } as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.stats.dispatchTrend.bySuburb.map((s: { suburb: string }) => s.suburb)).toEqual(['Torbay', 'Browns Bay', 'Albany']);
+  });
+
+  it('includes last_sent_at in outreach by suburb and orders it by most recent send', async () => {
+    const mockRow = {
+      new_leads: '1', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', recent_downloads: null,
+      outreach_by_suburb: [
+        { suburb: 'Albany', pending_count: 5, sent_count: 10, total_count: 15, last_sent_at: '2026-07-01T00:00:00.000Z' },
+        { suburb: 'Torbay', pending_count: 2, sent_count: 12, total_count: 14, last_sent_at: '2026-08-01T00:00:00.000Z' },
+        { suburb: 'Browns Bay', pending_count: 1, sent_count: 0, total_count: 1, last_sent_at: null },
+      ],
+    };
+
+    let capturedSql = '';
+    vi.mocked(db.execute).mockImplementation(((sql: any) => {
+      capturedSql = JSON.stringify(sql?.queryChunks ?? []);
+      return { rows: [mockRow] };
+    }) as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(capturedSql).toContain('last_sent_at DESC NULLS LAST');
+    expect(body.stats.outreachBySuburb).toEqual([
+      { suburb: 'Albany', pending_count: 5, sent_count: 10, total_count: 15, last_sent_at: '2026-07-01T00:00:00.000Z' },
+      { suburb: 'Torbay', pending_count: 2, sent_count: 12, total_count: 14, last_sent_at: '2026-08-01T00:00:00.000Z' },
+      { suburb: 'Browns Bay', pending_count: 1, sent_count: 0, total_count: 1, last_sent_at: null },
+    ]);
+  });
+
   it('defaults dispatch trend to empty arrays when fields are missing', async () => {
     const emptyRow = {
       new_leads: null, high_priority_leads: null, pending_outreach: null,

@@ -11,6 +11,14 @@ interface SuburbCountRow {
   sent_count?: string | number;
 }
 
+interface OutreachSuburbRow {
+  suburb?: string;
+  pending_count?: string | number;
+  sent_count?: string | number;
+  total_count?: string | number;
+  last_sent_at?: string | Date | null;
+}
+
 interface SentSummaryItem {
   suburb: string;
   sent_count: number;
@@ -184,17 +192,19 @@ export async function GET(request: Request) {
             ),
             outreach_by_suburb_full_cte AS MATERIALIZED (
               SELECT
-                suburb,
-                COUNT(*) FILTER (WHERE LOWER(status) IN ('pending', 'sent')) as pending_count,
-                COUNT(*) FILTER (WHERE LOWER(status) = 'sent') as sent_count,
-                COUNT(*) as total_count
-              FROM outreach_properties
-              WHERE suburb IS NOT NULL
-              GROUP BY suburb
+                op.suburb,
+                COUNT(*) FILTER (WHERE LOWER(op.status) IN ('pending', 'sent')) as pending_count,
+                COUNT(*) FILTER (WHERE LOWER(op.status) = 'sent') as sent_count,
+                COUNT(*) as total_count,
+                MAX(sl.sent_at) AS last_sent_at
+              FROM outreach_properties op
+              LEFT JOIN outreach_send_logs sl ON sl.outreach_property_id = op.id
+              WHERE op.suburb IS NOT NULL
+              GROUP BY op.suburb
             ),
             outreach_by_suburb_cte AS (
               SELECT * FROM outreach_by_suburb_full_cte
-              ORDER BY total_count DESC
+              ORDER BY last_sent_at DESC NULLS LAST, total_count DESC
               LIMIT 20
             ),
             sent_summary_cte AS (
@@ -339,7 +349,15 @@ export async function GET(request: Request) {
         `);
 
         const row = dbResult.rows[0] as Record<string, unknown>;
-        const outreachBySuburb: SuburbCountRow[] = Array.isArray(row.outreach_by_suburb) ? row.outreach_by_suburb as SuburbCountRow[] : [];
+        const outreachBySuburb: Array<{ suburb: string; pending_count: number; sent_count: number; total_count: number; last_sent_at: string | null }> =
+          (Array.isArray(row.outreach_by_suburb) ? row.outreach_by_suburb as OutreachSuburbRow[] : [])
+            .map((item) => ({
+              suburb: item?.suburb || 'Unknown',
+              pending_count: Number(item?.pending_count) || 0,
+              sent_count: Number(item?.sent_count) || 0,
+              total_count: Number(item?.total_count) || 0,
+              last_sent_at: item?.last_sent_at ? new Date(item.last_sent_at).toISOString() : null,
+            }));
         const sentSummarySuburbs: SuburbCountRow[] = Array.isArray(row.sent_summary_suburbs) && (row.sent_summary_suburbs as SuburbCountRow[]).length > 0
           ? row.sent_summary_suburbs as SuburbCountRow[]
           : outreachBySuburb.filter((item) => Number(item?.sent_count) > 1);
@@ -381,6 +399,12 @@ export async function GET(request: Request) {
                 first_sent_at: item.first_sent_at ? new Date(item.first_sent_at).toISOString() : null,
                 last_sent_at: item.last_sent_at ? new Date(item.last_sent_at).toISOString() : null,
               };
+            })
+            // Most recently sent suburbs first; suburbs with no send activity last.
+            .sort((a, b) => {
+              const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+              const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+              return tb - ta;
             });
 
         return {

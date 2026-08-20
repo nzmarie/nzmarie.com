@@ -191,6 +191,13 @@ function SuburbDispatchTimeline({
 }) {
   if (suburbs.length === 0) return null;
 
+  // Most recently sent suburbs first; suburbs with no send activity last.
+  const sortedSuburbs = [...suburbs].sort((a, b) => {
+    const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+    const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+    return tb - ta;
+  });
+
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -223,7 +230,7 @@ function SuburbDispatchTimeline({
             </tr>
           </thead>
           <tbody>
-            {suburbs.map((s) => {
+            {sortedSuburbs.map((s) => {
               const active = selectedSuburb === s.suburb;
               const sentPct = s.total_count > 0 ? (s.sent_count / s.total_count) * 100 : 0;
               const junkPct = s.total_count > 0 ? (s.junk_count / s.total_count) * 100 : 0;

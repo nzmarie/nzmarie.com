@@ -65,6 +65,7 @@ interface OutreachSuburb {
   pending_count: number;
   sent_count: number;
   total_count: number;
+  last_sent_at: string | null;
 }
 
 interface RecentDownload {
@@ -182,6 +183,14 @@ export default function AdminDashboardPage() {
 
   const userName =
     session?.user?.name || session?.user?.email?.split("@")[0] || "User";
+
+  // Outreach by Suburb: most recently sent suburb first (defensive sort so the
+  // display order is guaranteed even if the API order changes).
+  const outreachBySuburb = [...(stats?.outreachBySuburb ?? [])].sort((a, b) => {
+    const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+    const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+    return tb - ta;
+  });
 
   return (
     <div className="space-y-6">
@@ -362,7 +371,7 @@ export default function AdminDashboardPage() {
 
       {stats?.dispatchTrend && <DispatchTrendSection trend={stats.dispatchTrend} />}
 
-      {stats?.outreachBySuburb && stats.outreachBySuburb.length > 0 && (
+      {outreachBySuburb.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-100">
           <div className="p-6 border-b border-slate-100">
             <h2 className="text-lg font-semibold text-slate-900">
@@ -371,7 +380,7 @@ export default function AdminDashboardPage() {
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {stats.outreachBySuburb.map((item) => (
+              {outreachBySuburb.map((item) => (
                 <div key={item.suburb} className="rounded-lg border border-slate-200 p-4">
                   <div className="text-sm font-semibold text-slate-800 mb-3">{item.suburb}</div>
                   <div className="flex gap-3 text-sm">

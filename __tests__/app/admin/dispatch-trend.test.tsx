@@ -228,4 +228,46 @@ describe('DispatchTrendSection', () => {
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers).toEqual(['Suburb', 'First Sent', 'Last Sent', 'Sent', 'Unsent', 'Pending', 'Progress']);
   });
+
+  it('sorts the timeline with the most recently sent suburb first', () => {
+    const trend: DispatchTrend = {
+      ...mockTrend,
+      bySuburb: [
+        {
+          suburb: 'Albany',
+          sent_count: 3,
+          junk_count: 1,
+          unsent_count: 0,
+          total_count: 4,
+          first_sent_at: null,
+          last_sent_at: null,
+        },
+        {
+          suburb: 'Browns Bay',
+          sent_count: 5,
+          junk_count: 0,
+          unsent_count: 0,
+          total_count: 5,
+          first_sent_at: '2026-07-01T00:00:00.000Z',
+          last_sent_at: '2026-07-20T00:00:00.000Z',
+        },
+        {
+          suburb: 'Torbay',
+          sent_count: 15,
+          junk_count: 3,
+          unsent_count: 2,
+          total_count: 20,
+          first_sent_at: '2026-07-02T01:00:00.000Z',
+          last_sent_at: '2026-08-10T01:00:00.000Z',
+        },
+      ],
+    };
+
+    render(<DispatchTrendSection trend={trend} />);
+
+    const rows = screen.getAllByRole('row');
+    expect(rows[1].textContent).toContain('Torbay');
+    expect(rows[2].textContent).toContain('Browns Bay');
+    expect(rows[3].textContent).toContain('Albany');
+  });
 });

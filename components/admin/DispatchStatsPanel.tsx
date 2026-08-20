@@ -86,7 +86,17 @@ function SummaryCards({ summary, bizPv, bizUv }: { summary: Summary; bizPv: numb
   );
 }
 
-const PIE_COLORS = ['#DC2626', '#7C3AED', '#EAB308'];
+// Unsent → red, Sent → purple, No Junk Mail → yellow (keyed by name so the
+// mapping is stable regardless of the order pieData is built in).
+const PIE_COLORS: Record<string, string> = {
+  Unsent: '#DC2626',
+  Sent: '#7C3AED',
+  'No Junk Mail': '#EAB308',
+};
+
+function pieColor(name: string, fallbackIdx: number): string {
+  return PIE_COLORS[name] ?? ['#DC2626', '#7C3AED', '#EAB308'][fallbackIdx % 3];
+}
 
 function PieChartLegend({ pieData, total }: { pieData: { name: string; value: number }[]; total: number }) {
   return (
@@ -95,7 +105,7 @@ function PieChartLegend({ pieData, total }: { pieData: { name: string; value: nu
         const pct = ((d.value / total) * 100).toFixed(1);
         return (
           <div key={d.name} className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[idx] }} />
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: pieColor(d.name, idx) }} />
             <span className="font-medium text-slate-700 w-32">{d.name}</span>
             <span className="text-slate-500">{d.value} ({pct}%)</span>
           </div>
@@ -129,7 +139,7 @@ function CampaignOverview({ summary }: { summary: Summary }) {
             <PieChart>
               <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50}>
                 {pieData.map((entry, idx) => (
-                  <Cell key={entry.name} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                  <Cell key={entry.name} fill={pieColor(entry.name, idx)} />
                 ))}
               </Pie>
               <Tooltip />
