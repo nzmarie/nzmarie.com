@@ -228,7 +228,7 @@ describe('Extra admin pages', () => {
     expect(await screen.findByText('Uploaded QR codes')).toBeTruthy();
   });
 
-  it('shows the newest uploaded suburb first in the Uploaded Reports list', async () => {
+  it('groups reports by suburb on Main Report date desc and orders labels Main Report → Letter → About Marie', async () => {
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/api/admin/pdf/reports')) {
         return Promise.resolve({
@@ -236,13 +236,43 @@ describe('Extra admin pages', () => {
           json: () => Promise.resolve({
             reports: [
               {
-                id: 'oteha',
+                id: 'oteha-about',
+                suburb: 'Oteha',
+                quarter: 'Q2',
+                year: 2026,
+                doc_label: 'About Marie',
+                file_url: 'https://example.com/oteha-about.pdf',
+                file_name: 'oteha-about.pdf',
+                file_size: 800,
+                download_count: 0,
+                view_count: 0,
+                status: 'active',
+                uploaded_by: 'admin@example.com',
+                uploaded_at: '2025-05-14T00:00:00.000Z',
+              },
+              {
+                id: 'oteha-letter',
+                suburb: 'Oteha',
+                quarter: 'Q2',
+                year: 2026,
+                doc_label: 'Letter',
+                file_url: 'https://example.com/oteha-letter.pdf',
+                file_name: 'oteha-letter.pdf',
+                file_size: 900,
+                download_count: 0,
+                view_count: 0,
+                status: 'active',
+                uploaded_by: 'admin@example.com',
+                uploaded_at: '2025-05-16T00:00:00.000Z',
+              },
+              {
+                id: 'oteha-main',
                 suburb: 'Oteha',
                 quarter: 'Q2',
                 year: 2026,
                 doc_label: 'Main Report',
-                file_url: 'https://example.com/oteha.pdf',
-                file_name: 'oteha.pdf',
+                file_url: 'https://example.com/oteha-main.pdf',
+                file_name: 'oteha-main.pdf',
                 file_size: 1500,
                 download_count: 0,
                 view_count: 0,
@@ -281,7 +311,14 @@ describe('Extra admin pages', () => {
 
     await screen.findByText('Upload suburb reports');
     const bodyText = document.body.textContent || '';
+    // Suburb with the newest Main Report upload (Oteha, 2025-05-15) is listed
+    // above North Shore (2025-02-01).
+    expect(bodyText.indexOf('Oteha')).toBeGreaterThanOrEqual(0);
     expect(bodyText.indexOf('Oteha')).toBeLessThan(bodyText.indexOf('North Shore'));
+    // Within Oteha the label order wins over upload date: Main Report (05-15)
+    // comes before Letter (05-16) which comes before About Marie (05-14).
+    expect(bodyText.indexOf('oteha-main.pdf')).toBeLessThan(bodyText.indexOf('oteha-letter.pdf'));
+    expect(bodyText.indexOf('oteha-letter.pdf')).toBeLessThan(bodyText.indexOf('oteha-about.pdf'));
   });
 
   it('renders Last Sold Data For Sale table with suburb rows', async () => {

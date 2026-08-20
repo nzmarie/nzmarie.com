@@ -264,7 +264,7 @@ export default function OutreachPage() {
   const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'sent' | 'unsent'>('all');
   const [sortMode, setSortMode] = useState<'address' | 'time'>('address');
   const [sentDateFilter, setSentDateFilter] = useState<string[]>([todayDateKey()]);
-  const [availableReports, setAvailableReports] = useState<Array<{ suburb: string; quarter: string; year: number; id: string }>>([]);
+  const [availableReports, setAvailableReports] = useState<Array<{ suburb: string; quarter: string; year: number; id: string; uploaded_at: string }>>([]);
 
   // Today's Run: shared street-clusters data (fetched when Pending + Unsent).
   const [todayRunBudget, setTodayRunBudget] = useState<number>(() => {
@@ -4028,8 +4028,8 @@ function ReportFilterSection({
   setLastSoldPreset,
   onClearRunFilter,
 }: {
-  availableReports: Array<{ suburb: string; quarter: string; year: number; id: string }>;
-  setAvailableReports: React.Dispatch<React.SetStateAction<Array<{ suburb: string; quarter: string; year: number; id: string }>>>;
+  availableReports: Array<{ suburb: string; quarter: string; year: number; id: string; uploaded_at: string }>;
+  setAvailableReports: React.Dispatch<React.SetStateAction<Array<{ suburb: string; quarter: string; year: number; id: string; uploaded_at: string }>>>;
   reportSuburbFilter: string;
   setReportSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
   reportQuarterFilter: string;
@@ -4075,8 +4075,8 @@ function ReportFilterSection({
         const res = await fetch('/api/admin/pdf/reports?status=active');
         if (res.ok) {
           const data = await res.json();
-          const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string }) => ({
-            suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id,
+          const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string; uploaded_at?: string }) => ({
+            suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id, uploaded_at: r.uploaded_at || '',
           }));
           setAvailableReports(reports);
           setLoaded(true);
@@ -4136,6 +4136,34 @@ function ReportFilterSection({
     defaultReport.suburb === reportSuburbFilter &&
     defaultReport.label === reportQuarterFilter;
 
+  // Most recently uploaded report first: order suburbs by their latest upload
+  // date (descending) so freshly uploaded reports appear leftmost.
+  const orderedSuburbs = useMemo(() => {
+    const latestBySuburb = new Map<string, string>();
+    for (const r of availableReports) {
+      const ts = r.uploaded_at || '';
+      const cur = latestBySuburb.get(r.suburb);
+      if (cur === undefined || ts > cur) latestBySuburb.set(r.suburb, ts);
+    }
+    return [...latestBySuburb.entries()]
+      .sort((a, b) => (b[1] || '').localeCompare(a[1] || ''))
+      .map(([s]) => s);
+  }, [availableReports]);
+
+  const orderedQuarters = useMemo(() => {
+    const latestByQuarter = new Map<string, string>();
+    for (const r of availableReports) {
+      if (r.suburb !== reportSuburbFilter) continue;
+      const label = `${r.year}-${r.quarter}`;
+      const ts = r.uploaded_at || '';
+      const cur = latestByQuarter.get(label);
+      if (cur === undefined || ts > cur) latestByQuarter.set(label, ts);
+    }
+    return [...latestByQuarter.entries()]
+      .sort((a, b) => (b[1] || '').localeCompare(a[1] || ''))
+      .map(([q]) => q);
+  }, [availableReports, reportSuburbFilter]);
+
   return (
     <>
       <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
@@ -4146,7 +4174,7 @@ function ReportFilterSection({
           <button onClick={loadReports} disabled={loading}
             style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >{loading ? 'Loading...' : 'Show Reports'}</button>
-        ) : [...new Set(availableReports.map(r => r.suburb))].sort().map(s => (
+        ) : orderedSuburbs.map(s => (
           <button
             key={s}
             onClick={() => {
@@ -4176,11 +4204,7 @@ function ReportFilterSection({
       </div>
       {reportSuburbFilter && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-          {[...new Set(
-            availableReports
-              .filter(r => r.suburb === reportSuburbFilter)
-              .map(r => `${r.year}-${r.quarter}`)
-          )].map(label => (
+          {orderedQuarters.map(label => (
             <button
               key={`${reportSuburbFilter}-${label}`}
               onClick={() => { setReportQuarterFilter(prev => prev === label ? '' : label); onClearRunFilter(); }}

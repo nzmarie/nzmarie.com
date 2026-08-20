@@ -117,6 +117,9 @@ const YEARS = [CURRENT_YEAR + 3, CURRENT_YEAR + 2, CURRENT_YEAR + 1, CURRENT_YEA
 
 const DOC_LABEL_OPTIONS = ['Main Report', 'Letter', 'About Marie'] as const;
 
+// Label display order within a suburb (Main Report → Letter → About Marie).
+const LABEL_ORDER: Record<string, number> = { 'Main Report': 0, Letter: 1, 'About Marie': 2 };
+
 export default function PDFManagerPageClient() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -444,7 +447,31 @@ export default function PDFManagerPageClient() {
     return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
   };
 
-  const filteredReports = useMemo(() => reports, [reports]);
+  // Group by suburb. Suburbs are ordered by their Main Report's upload date
+// (newest first; suburbs without a Main Report sort last), and within a suburb
+// reports follow the Main Report → Letter → About Marie label order, newest
+// upload first within the same label.
+const filteredReports = useMemo(() => {
+  const labelRank = (label: string) => LABEL_ORDER[label] ?? 3;
+  const mainTsBySuburb = new Map<string, number>();
+  for (const r of reports) {
+    if (labelRank(r.doc_label || 'Main Report') === 0) {
+      const ts = new Date(r.uploaded_at).getTime();
+      const cur = mainTsBySuburb.get(r.suburb);
+      if (cur === undefined || ts > cur) mainTsBySuburb.set(r.suburb, ts);
+    }
+  }
+  return [...reports].sort((a, b) => {
+    const am = mainTsBySuburb.get(a.suburb) ?? -Infinity;
+    const bm = mainTsBySuburb.get(b.suburb) ?? -Infinity;
+    if (am !== bm) return bm - am;
+    if (a.suburb !== b.suburb) return a.suburb.localeCompare(b.suburb);
+    const la = labelRank(a.doc_label || 'Main Report');
+    const lb = labelRank(b.doc_label || 'Main Report');
+    if (la !== lb) return la - lb;
+    return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+  });
+}, [reports]);
 
   return (
     <div className="min-h-screen bg-slate-100">

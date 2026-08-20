@@ -774,6 +774,41 @@ describe('Outreach page - List view mobile layout', () => {
     expect(postedBody).toEqual({ suburb: 'Oteha', label: '2026-Q2' });
   });
 
+  it('orders the Filter by Report suburb buttons by most recent upload first', async () => {
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            reports: [
+              { suburb: 'Albany', quarter: 'Q2', year: 2026, id: 'r-alb', uploaded_at: '2025-05-01T00:00:00.000Z' },
+              { suburb: 'Torbay', quarter: 'Q1', year: 2026, id: 'r-tor', uploaded_at: '2025-06-01T00:00:00.000Z' },
+              { suburb: 'Oteha', quarter: 'Q2', year: 2026, id: 'r-ote', uploaded_at: '2025-07-01T00:00:00.000Z' },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    const buttonNames = within(reportSection).getAllByRole('button').map(b => b.textContent?.trim() || '');
+    // Newest uploaded report's suburb appears leftmost: Oteha → Torbay → Albany.
+    expect(buttonNames.indexOf('Oteha')).toBeGreaterThanOrEqual(0);
+    expect(buttonNames.indexOf('Oteha')).toBeLessThan(buttonNames.indexOf('Torbay'));
+    expect(buttonNames.indexOf('Torbay')).toBeLessThan(buttonNames.indexOf('Albany'));
+  });
+
   it('filters sent properties by sent date via calendar', async () => {
     const calls: string[] = [];
     (global.fetch as any) = vi.fn((url: RequestInfo) => {

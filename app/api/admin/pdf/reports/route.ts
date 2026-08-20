@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const status = searchParams.get('status') || 'active';
 
   let query = `
-    SELECT 
+    SELECT
       id,
       suburb,
       quarter,
@@ -31,8 +31,12 @@ export async function GET(request: Request) {
       uploaded_by,
       uploaded_at,
       created_at
-    FROM suburb_reports
-    WHERE status = $1
+    FROM (
+      SELECT *,
+        MAX(uploaded_at) FILTER (WHERE doc_label = 'Main Report' OR doc_label IS NULL)
+          OVER (PARTITION BY suburb) AS suburb_main_date
+      FROM suburb_reports
+      WHERE status = $1
   `;
 
   const params: unknown[] = [status];
@@ -44,7 +48,16 @@ export async function GET(request: Request) {
     paramIndex++;
   }
 
-  query += ` ORDER BY uploaded_at DESC`;
+  query += `
+    ) t
+    ORDER BY suburb_main_date DESC NULLS LAST,
+      suburb ASC,
+      CASE WHEN doc_label = 'Main Report' OR doc_label IS NULL THEN 0
+           WHEN doc_label = 'Letter' THEN 1
+           WHEN doc_label = 'About Marie' THEN 2
+           ELSE 3 END,
+      uploaded_at DESC
+  `;
 
   try {
     const result = await marieDB.query(query, params);

@@ -311,6 +311,11 @@ describe('PDF Manager & Report Download API Routes', () => {
       const data = await response.json();
       expect(data.reports.length).toBe(1);
       expect(data.reports[0].suburb).toBe('Oteha');
+
+      const sql = vi.mocked(marieDB.query).mock.calls[0]?.[0] as string;
+      expect(sql).toContain('suburb_main_date');
+      expect(sql).toContain('ORDER BY suburb_main_date DESC NULLS LAST');
+      expect(sql).toContain("WHEN doc_label = 'Letter' THEN 1");
     });
   });
 

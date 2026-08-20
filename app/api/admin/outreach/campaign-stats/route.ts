@@ -20,6 +20,18 @@ function setCache(key: string, data: unknown, ttlMs: number): void {
   cache.set(key, { data, expiry: Date.now() + ttlMs });
 }
 
+function toIso(v: unknown): string {
+  if (!v) return '';
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+// "2026_Q2_Torbay" → "Torbay". Keys without a suburb segment yield "".
+function campaignSuburb(key: string): string {
+  const parts = String(key).trim().split('_');
+  return parts.length > 2 ? parts.slice(2).join(' ') : '';
+}
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.email || !isAdmin(session.user.email)) {
@@ -56,22 +68,72 @@ export async function GET(request: Request) {
       // campaigns are merged in so past dispatches remain selectable.
       const [reportResult, logsResult] = await Promise.all([
         marieDB.query(
-          `SELECT DISTINCT suburb, year, quarter
+          `SELECT suburb, year, quarter, MAX(uploaded_at) AS latest_uploaded_at
            FROM suburb_reports
            WHERE status = 'active'
-           ORDER BY year DESC, quarter DESC, suburb ASC`
+           GROUP BY suburb, year, quarter`
         ),
         marieDB.query(
-          `SELECT DISTINCT campaign_key FROM outreach_send_logs`
+          `SELECT campaign_key, MAX(sent_at) AS latest_sent_at
+           FROM outreach_send_logs
+           GROUP BY campaign_key`
         ),
       ]);
 
-      const reportCampaigns = (reportResult.rows as { suburb: string; year: number; quarter: string }[]).map(
-        (r) => `${r.year}_${r.quarter}_${r.suburb}`
-      );
-      const logCampaigns = (logsResult.rows as { campaign_key: string }[]).map((r) => r.campaign_key);
+      interface CampaignEntry {
+        key: string;
+        suburb: string;
+        uploadedAt: string;
+        sentAt: string;
+      }
 
-      const list = [...new Set([...reportCampaigns, ...logCampaigns])].sort((a, b) => b.localeCompare(a));
+      const reportEntries: CampaignEntry[] = (reportResult.rows as {
+        suburb: string; year: number; quarter: string; latest_uploaded_at: unknown;
+      }[]).map((r) => ({
+        key: `${r.year}_${r.quarter}_${r.suburb}`,
+        suburb: r.suburb,
+        uploadedAt: toIso(r.latest_uploaded_at),
+        sentAt: '',
+      }));
+
+      const logEntries: CampaignEntry[] = (logsResult.rows as {
+        campaign_key: string; latest_sent_at: unknown;
+      }[]).map((r) => ({
+        key: r.campaign_key,
+        suburb: campaignSuburb(r.campaign_key),
+        uploadedAt: '',
+        sentAt: toIso(r.latest_sent_at),
+      }));
+
+      // Merge, preferring the report entry (it carries the upload date).
+      const byKey = new Map<string, CampaignEntry>();
+      for (const e of reportEntries) byKey.set(e.key, e);
+      for (const e of logEntries) {
+        if (!byKey.has(e.key)) byKey.set(e.key, e);
+      }
+
+      // Mirror the Outreach "Filter by Report" ordering: suburbs are grouped by
+      // their latest report upload (most recently uploaded first), then each
+      // campaign within a suburb by its own latest upload. Send-log-only
+      // campaigns (no upload date) sort after all report-backed campaigns.
+      const suburbLatest = new Map<string, string>();
+      for (const e of byKey.values()) {
+        const cur = suburbLatest.get(e.suburb) || '';
+        if (e.uploadedAt > cur) suburbLatest.set(e.suburb, e.uploadedAt);
+      }
+
+      const list = [...byKey.values()].sort((a, b) => {
+        const sa = suburbLatest.get(a.suburb) || '';
+        const sb = suburbLatest.get(b.suburb) || '';
+        if (sa !== sb) return sb.localeCompare(sa);
+        const ta = a.uploadedAt || '';
+        const tb = b.uploadedAt || '';
+        if (ta !== tb) return tb.localeCompare(ta);
+        const la = a.sentAt || '';
+        const lb = b.sentAt || '';
+        if (la !== lb) return lb.localeCompare(la);
+        return b.key.localeCompare(a.key);
+      }).map((e) => e.key);
 
       setCache('campaign_list', list, 300_000);
       return NextResponse.json({ available_campaigns: list, default_campaign: defaultCampaign });

@@ -34,14 +34,14 @@ describe('GET /api/admin/outreach/campaign-stats', () => {
       } as any)
       .mockResolvedValueOnce({
         rows: [
-          { suburb: 'Torbay', year: 2026, quarter: 'Q2' },
-          { suburb: 'Oteha', year: 2026, quarter: 'Q1' },
+          { suburb: 'Torbay', year: 2026, quarter: 'Q2', latest_uploaded_at: '2026-08-01T00:00:00.000Z' },
+          { suburb: 'Oteha', year: 2026, quarter: 'Q1', latest_uploaded_at: '2026-07-01T00:00:00.000Z' },
         ],
       } as any)
       .mockResolvedValueOnce({
         rows: [
-          { campaign_key: '2026_Q2_Torbay' },
-          { campaign_key: '2025_Q4_Takapuna' },
+          { campaign_key: '2026_Q2_Torbay', latest_sent_at: '2026-08-02T00:00:00.000Z' },
+          { campaign_key: '2025_Q4_Takapuna', latest_sent_at: '2025-12-01T00:00:00.000Z' },
         ],
       } as any);
 
@@ -54,10 +54,54 @@ describe('GET /api/admin/outreach/campaign-stats', () => {
     expect(data.available_campaigns).toContain('2026_Q2_Torbay');
     expect(data.available_campaigns).toContain('2026_Q1_Oteha');
     expect(data.available_campaigns).toContain('2025_Q4_Takapuna');
-    // Newest quarter/year sorts first
+    // Most recently uploaded report first (matches the Outreach Filter by Report order).
     expect(data.available_campaigns[0]).toBe('2026_Q2_Torbay');
+    // Send-log-only campaigns (no active report upload) sort after report-backed ones.
+    expect(data.available_campaigns[data.available_campaigns.length - 1]).toBe('2025_Q4_Takapuna');
     // Admin-configured default campaign is surfaced so the page can pre-select it
     expect(data.default_campaign).toBe('2026_Q2_Torbay');
+  });
+
+  it('orders campaigns by most recent report upload (mirroring Filter by Report), send-log-only keys last', async () => {
+    vi.useFakeTimers();
+    // Bump the clock past the campaign-list cache TTL so the list is re-queried.
+    vi.setSystemTime(Date.now() + 10 * 60 * 1000);
+
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { email: 'admin@test.com' },
+    } as any);
+
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          { suburb: 'Oteha', year: 2026, quarter: 'Q1', latest_uploaded_at: '2026-03-01T00:00:00.000Z' },
+          { suburb: 'Torbay', year: 2026, quarter: 'Q2', latest_uploaded_at: '2026-08-01T00:00:00.000Z' },
+          { suburb: 'Albany', year: 2025, quarter: 'Q4', latest_uploaded_at: '2026-06-15T00:00:00.000Z' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          { campaign_key: '2025_Q4_Albany', latest_sent_at: '2025-12-01T00:00:00.000Z' },
+          { campaign_key: 'Xmas2025', latest_sent_at: '2025-12-10T00:00:00.000Z' },
+        ],
+      } as any);
+
+    const response = await campaignStatsGET(
+      new Request('http://localhost:3000/api/admin/outreach/campaign-stats')
+    );
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    // Torbay's report was uploaded most recently → first. Albany was uploaded
+    // after Oteha even though its report period is older → before Oteha.
+    expect(data.available_campaigns[0]).toBe('2026_Q2_Torbay');
+    expect(data.available_campaigns[1]).toBe('2025_Q4_Albany');
+    expect(data.available_campaigns[2]).toBe('2026_Q1_Oteha');
+    // Send-log-only keys with no active report upload sort last.
+    expect(data.available_campaigns[data.available_campaigns.length - 1]).toBe('Xmas2025');
+
+    vi.useRealTimers();
   });
 
   it('returns 401 for non-admin users', async () => {
