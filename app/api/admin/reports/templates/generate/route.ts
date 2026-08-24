@@ -188,6 +188,39 @@ function previousQuarter(quarter: string): string | null {
   return `${year}-Q${q - 1}`;
 }
 
+function quarterMonthRange(quarter: string): { startYM: string; endYM: string } | null {
+  const [yearStr, qStr] = quarter.split('-Q');
+  const year = Number(yearStr);
+  const q = Number(qStr);
+  if (!yearStr || !qStr || Number.isNaN(year) || Number.isNaN(q) || q < 1 || q > 4) return null;
+  const firstMonth = (q - 1) * 3 + 1;
+  const lastMonth = firstMonth + 2;
+  return {
+    startYM: `${year}-${String(firstMonth).padStart(2, '0')}`,
+    endYM: `${year + (lastMonth > 12 ? 1 : 0)}-${String(lastMonth > 12 ? lastMonth - 12 : lastMonth).padStart(2, '0')}`,
+  };
+}
+
+function medianForQuarter(rows: TrendRow[], quarter: string): number | null {
+  const range = quarterMonthRange(quarter);
+  if (!range) return null;
+  const inRange = rows.filter(r => {
+    const ym = getYearMonth(r.period_month);
+    return ym >= range.startYM && ym <= range.endYM;
+  });
+  return agg(inRange.map(r => r.median_price));
+}
+
+// Quarter-over-quarter median price change, computed from monthly rows.
+function qoqPctFromRows(rows: TrendRow[], quarter: string): number | null {
+  const prevQuarterKey = previousQuarter(quarter);
+  if (!prevQuarterKey) return null;
+  const cur = medianForQuarter(rows, quarter);
+  const prev = medianForQuarter(rows, prevQuarterKey);
+  if (cur == null || prev == null || prev === 0) return null;
+  return Math.round(((cur - prev) / prev) * 10000) / 100;
+}
+
 function buildBlocks(
   suburbName: string,
   quarter: string,
@@ -249,7 +282,9 @@ function buildBlocks(
         kpiTotalVolume = sd.totalVolume ?? null;
         kpiSales = sd.sales ?? 0;
         kpiDays = sd.days ?? null;
-        pricePct = sd.priceDiff1yrPct ?? null;
+        // The card compares against the previous quarter, so the median price
+        // delta must be quarter-over-quarter (not the REINZ 1-year figure).
+        pricePct = sd.priceDiffMomPct ?? null;
       }
     }
     // Fallback: compute directly from monthly rows
@@ -258,8 +293,7 @@ function buildBlocks(
       kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
       kpiSales = sum(subData.map(r => r.sales_count));
       kpiDays = agg(subData.map(r => r.days_to_sell));
-      const lastSub = subData[subData.length - 1];
-      pricePct = lastSub?.price_diff_1yr_pct != null ? Number(lastSub.price_diff_1yr_pct) : null;
+      pricePct = qoqPctFromRows(subData, quarter);
     }
 
     const prevQuarter = previousQuarter(quarter);

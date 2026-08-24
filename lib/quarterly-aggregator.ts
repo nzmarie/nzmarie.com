@@ -1,5 +1,28 @@
 import type { MonthlyDataPoint } from './market-data-aggregator';
 
+function quarterKeyParts(key: string): { year: number; quarter: number } | null {
+  const m = key.match(/^(\d{4})-Q([1-4])$/);
+  if (!m) return null;
+  return { year: Number(m[1]), quarter: Number(m[2]) };
+}
+
+function previousQuarterKey(key: string): string | null {
+  const p = quarterKeyParts(key);
+  if (!p) return null;
+  return p.quarter === 1 ? `${p.year - 1}-Q4` : `${p.year}-Q${p.quarter - 1}`;
+}
+
+function sameQuarterPrevYearKey(key: string): string | null {
+  const p = quarterKeyParts(key);
+  if (!p) return null;
+  return `${p.year - 1}-Q${p.quarter}`;
+}
+
+function pctChange(cur: number | null | undefined, base: number | null | undefined): number | null {
+  if (cur == null || base == null || base === 0) return null;
+  return Math.round(((cur - base) / base) * 10000) / 100;
+}
+
 export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPoint[] {
   const groups = new Map<string, MonthlyDataPoint[]>();
 
@@ -142,5 +165,33 @@ export function aggregateToQuarterly(monthly: MonthlyDataPoint[]): MonthlyDataPo
     });
   }
 
-  return result.sort((a, b) => a.period.localeCompare(b.period));
+  const sorted = result.sort((a, b) => a.period.localeCompare(b.period));
+
+  // Quarter-over-quarter (QoQ) and year-over-year (YoY) must be derived from
+  // the aggregated quarterly medians — averaging the monthly REINZ diff
+  // columns is not meaningful for a quarterly row. When the comparison
+  // quarter is outside the supplied range, QoQ is null and YoY falls back to
+  // the monthly-average value.
+  const byPeriod = new Map(sorted.map(r => [r.period, r]));
+  for (const row of sorted) {
+    const prevRow = previousQuarterKey(row.period) ? byPeriod.get(previousQuarterKey(row.period)!) : undefined;
+    const yearRow = sameQuarterPrevYearKey(row.period) ? byPeriod.get(sameQuarterPrevYearKey(row.period)!) : undefined;
+    for (const sn of Object.keys(row.suburbs)) {
+      const sd = row.suburbs[sn];
+      row.suburbs[sn] = {
+        ...sd,
+        priceDiffMomPct: pctChange(sd.median, prevRow?.suburbs[sn]?.median),
+        priceDiff1yrPct: pctChange(sd.median, yearRow?.suburbs[sn]?.median) ?? sd.priceDiff1yrPct ?? null,
+      };
+    }
+    if (row.cityDetail) {
+      row.cityDetail = {
+        ...row.cityDetail,
+        priceDiffMomPct: pctChange(row.cityDetail.median, prevRow?.cityDetail?.median),
+        priceDiff1yrPct: pctChange(row.cityDetail.median, yearRow?.cityDetail?.median) ?? row.cityDetail.priceDiff1yrPct ?? null,
+      };
+    }
+  }
+
+  return sorted;
 }

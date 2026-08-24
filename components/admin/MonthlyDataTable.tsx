@@ -68,7 +68,7 @@ interface AIInsight {
 
 const EMPTY_INSIGHT: AIInsight = { landlord: '', buyer: '', market: '' };
 
-function generateInsight(period: string, sd: SuburbDetail | null | undefined): AIInsight {
+function generateInsight(period: string, sd: SuburbDetail | null | undefined, periodWord: 'month' | 'quarter' = 'month'): AIInsight {
   if (!sd) return EMPTY_INSIGHT;
 
   const median = sd.median;
@@ -102,7 +102,7 @@ function generateInsight(period: string, sd: SuburbDetail | null | undefined): A
     }
   } else {
     landlord = `Market is balanced with median at ${formatPrice(median)}. `;
-    if (mom != null) landlord += `Prices ${mom >= 0 ? 'edging up' : 'softening'} ${formatPct(mom)} month-on-month. `;
+    if (mom != null) landlord += `Prices ${mom >= 0 ? 'edging up' : 'softening'} ${formatPct(mom)} ${periodWord}-on-${periodWord}. `;
     landlord += 'Highlight your property\'s unique features to stand out.';
   }
 
@@ -110,7 +110,7 @@ function generateInsight(period: string, sd: SuburbDetail | null | undefined): A
   if (days != null && days > 50) {
     buyer = `Days on market at ${days} — you have negotiating power. `;
     if (gap) buyer += `List price exceeds sold by ${formatPrice(gap.gap)} (${gap.pct}%). Offer below asking. `;
-    if (mom != null && mom < 0) buyer += `Prices dropped ${formatPct(mom)} this month — act quickly before the market rebounds.`;
+    if (mom != null && mom < 0) buyer += `Prices dropped ${formatPct(mom)} this ${periodWord} — act quickly before the market rebounds.`;
     else buyer += 'Sellers are motivated. Start with a 5-10% below-asking offer.';
   } else if (sales != null && sales < 5) {
     buyer = `Only ${sales} sales this period — low inventory means less competition. `;
@@ -118,7 +118,7 @@ function generateInsight(period: string, sd: SuburbDetail | null | undefined): A
     buyer += 'Move fast when you find the right property.';
   } else {
     buyer = `Healthy market with ${sales ?? 'steady'} sales and ~${days ?? 'standard'} days on market. `;
-    if (mom != null && mom > 0) buyer += `Prices up ${formatPct(mom)} this month — don't wait. `;
+    if (mom != null && mom > 0) buyer += `Prices up ${formatPct(mom)} this ${periodWord} — don't wait. `;
     buyer += 'Compare recent sales to ensure fair value before offering.';
   }
 
@@ -169,8 +169,8 @@ export default function MonthlyDataTable({
   const insight = useMemo(() => {
     if (!selectedRow) return null;
     const sd = isDistrict ? selectedRow.cityDetail : selectedRow.suburbs[activeFocusSuburb];
-    return generateInsight(selectedRow.period, sd);
-  }, [selectedRow, activeFocusSuburb, isDistrict]);
+    return generateInsight(selectedRow.period, sd, dataMode === 'monthly' ? 'month' : 'quarter');
+  }, [selectedRow, activeFocusSuburb, isDistrict, dataMode]);
 
   const noDetail = !isDistrict && (
     activeData.length === 0 ||
@@ -261,7 +261,9 @@ export default function MonthlyDataTable({
               </th>
               <th className="text-right py-2 px-2 whitespace-nowrap">
                 <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">Median Price</div>
-                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">MoM / YoY Trend</div>
+                <div className="text-xs font-normal text-gray-500 tracking-tight leading-tight">
+                  {dataMode === 'monthly' ? 'MoM / YoY Trend' : 'QoQ / YoY Trend'}
+                </div>
               </th>
               <th className="text-right py-2 px-2 whitespace-nowrap">
                 <div className="text-sm font-semibold text-gray-900 tracking-tight leading-tight">List vs Sold</div>
@@ -305,7 +307,7 @@ export default function MonthlyDataTable({
                     <div className="text-xs space-x-1.5">
                       {sd?.priceDiffMomPct != null && (
                         <span className={sd.priceDiffMomPct >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          MoM {formatPct(sd.priceDiffMomPct)}
+                          {dataMode === 'monthly' ? 'MoM' : 'QoQ'} {formatPct(sd.priceDiffMomPct)}
                         </span>
                       )}
                       {sd?.priceDiff1yrPct != null && (
