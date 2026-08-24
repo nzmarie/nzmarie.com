@@ -426,6 +426,30 @@ describe('Outreach page - Dual Pagination Mode', () => {
       expect(screen.getAllByText(/Displaying 1 to 9 of 45 properties/).length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  it('renders only one bottom pagination bar in classic mode', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: mockItems, pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    render(<OutreachPage />);
+
+    await waitFor(() => expect(screen.getByText('❤️ Liked')).toBeDefined());
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [mockItems[0]], pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } }),
+    });
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      // The range pagination ("1–9 of 45 …") must appear exactly once — the
+      // card view previously rendered a duplicate bar below the grid.
+      expect(screen.getAllByText('1–9 of 45').length).toBe(1);
+    });
+  });
 });
 
 describe('Outreach page - Liked icon on card image', () => {
