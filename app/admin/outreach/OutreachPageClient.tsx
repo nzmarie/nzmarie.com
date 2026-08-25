@@ -27,6 +27,7 @@ import {
   FaPaperPlane,
 } from 'react-icons/fa';
 import { aggregateLikedStreets, filterLikedItemsByStreet, extractStreetFromLikedItem } from '@/lib/liked-street-filter';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
 interface OutreachProperty {
   id: string;
@@ -1551,7 +1552,7 @@ export default function OutreachPage() {
               Quick Filter by Suburb
             </label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-              {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].filter((s) => !likedStreetModeApplied || suburbFilter === s || reportSuburbFilter === s).map((s) => (
+              {SUBURB_PRIORITY_ORDER.filter((s) => !likedStreetModeApplied || suburbFilter === s || reportSuburbFilter === s).map((s) => (
                 <button
                   key={s}
                   onClick={() => {

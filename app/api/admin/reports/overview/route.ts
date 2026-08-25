@@ -2,13 +2,9 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
-const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
-  'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany',
-  'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe',
-  'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
-  'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven',
-  'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'];
+const SUBURB_ORDER = ['North Shore', ...SUBURB_PRIORITY_ORDER];
 
 export async function GET() {
   const session = await auth();
@@ -85,11 +81,11 @@ export async function GET() {
 
     const orderMap = new Map(SUBURB_ORDER.map((s, i) => [s, i]));
     const suburbs = Array.from(suburbMap.values())
-      .filter((s) => orderMap.has(s.name))
       .sort((a, b) => {
-        const ai = orderMap.get(a.name) ?? 999;
-        const bi = orderMap.get(b.name) ?? 999;
-        return ai - bi;
+        const ai = orderMap.get(a.name) ?? SUBURB_ORDER.length;
+        const bi = orderMap.get(b.name) ?? SUBURB_ORDER.length;
+        if (ai !== bi) return ai - bi;
+        return a.name.localeCompare(b.name);
       });
 
     return NextResponse.json({

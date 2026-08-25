@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { SkeletonPDFManager } from '@/components/admin/Skeleton';
 import { isAdmin } from '@/lib/permissions';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 import { FaUpload, FaDownload, FaTimes, FaCloudUploadAlt, FaFolderOpen, FaQrcode, FaTrash, FaExternalLinkAlt } from 'react-icons/fa';
 
 interface SuburbReport {
@@ -35,43 +36,7 @@ interface QrCodeRecord {
   created_at: string;
 }
 
-const DEFAULT_SUBURBS = [
-  'North Shore',
-  'Northcross',
-  'Oteha',
-  'Torbay',
-  'Fairview Heights',
-  'Waiake',
-  'Browns Bay',
-  'Long Bay',
-  'Pinehill',
-  'Rothesay Bay',
-  'Murrays Bay',
-  'Albany',
-  'Forrest Hill',
-  'Schnapper Rock',
-  'Unsworth Heights',
-  'Sunnynook',
-  'Greenhithe',
-  'Chatswood',
-  'Mairangi Bay',
-  'Campbells Bay',
-  'Castor Bay',
-  'Milford',
-  'Glenfield',
-  'Hillcrest',
-  'Birkenhead',
-  'Hauraki',
-  'Bayswater',
-  'Bayview',
-  'Beach Haven',
-  'Belmont',
-  'Birkdale',
-  'Devonport',
-  'Northcote',
-  'Takapuna',
-  'Totara Vale',
-];
+const DEFAULT_SUBURBS = ['North Shore', ...SUBURB_PRIORITY_ORDER];
 
 const SUBURB_URLS: Record<string, string> = {
   'North Shore': 'https://nzmarie.com',
@@ -86,6 +51,7 @@ const SUBURB_URLS: Record<string, string> = {
   'Murrays Bay': 'https://nzmarie.com/murrays-bay',
   'Albany': 'https://nzmarie.com/albany',
   'Long Bay': 'https://nzmarie.com/long-bay',
+  'Rosedale': 'https://nzmarie.com/rosedale',
   'Forrest Hill': 'https://nzmarie.com/forrest-hill',
   'Schnapper Rock': 'https://nzmarie.com/schnapper-rock',
   'Unsworth Heights': 'https://nzmarie.com/unsworth-heights',
@@ -96,6 +62,7 @@ const SUBURB_URLS: Record<string, string> = {
   'Campbells Bay': 'https://nzmarie.com/campbells-bay',
   'Castor Bay': 'https://nzmarie.com/castor-bay',
   'Milford': 'https://nzmarie.com/milford',
+  'Wairau Valley': 'https://nzmarie.com/wairau-valley',
   'Glenfield': 'https://nzmarie.com/glenfield',
   'Hillcrest': 'https://nzmarie.com/hillcrest',
   'Birkenhead': 'https://nzmarie.com/birkenhead',
@@ -107,6 +74,8 @@ const SUBURB_URLS: Record<string, string> = {
   'Birkdale': 'https://nzmarie.com/birkdale',
   'Devonport': 'https://nzmarie.com/devonport',
   'Northcote': 'https://nzmarie.com/northcote',
+  'Northcote Point': 'https://nzmarie.com/northcote-point',
+  'Stanley Point': 'https://nzmarie.com/stanley-point',
   'Takapuna': 'https://nzmarie.com/takapuna',
   'Totara Vale': 'https://nzmarie.com/totara-vale',
 };
@@ -335,6 +304,12 @@ export default function PDFManagerPageClient() {
     setQrGenerating(true);
     setQrPreview(null);
     setQrGeneratedBlob(null);
+
+    if (!SUBURB_URLS[qrSuburb]) {
+      showNotify('error', `No target URL configured for ${qrSuburb}`);
+      setQrGenerating(false);
+      return;
+    }
 
     try {
       const QrCodeWithLogo = (await import('qrcode-with-logos')).default;

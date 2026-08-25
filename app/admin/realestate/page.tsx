@@ -9,6 +9,7 @@ import Image from "next/image";
 import { SkeletonProperties } from "@/components/admin/Skeleton";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { REGION_CITIES, CITY_SUBURBS, REGIONS as GEO_REGIONS } from "@/lib/geo-data";
+import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 import { getFixedImageUrl } from "@/lib/google-maps";
 
 interface Listing {
@@ -848,7 +849,7 @@ export default function RealestatePage() {
             Quick Filter by Suburb
           </label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((suburb) => (
+            {SUBURB_PRIORITY_ORDER.map((suburb) => (
               <button
                 key={suburb}
                 onClick={() => {

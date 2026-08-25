@@ -50,8 +50,9 @@ describe('sortSuburbs', () => {
     expect(SUBURB_PRIORITY_ORDER[0]).toBe('Northcross');
   });
 
-  it('SUBURB_PRIORITY_ORDER contains 34 entries', () => {
-    expect(SUBURB_PRIORITY_ORDER.length).toBe(34);
+  it('SUBURB_PRIORITY_ORDER contains 38 entries with no duplicates', () => {
+    expect(SUBURB_PRIORITY_ORDER.length).toBe(38);
+    expect(new Set(SUBURB_PRIORITY_ORDER).size).toBe(38);
   });
 
   it('places Long Bay immediately after Browns Bay', () => {

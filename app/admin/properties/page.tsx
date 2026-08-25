@@ -15,6 +15,7 @@ import Image from "next/image";
 import AddressAutocomplete from "@/components/property/AddressAutocomplete";
 import { SkeletonProperties, SkeletonPropertyCard, SkeletonBlock } from "@/components/admin/Skeleton";
 import { REGION_CITIES, CITY_SUBURBS } from "@/lib/geo-data";
+import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 import { extractStreetNameFromAddress } from "@/lib/street-ordering";
 import type { StreetProgressEntry } from "@/lib/street-progress";
 import { getFixedImageUrl } from "@/lib/google-maps";
@@ -1704,7 +1705,7 @@ export default function PropertiesPage() {
   }, [isClassic, hasNextPage, isFetchingNextPage, fetchNextPage, propertiesData, viewMode]);
 
   const currentCitySuburbs = CITY_SUBURBS[filters.city] || [];
-  const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'];
+  const SUBURB_ORDER = ['North Shore', ...SUBURB_PRIORITY_ORDER];
   const sortedSuburbs = [...currentCitySuburbs].sort((a, b) => {
     const ai = SUBURB_ORDER.indexOf(a);
     const bi = SUBURB_ORDER.indexOf(b);
@@ -2073,7 +2074,7 @@ export default function PropertiesPage() {
             gap: "10px",
             alignItems: "center"
           }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].filter((s) => !streetModeApplied || s === filters.suburb).map((suburb) => (
+            {SUBURB_PRIORITY_ORDER.filter((s) => !streetModeApplied || s === filters.suburb).map((suburb) => (
               <button
                 key={suburb}
                 onClick={() => {

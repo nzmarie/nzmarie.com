@@ -11,7 +11,7 @@ import MonthlyDataTable from '@/components/admin/MonthlyDataTable';
 import ScanTrendsChart from '@/components/admin/ScanTrendsChart';
 import { isSuperAdmin } from '@/lib/permissions';
 import type { MonthlyDataPoint } from '@/lib/market-data-aggregator';
-import { sortSuburbs } from '@/lib/suburb-order';
+import { sortSuburbs, SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 const CARD_BADGE_STYLES = {
   blue: 'bg-blue-100 text-blue-700',
   green: 'bg-green-100 text-green-700',
@@ -30,7 +30,18 @@ type RegionRow = {
   count: number;
 };
 
-const FALLBACK_SUBURBS = sortSuburbs(['Oteha', 'Northcross', 'Albany', 'Browns Bay', 'Torbay']);
+const FALLBACK_SUBURBS = [...SUBURB_PRIORITY_ORDER];
+
+/**
+ * Full chip list for REINZ Market Trends / Analysis Data: always shows every
+ * suburb in SUBURB_PRIORITY_ORDER (same order as the properties page Quick
+ * Filter by Suburb), then appends any data-only suburbs alphabetically.
+ */
+function buildSuburbChipList(available: string[]): string[] {
+  const known = SUBURB_PRIORITY_ORDER as readonly string[];
+  const extras = sortSuburbs(available.filter(s => !known.includes(s)));
+  return [...known, ...extras];
+}
 
 type DataMode = 'monthly' | 'quarterly';
 
@@ -172,7 +183,7 @@ export default function AnalyticsPage() {
       const res = await fetch('/api/admin/analytics/available-suburbs');
       const data = await res.json();
       if (data.availableSuburbs && Array.isArray(data.availableSuburbs) && data.availableSuburbs.length > 0) {
-        const sorted = sortSuburbs(data.availableSuburbs);
+        const sorted = buildSuburbChipList(data.availableSuburbs);
         setAvailableSuburbs(sorted);
         setSelectedSuburbs(prev => {
           if (prev.length === 0) return prev;
@@ -546,8 +557,7 @@ export default function AnalyticsPage() {
             >Quarterly</button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {availableSuburbs.map((s, i) => {
             const active = selectedSuburbs.includes(s);
             const color = getSuburbColor(i);
@@ -566,7 +576,6 @@ export default function AnalyticsPage() {
               </button>
             );
           })}
-          </div>
           <button
             onClick={() => setShowDistrict(v => !v)}
             className={`text-sm font-medium rounded-full px-3 py-1.5 border transition-all ${

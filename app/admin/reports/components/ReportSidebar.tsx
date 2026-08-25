@@ -4,13 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ConfirmModal from './ConfirmModal';
 import { useReportStore, OverviewSuburb } from '../stores/report-store';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
-const SUBURB_ORDER = ['North Shore', 'Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake',
-  'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany',
-  'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe',
-  'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield',
-  'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven',
-  'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'];
+const SUBURB_ORDER = ['North Shore', ...SUBURB_PRIORITY_ORDER];
 
 export default function ReportSidebar() {
   const router = useRouter();
@@ -180,7 +176,7 @@ export default function ReportSidebar() {
             display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8,
             maxHeight: 120, overflowY: 'auto',
           }}>
-            {SUBURB_ORDER.map((name) => {
+            {[...SUBURB_ORDER, ...suburbs.filter((s) => !SUBURB_ORDER.includes(s.name)).map((s) => s.name)].map((name) => {
               const hasData = suburbs.some((s) => s.name === name);
               if (!hasData) return null;
               const isSelected = selectedSuburb === name;

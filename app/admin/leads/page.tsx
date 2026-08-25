@@ -10,6 +10,7 @@ import { FaBed, FaBath, FaCar, FaRulerCombined, FaMapMarkerAlt } from 'react-ico
 import { LeadEditModal } from '@/components/admin/LeadEditModal';
 import { PropertyEditModal } from '@/components/admin/PropertyEditModal';
 import { PropertyHistoryView } from '@/components/admin/PropertyHistoryView';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
 interface Lead {
   id: string;
@@ -563,7 +564,7 @@ export default function LeadsPage() {
             Quick Filter by Suburb
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
-            {['Northcross', 'Oteha', 'Torbay', 'Fairview Heights', 'Waiake', 'Browns Bay', 'Long Bay', 'Pinehill', 'Rothesay Bay', 'Murrays Bay', 'Albany', 'Forrest Hill', 'Schnapper Rock', 'Unsworth Heights', 'Sunnynook', 'Greenhithe', 'Chatswood', 'Mairangi Bay', 'Campbells Bay', 'Castor Bay', 'Milford', 'Glenfield', 'Hillcrest', 'Birkenhead', 'Hauraki', 'Bayswater', 'Bayview', 'Beach Haven', 'Belmont', 'Birkdale', 'Devonport', 'Northcote', 'Takapuna', 'Totara Vale'].map((suburb) => (
+            {SUBURB_PRIORITY_ORDER.map((suburb) => (
               <button
                 key={suburb}
                 onClick={() => { setSuburbFilter(prev => prev === suburb ? '' : suburb); setPage(1); }}

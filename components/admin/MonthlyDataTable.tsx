@@ -212,27 +212,25 @@ export default function MonthlyDataTable({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div className="flex flex-wrap gap-2">
-          {availableSuburbs.map((s) => {
-            const active = activeFocusSuburb === s;
-            const color = getSuburbColor(availableSuburbs.indexOf(s));
-            return (
-              <button
-                key={s}
-                onClick={() => onFocusChange(s)}
-                className={`text-sm font-medium rounded-full px-3 py-1.5 border transition-all ${
-                  active
-                    ? 'text-white shadow-sm'
-                    : 'text-gray-600 border-gray-300 hover:border-gray-400 bg-white'
-                }`}
-                style={active ? { backgroundColor: color, borderColor: color } : undefined}
-              >
-                {s}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {availableSuburbs.map((s) => {
+          const active = activeFocusSuburb === s;
+          const color = getSuburbColor(availableSuburbs.indexOf(s));
+          return (
+            <button
+              key={s}
+              onClick={() => onFocusChange(s)}
+              className={`text-sm font-medium rounded-full px-3 py-1.5 border transition-all ${
+                active
+                  ? 'text-white shadow-sm'
+                  : 'text-gray-600 border-gray-300 hover:border-gray-400 bg-white'
+              }`}
+              style={active ? { backgroundColor: color, borderColor: color } : undefined}
+            >
+              {s}
+            </button>
+          );
+        })}
         <button
           onClick={() => onFocusChange('North Shore City')}
           className={`text-sm font-medium rounded-full px-3 py-1.5 border transition-all ${
