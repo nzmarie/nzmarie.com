@@ -50,9 +50,14 @@ describe('sortSuburbs', () => {
     expect(SUBURB_PRIORITY_ORDER[0]).toBe('Northcross');
   });
 
-  it('SUBURB_PRIORITY_ORDER contains 38 entries with no duplicates', () => {
-    expect(SUBURB_PRIORITY_ORDER.length).toBe(38);
-    expect(new Set(SUBURB_PRIORITY_ORDER).size).toBe(38);
+  it('SUBURB_PRIORITY_ORDER contains 39 entries with no duplicates', () => {
+    expect(SUBURB_PRIORITY_ORDER.length).toBe(39);
+    expect(new Set(SUBURB_PRIORITY_ORDER).size).toBe(39);
+  });
+
+  it('places Narrow Neck between Bayswater and Devonport', () => {
+    expect(SUBURB_PRIORITY_ORDER.indexOf('Narrow Neck')).toBe(SUBURB_PRIORITY_ORDER.indexOf('Bayswater') + 1);
+    expect(SUBURB_PRIORITY_ORDER.indexOf('Devonport')).toBe(SUBURB_PRIORITY_ORDER.indexOf('Narrow Neck') + 1);
   });
 
   it('places Long Bay immediately after Browns Bay', () => {

@@ -35,6 +35,7 @@ export const SUBURB_PRIORITY_ORDER = [
   'Northcote Point',
   'Belmont',
   'Bayswater',
+  'Narrow Neck',
   'Devonport',
   'Stanley Point',
 ] as const;

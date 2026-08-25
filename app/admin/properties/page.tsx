@@ -879,7 +879,7 @@ export default function PropertiesPage() {
   // (page change or viewMode switch) where classicData briefly holds stale/0
   // data, totalProperties never drops to 0, preventing "Displaying 10 to 0 of 0"
   // and "Page 2 of 1" display glitches.
-  const lastValidTotalRef = useRef<number>(0);
+
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [filters, setFilters] = useState<Filters>({
     region: "Auckland",
@@ -1580,13 +1580,9 @@ export default function PropertiesPage() {
     }
   };
 
-  const rawTotal = streetModeOn
+  const totalProperties = streetModeOn
     ? streetAllLength
-    : (isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total || 0));
-  // Keep the last non-zero total so the display never flickers to "0" during
-  // a Classic Pages fetch transition (e.g. after a page or viewMode change).
-  if (rawTotal > 0) lastValidTotalRef.current = rawTotal;
-  const totalProperties = rawTotal > 0 ? rawTotal : lastValidTotalRef.current;
+    : (isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total ?? 0));
   const totalPages = Math.max(1, Math.ceil(totalProperties / pageSize));
 
   useEffect(() => {
@@ -2049,7 +2045,9 @@ export default function PropertiesPage() {
             Search Filters
           </h2>
           <p style={{ fontSize: "0.9rem", color: "#718096" }}>
-            Displaying {displayProperties.length} of {totalProperties} properties
+            {totalProperties === 0
+              ? 'Displaying 0 of 0 properties'
+              : `Displaying ${displayProperties.length} of ${totalProperties} properties`}
           </p>
         </div>
 
@@ -3266,9 +3264,11 @@ export default function PropertiesPage() {
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "20px", marginBottom: "12px", padding: "12px 16px", backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <span style={{ fontSize: "0.9rem", color: "#4a5568" }}>
-          {isClassic
-            ? `Displaying ${Math.max(1, (currentPage - 1) * pageSize + 1)} to ${Math.min(currentPage * pageSize, totalProperties)} of ${totalProperties} properties`
-            : `Displaying 1 to ${displayProperties.length} of ${totalProperties} properties`}
+          {totalProperties === 0
+            ? 'Displaying 0 of 0 properties'
+            : isClassic
+              ? `Displaying ${Math.max(1, (currentPage - 1) * pageSize + 1)} to ${Math.min(currentPage * pageSize, totalProperties)} of ${totalProperties} properties`
+              : `Displaying 1 to ${displayProperties.length} of ${totalProperties} properties`}
         </span>
         <div style={{ display: "inline-flex", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
           <button

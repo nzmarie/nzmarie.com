@@ -72,6 +72,7 @@ const SUBURB_URLS: Record<string, string> = {
   'Beach Haven': 'https://nzmarie.com/beach-haven',
   'Belmont': 'https://nzmarie.com/belmont',
   'Birkdale': 'https://nzmarie.com/birkdale',
+  'Narrow Neck': 'https://nzmarie.com/narrow-neck',
   'Devonport': 'https://nzmarie.com/devonport',
   'Northcote': 'https://nzmarie.com/northcote',
   'Northcote Point': 'https://nzmarie.com/northcote-point',
