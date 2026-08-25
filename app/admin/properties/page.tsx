@@ -1715,6 +1715,19 @@ export default function PropertiesPage() {
     return a.localeCompare(b);
   });
 
+  const firstSuburbForCity = (city: string): string => {
+    const order = SUBURB_PRIORITY_ORDER as readonly string[];
+    const sorted = [...(CITY_SUBURBS[city] || [])].sort((a, b) => {
+      const ai = order.indexOf(a);
+      const bi = order.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    return sorted[0] || 'Northcross';
+  };
+
   const handleRegionChange = (region: string) => {
     const cities = REGION_CITIES[region as keyof typeof REGION_CITIES] || [];
     const defaultCity = cities[0] || "";
@@ -1722,7 +1735,7 @@ export default function PropertiesPage() {
       ...prev,
       region,
       city: defaultCity,
-      suburb: "",
+      suburb: firstSuburbForCity(defaultCity),
     }));
   };
 
@@ -1730,7 +1743,7 @@ export default function PropertiesPage() {
     setFilters((prev) => ({
       ...prev,
       city,
-      suburb: "",
+      suburb: firstSuburbForCity(city),
     }));
   };
 
@@ -2078,11 +2091,12 @@ export default function PropertiesPage() {
               <button
                 key={suburb}
                 onClick={() => {
+                  if (filters.suburb === suburb) return;
                   setAddressInput('');
                   setFilters(prev => ({
                     ...prev,
                     search: '',
-                    suburb: prev.suburb === suburb ? '' : suburb,
+                    suburb,
                   }));
                 }}
                 style={{
@@ -2113,35 +2127,6 @@ export default function PropertiesPage() {
                 {suburb}
               </button>
             ))}
-            {filters.suburb && (
-              <button
-                onClick={() => {
-                  setAddressInput('');
-                  setFilters(prev => ({ ...prev, search: '', suburb: '' }));
-                }}
-                style={{
-                  padding: '10px 18px',
-                  backgroundColor: '#fef2f2',
-                  color: '#dc2626',
-                  border: '2px solid #fecaca',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fee2e2';
-                  e.currentTarget.style.borderColor = '#fca5a5';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fef2f2';
-                  e.currentTarget.style.borderColor = '#fecaca';
-                }}
-              >
-                ✕ Clear
-              </button>
-            )}
           </div>
         </div>
 
@@ -3248,7 +3233,6 @@ export default function PropertiesPage() {
                     cursor: "pointer",
                   }}
                 >
-                  <option value="">All suburbs</option>
                   {sortedSuburbs.map((suburb) => (
                     <option key={suburb} value={suburb}>
                       {suburb}

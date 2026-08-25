@@ -1539,7 +1539,9 @@ export default function OutreachPage() {
             }}
             onSelect={(suggestion) => {
               setAddressInput(suggestion.address);
-              setSuburbFilter(suggestion.suburb || '');
+              if (suggestion.suburb) {
+                setSuburbFilter(suggestion.suburb);
+              }
             }}
             placeholder="🔍 Search by address..."
           />
@@ -1556,8 +1558,9 @@ export default function OutreachPage() {
                 <button
                   key={s}
                   onClick={() => {
+                    if (suburbFilter === s) return;
                     setAddressInput('');
-                    setSuburbFilter(prev => prev === s ? '' : s);
+                    setSuburbFilter(s);
                   }}
                   style={{
                     padding: '10px 18px',
@@ -1587,32 +1590,6 @@ export default function OutreachPage() {
                   {s}
                 </button>
               ))}
-              {suburbFilter && (
-                <button
-                  onClick={() => { setAddressInput(''); setSuburbFilter(''); }}
-                  style={{
-                    padding: '10px 18px',
-                    backgroundColor: '#fef2f2',
-                    color: '#dc2626',
-                    border: '2px solid #fecaca',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: '500',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#fee2e2';
-                    e.currentTarget.style.borderColor = '#fca5a5';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#fef2f2';
-                    e.currentTarget.style.borderColor = '#fecaca';
-                  }}
-                >
-                  ✕ Clear
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -2273,7 +2250,7 @@ export default function OutreachPage() {
           <button
             onClick={() => {
               setAddressInput('');
-              setSuburbFilter('');
+              setSuburbFilter('Northcross');
               setStreetFilter('');
               setCampaignFilter('');
               setSortOrder('asc');
@@ -4053,7 +4030,7 @@ function ReportFilterSection({
             );
             if (!exists) {
               setDefaultReport(null);
-              setSuburbFilter('');
+              setSuburbFilter('Northcross');
               setReportSuburbFilter('');
               setReportQuarterFilter('');
             }
@@ -4143,8 +4120,12 @@ function ReportFilterSection({
           <button
             key={s}
             onClick={() => {
-              setSuburbFilter(prev => prev === s ? '' : s);
-              setReportSuburbFilter(prev => prev === s ? '' : s);
+              if (reportSuburbFilter === s) {
+                setReportSuburbFilter('');
+              } else {
+                setSuburbFilter(s);
+                setReportSuburbFilter(s);
+              }
               setReportQuarterFilter('');
               onClearRunFilter();
             }}
@@ -4162,7 +4143,7 @@ function ReportFilterSection({
           </button>
         ))}
         {reportSuburbFilter && (
-          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); setSuburbFilter(''); onClearRunFilter(); }}
+          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); onClearRunFilter(); }}
             style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >✕ Clear</button>
         )}

@@ -1437,22 +1437,23 @@ describe('Outreach page - Card view run ordering', () => {
     const quickSection = () =>
       within(screen.getByText('Quick Filter by Suburb').closest('div') as HTMLElement);
 
-    it('prompts for a suburb and does not enable street mode when Apply is clicked without one', async () => {
+    it('keeps the default suburb selected when its chip is clicked again', async () => {
       streetMemFetch();
       render(<OutreachPage />);
 
       await waitFor(() => {
         expect(screen.getByText('🗺️ Filter by Street')).toBeDefined();
       });
-      // Northcross is the default suburb on first load; clear it so none is selected.
+      // Northcross is the default suburb on first load; clicking its chip must
+      // NOT clear it because a suburb selection is mandatory.
       const quick = quickSection();
       fireEvent.click(quick.getByRole('button', { name: 'Northcross' }));
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       await waitFor(() => {
-        expect(screen.getByText('Please select a suburb first before applying street filter.')).toBeDefined();
+        expect(screen.getByRole('button', { name: /By Street \(click to cancel\)/ })).toBeDefined();
       });
-      expect(screen.queryByRole('button', { name: /By Street \(click to cancel\)/ })).toBeNull();
+      expect(screen.queryByText('Please select a suburb first before applying street filter.')).toBeNull();
     });
 
     it('hides other suburbs in Quick Filter by Suburb after Apply with a suburb selected', async () => {

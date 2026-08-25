@@ -643,7 +643,7 @@ describe('Properties Page - Quick Filter by Suburb clears Address Input', () => 
     cleanup();
   });
 
-  it('clears address input when a suburb button is clicked', async () => {
+  it('clears address input when a different suburb button is clicked', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
@@ -651,47 +651,49 @@ describe('Properties Page - Quick Filter by Suburb clears Address Input', () => 
     fireEvent.change(addressInput, { target: { value: '15 Marine Parade' } });
     expect(addressInput.value).toBe('15 Marine Parade');
 
-    const suburbBtn = screen.getByRole('button', { name: 'Northcross' });
-    fireEvent.click(suburbBtn);
-
-    await waitFor(() => {
-      expect(addressInput.value).toBe('');
-    });
-  });
-
-  it('clears address input when suburb Clear button is clicked', async () => {
-    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
-    render(<PropertiesPage />);
-
+    // Northcross is the default selection; clicking Albany switches suburbs.
     const suburbBtn = screen.getByRole('button', { name: 'Albany' });
     fireEvent.click(suburbBtn);
 
-    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
-    fireEvent.change(addressInput, { target: { value: '15 Marine Parade' } });
-    expect(addressInput.value).toBe('15 Marine Parade');
-
-    const clearBtn = screen.getByRole('button', { name: '✕ Clear' });
-    fireEvent.click(clearBtn);
-
     await waitFor(() => {
       expect(addressInput.value).toBe('');
     });
   });
 
-  it('clears address input when a different suburb is re-clicked (toggle off)', async () => {
+  it('keeps the active suburb selected when its button is clicked again', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: '15 Marine Parade' } });
+    expect(addressInput.value).toBe('15 Marine Parade');
+
+    const northcrossBtn = screen.getByRole('button', { name: 'Northcross' }) as HTMLElement;
+    expect(northcrossBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+
+    // Re-clicking the active suburb must not clear the selection or the input.
+    fireEvent.click(northcrossBtn);
+
+    expect(addressInput.value).toBe('15 Marine Parade');
+    expect(northcrossBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+  });
+
+  it('does not toggle off the selected suburb when re-clicked', async () => {
     const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
     render(<PropertiesPage />);
 
     const addressInput = screen.getByTestId('address-autocomplete') as HTMLInputElement;
 
     fireEvent.change(addressInput, { target: { value: '10 Some Street' } });
-    const albanyBtn = screen.getByRole('button', { name: 'Albany' });
+    const albanyBtn = screen.getByRole('button', { name: 'Albany' }) as HTMLElement;
     fireEvent.click(albanyBtn);
     expect(addressInput.value).toBe('');
 
     fireEvent.change(addressInput, { target: { value: '20 Other Road' } });
     fireEvent.click(albanyBtn);
-    expect(addressInput.value).toBe('');
+    // Re-clicking the active suburb keeps it selected and leaves the input alone.
+    expect(addressInput.value).toBe('20 Other Road');
+    expect(albanyBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
   });
 
   it('renders new suburb buttons in the quick filter section', async () => {
