@@ -814,7 +814,7 @@ export default function OutreachPage() {
   useEffect(() => {
     if (status !== 'authenticated' || debouncedFilterKey === 0) return;
     fetchItems();
-  }, [debouncedFilterKey, status, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isClassic || status !== 'authenticated') return;
@@ -850,7 +850,7 @@ export default function OutreachPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isClassic, currentPage, debouncedFilterKey, status, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isClassic, currentPage, debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1187,7 +1187,7 @@ export default function OutreachPage() {
       budget: String(todayRunBudget),
       status: 'pending',
       sent_status: 'unsent',
-      address_coords: viewMode === 'map' ? 'true' : 'false',
+      address_coords: 'true',
     });
     if (effectiveStartStreet) {
       params.set('start_street', effectiveStartStreet);
@@ -1219,7 +1219,7 @@ export default function OutreachPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sentStatusFilter, viewMode, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
+  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
 
   const groupedBySuburb = useMemo(() => {
     const sourceItems = filteredLikedItems ?? displayItems;
