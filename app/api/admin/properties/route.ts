@@ -40,6 +40,10 @@ export async function GET(request: Request) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const skipCount = searchParams.get('skip_count') === 'true';
+  // Classic pagination fetches each page independently and needs a real total
+  // for "Page X of Y" on every page. Infinite scroll omits it: it already knows
+  // the total from page 1 and only needs the next slice of data.
+  const includeTotal = searchParams.get('include_total') === 'true';
   const offset = (page - 1) * limit;
 
   let query = `
@@ -300,10 +304,11 @@ export async function GET(request: Request) {
   }
 
   // Get total count — avoid expensive JOINs when filters only touch properties table.
-  // Also skip COUNT entirely on pages beyond the first (offset > 0): the frontend
-  // already knows the total from page 1 and just needs the next slice of data.
+  // Skip COUNT on infinite-scroll pages beyond the first (offset > 0, no
+  // include_total): the frontend already knows the total from page 1 and just
+  // needs the next slice of data.
   let total = 0;
-  if (!skipCount && offset === 0) {
+  if (!skipCount && (offset === 0 || includeTotal)) {
     const needsJoinForCount = !!(marketStatus && ['for_sale', 'for_rent', 'not_listed'].includes(marketStatus));
     let countQuery: string;
     if (needsJoinForCount) {

@@ -879,6 +879,7 @@ export default function PropertiesPage() {
   // (page change or viewMode switch) where classicData briefly holds stale/0
   // data, totalProperties never drops to 0, preventing "Displaying 10 to 0 of 0"
   // and "Page 2 of 1" display glitches.
+  const lastValidTotalRef = useRef<number>(0);
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -1006,11 +1007,15 @@ export default function PropertiesPage() {
     }
   }, [showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly]);
 
-  const fetchPageData = async (pageNum: number): Promise<{ properties: Property[]; total: number }> => {
+  // includeTotal: classic pagination fetches each page independently and needs
+  // the API to compute the COUNT on every page (the API skips it beyond page 1
+  // for infinite scroll). Infinite scroll keeps the default (skip) behaviour.
+  const fetchPageData = async (pageNum: number, includeTotal = false): Promise<{ properties: Property[]; total: number }> => {
     if (showLikedOnly || showPendingOnly || showSentOnly || showUnselectedOnly) {
       // Unselected: query properties that are NOT present in outreach_enriched
       if (showUnselectedOnly) {
         const params = new URLSearchParams({ page: pageNum.toString(), limit: String(pageSize) });
+        if (includeTotal) params.append('include_total', 'true');
         if (filters.suburb) params.append('suburb', filters.suburb);
         if (filters.city) params.append('city', filters.city);
         if (filters.region) params.append('region', filters.region);
@@ -1049,6 +1054,7 @@ export default function PropertiesPage() {
       // Otherwise delegate to outreach API (liked/pending/sent)
       const status = showPendingOnly ? 'pending' : (showSentOnly ? 'sent' : 'liked');
       const params = new URLSearchParams({ status, page: pageNum.toString(), limit: String(pageSize) });
+      if (includeTotal) params.append('include_total', 'true');
       if (filters.suburb) params.append('suburb', filters.suburb);
       if (filters.city) params.append('city', filters.city);
       if (filters.region) params.append('region', filters.region);
@@ -1179,6 +1185,7 @@ export default function PropertiesPage() {
       page: pageNum.toString(),
       limit: String(pageSize),
     });
+    if (includeTotal) params.append("include_total", "true");
 
     if (filters.suburb) {
       params.append("suburb", filters.suburb);
@@ -1252,7 +1259,11 @@ export default function PropertiesPage() {
     isFetching: classicFetching,
   } = useQuery<{ properties: Property[]; total: number }, Error>({
     queryKey: ["admin-properties", "classic", filters, propertyFilter, lastSoldPreset, buildYearPreset, showLikedOnly, showPendingOnly, showSentOnly, showUnselectedOnly, currentPage, marketStatus, junkFilter, streetModeApplied ? selectedStreet : '', viewMode],
-    queryFn: async () => fetchPageData(currentPage),
+    // includeTotal=true: each classic page is fetched independently, so the API
+    // must compute the real COUNT for every page (it skips it beyond page 1 for
+    // infinite scroll, which would make totalPages collapse to 1 and bounce the
+    // pager back to page 1).
+    queryFn: async () => fetchPageData(currentPage, true),
     placeholderData: keepPreviousData,
     enabled: paginationMode === 'classic' && status === "authenticated" && !streetModeOn,
     staleTime: 5 * 60 * 1000,
@@ -1580,9 +1591,25 @@ export default function PropertiesPage() {
     }
   };
 
-  const totalProperties = streetModeOn
+  const rawTotalProperties = streetModeOn
     ? streetAllLength
     : (isClassic ? (classicData?.total ?? 0) : (propertiesData?.pages[0]?.total ?? 0));
+  // Keep the last non-zero total from BOTH query sources so a Classic Pages
+  // transition (infinite→classic mode switch, where the classic query key has
+  // no cached/placeholder data yet and classicData is briefly undefined) never
+  // drops the counter to 0 — preventing "Displaying 0 of 0 properties" and
+  // "Page 2 of 1" glitches. A loaded-but-genuinely-empty result (classicData
+  // defined with total 0) still displays as 0.
+  if (rawTotalProperties > 0) lastValidTotalRef.current = rawTotalProperties;
+  // total=0 needs context to interpret:
+  //   - classicData undefined            → transition, reuse the cached total
+  //   - classic page ≥ 2 with total=0    → the API skipped the COUNT (infinite-
+  //     scroll optimisation; also covers responses cached before include_total
+  //     was added), reuse the cached total — it is NOT a genuine empty result
+  //   - classic page 1 with total=0      → genuine empty result, show 0
+  const totalProperties = rawTotalProperties > 0
+    ? rawTotalProperties
+    : (isClassic && (classicData === undefined || currentPage > 1) ? lastValidTotalRef.current : 0);
   const totalPages = Math.max(1, Math.ceil(totalProperties / pageSize));
 
   useEffect(() => {
@@ -1590,6 +1617,15 @@ export default function PropertiesPage() {
     if (!propertiesData) return;
     setCurrentPage(propertiesData.pages.length);
   }, [isClassic, propertiesData]);
+
+  // Clamp the classic page into the valid range once real data is loaded
+  // (e.g. the total shrank after a refetch), so the UI can't show "Page 9 of 5".
+  // Skipped while classicData is undefined (transition) so the lastValidTotalRef
+  // fallback keeps the previous page number stable during the fetch.
+  useEffect(() => {
+    if (!isClassic || classicData === undefined) return;
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [isClassic, classicData, currentPage, totalPages]);
 
   useEffect(() => {
     setCurrentPage(1);

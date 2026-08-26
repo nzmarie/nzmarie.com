@@ -102,15 +102,15 @@ const defaultProperties = [
   }
 ];
 
-const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
-  const iq = vi.fn(() => ({
+const { mockUseInfiniteQuery, mockUseQuery, defaultInfiniteQueryImpl, defaultUseQueryImpl } = vi.hoisted(() => {
+  const defaultInfiniteQueryImpl = () => ({
     data: { pages: [{ properties: defaultProperties, total: 45 }] },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: vi.fn(),
-  }));
-  const uq = vi.fn((...args: any[]) => {
+  });
+  const defaultUseQueryImpl = (...args: any[]) => {
     const key = (Array.isArray(args[0]) ? args[0] : args[0] && args[0].queryKey) || [];
     const flatKey = JSON.stringify(key);
     if (flatKey.includes('street-addresses')) {
@@ -134,8 +134,10 @@ const { mockUseInfiniteQuery, mockUseQuery } = vi.hoisted(() => {
       };
     }
     return { data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false };
-  });
-  return { mockUseInfiniteQuery: iq, mockUseQuery: uq };
+  };
+  const iq = vi.fn(defaultInfiniteQueryImpl);
+  const uq = vi.fn(defaultUseQueryImpl);
+  return { mockUseInfiniteQuery: iq, mockUseQuery: uq, defaultInfiniteQueryImpl, defaultUseQueryImpl };
 });
 
 vi.mock('@tanstack/react-query', () => ({
@@ -918,6 +920,12 @@ describe('Properties Page - Dual Pagination Mode', () => {
     cleanup();
     intersectionCallback = null;
     intersectionOptions = null;
+    // Restore the hoisted default implementations: mockReturnValue /
+    // mockImplementation in these tests would otherwise leak into later
+    // describe blocks that rely on the defaults (vi.clearAllMocks does not
+    // restore implementations).
+    mockUseInfiniteQuery.mockImplementation(defaultInfiniteQueryImpl);
+    mockUseQuery.mockImplementation(defaultUseQueryImpl);
   });
 
   it('renders segmented control with Infinite Scroll and Classic Pages buttons', async () => {
@@ -1099,6 +1107,170 @@ describe('Properties Page - Dual Pagination Mode', () => {
 
     await waitFor(() => {
       expect(mockDisconnect).toHaveBeenCalled();
+    });
+  });
+
+  it('keeps the valid total when switching to classic before the classic query resolves (no "Page 2 of 1")', async () => {
+    // Classic query key has never resolved for page 2 → data is undefined
+    // while the first classic fetch is in flight.
+    mockUseQuery.mockImplementation((...args: any[]) => {
+      const opts = args[0] || {};
+      const key = (Array.isArray(opts) ? opts : opts.queryKey) || [];
+      const flatKey = JSON.stringify(key);
+      if (flatKey.includes('street-addresses') || flatKey.includes('street-list')) {
+        return { data: undefined as never, isLoading: false, isFetching: false };
+      }
+      return { data: undefined as never, isLoading: true, isFetching: true };
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    const { rerender } = render(<PropertiesPage />);
+
+    // User scrolls infinite mode: a second page loads (total=45) and
+    // currentPage syncs to 2 via the pages-length effect.
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          { properties: defaultProperties, total: 45 },
+          { properties: defaultProperties, total: 45 },
+        ],
+      },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+    rerender(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      // Must not flash the broken "Displaying 0 of 0 properties"
+      expect(screen.queryByText('Displaying 0 of 0 properties')).toBeNull();
+      // Classic range text uses the last valid total (45), not 0
+      expect(screen.getByText(/Displaying 10 to 18 of 45 properties/)).toBeDefined();
+      // Still on page 2, and totalPages = ceil(45/9) = 5 — never "Page 2 of 1"
+      expect(screen.getByDisplayValue('2')).toBeDefined();
+      expect(screen.getByText(/of 5/)).toBeDefined();
+    });
+  });
+
+  it('shows a genuine empty classic result as "Displaying 0 of 0 properties"', async () => {
+    mockUseInfiniteQuery.mockReturnValue({
+      data: undefined as never,
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+    });
+    // Loaded-but-empty classic result: data IS defined (not a transition)
+    mockUseQuery.mockReturnValue({
+      data: { properties: [], total: 0 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Displaying 0 of 0 properties').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('requests include_total from the API in classic mode', async () => {
+    (global.fetch as any).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.startsWith('/api/admin/properties?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            properties: defaultProperties,
+            pagination: { total: 45, page: 1, limit: 9, totalPages: 5 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ liked_ids: [] }) });
+    });
+    mockUseQuery.mockImplementation((...args: any[]) => {
+      const opts = args[0] || {};
+      const key = (Array.isArray(opts) ? opts : opts.queryKey) || [];
+      const flatKey = JSON.stringify(key);
+      if (flatKey.includes('street-addresses') || flatKey.includes('street-list')) {
+        return { data: undefined as never, isLoading: false, isFetching: false };
+      }
+      if (typeof opts.queryFn === 'function') void opts.queryFn();
+      return { data: { properties: defaultProperties, total: 45 }, isLoading: false, isFetching: false };
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      const urls = (global.fetch as any).mock.calls.map((c: any[]) => String(c[0]));
+      const classicListQuery = urls.find((u: string) => u.startsWith('/api/admin/properties?') && u.includes('page=1'));
+      expect(classicListQuery).toBeDefined();
+      expect(classicListQuery).toContain('include_total=true');
+    });
+  });
+
+  it('stays on page 2 when the page-2 response skips the COUNT (total=0)', async () => {
+    // Infinite scroll loaded 2 pages (total=45) → currentPage syncs to 2.
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          { properties: defaultProperties, total: 45 },
+          { properties: defaultProperties, total: 45 },
+        ],
+      },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+    // Classic page-2 response arrived with total=0 (COUNT skipped — the API
+    // optimisation for infinite scroll, or a response cached before
+    // include_total existed). Must reuse the cached total, NOT bounce to page 1.
+    mockUseQuery.mockImplementation((...args: any[]) => {
+      const opts = args[0] || {};
+      const key = (Array.isArray(opts) ? opts : opts.queryKey) || [];
+      const flatKey = JSON.stringify(key);
+      if (flatKey.includes('street-addresses') || flatKey.includes('street-list')) {
+        return { data: undefined as never, isLoading: false, isFetching: false };
+      }
+      return { data: { properties: defaultProperties, total: 0 }, isLoading: false, isFetching: false };
+    });
+
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    const { rerender } = render(<PropertiesPage />);
+
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          { properties: defaultProperties, total: 45 },
+          { properties: defaultProperties, total: 45 },
+        ],
+      },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage: vi.fn(),
+    });
+    rerender(<PropertiesPage />);
+
+    fireEvent.click(screen.getByText('Classic Pages'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Displaying 0 of 0 properties')).toBeNull();
+      // Cached total (45) is used → page 2 range text stays correct
+      expect(screen.getByText(/Displaying 10 to 18 of 45 properties/)).toBeDefined();
+      // Still on page 2 — the pager must not bounce back to page 1
+      expect(screen.getAllByDisplayValue('2').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/of 5/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

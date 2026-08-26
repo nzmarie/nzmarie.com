@@ -64,6 +64,10 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const sortOrder = searchParams.get('sortOrder') || 'asc';
   const sortMode = searchParams.get('sort_mode');
   const startStreet = searchParams.get('start_street')?.trim() || '';
+  // Classic pagination fetches each page independently and needs a real total
+  // for "Page X of Y" on every page. Infinite scroll omits it: it already knows
+  // the total from page 1 and only needs the next slice of data.
+  const includeTotal = searchParams.get('include_total') === 'true';
 
   const { page, limit, offset } = paginationParams(searchParams);
 
@@ -273,11 +277,12 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
 
   const result = await marieDB.query(dataQuery, params);
 
-  // Only compute total on the first page (offset === 0).  Subsequent pages
-  // reuse the total the frontend already received from page 1, saving a full
-  // table scan on every infinite-scroll load.
+  // Only compute total on the first page (offset === 0) or when the caller
+  // explicitly asks for it (classic pagination).  Subsequent infinite-scroll
+  // pages reuse the total the frontend already received from page 1, saving a
+  // full table scan on every load.
   let total = 0;
-  if (offset === 0) {
+  if (offset === 0 || includeTotal) {
     const countParams = params.slice(0, params.length - 2); // strip LIMIT / OFFSET
     const countResult = await marieDB.query(
       `SELECT COUNT(*) AS total FROM outreach_enriched ${whereClause}`,
@@ -326,6 +331,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortMode = searchParams.get('sort_mode');
   const startStreet = searchParams.get('start_street')?.trim() || '';
+  const includeTotal = searchParams.get('include_total') === 'true';
 
   let query = `
     SELECT
@@ -575,10 +581,11 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
 
   const result = await marieDB.query(query, params);
 
-  // Only compute total on the first page — skip the full-table COUNT on
-  // subsequent pages, the frontend already has it from page 1.
+  // Only compute total on the first page or when the caller explicitly asks
+  // for it (classic pagination) — skip the full-table COUNT on infinite-scroll
+  // pages beyond the first, the frontend already has it from page 1.
   let total = 0;
-  if (offset === 0) {
+  if (offset === 0 || includeTotal) {
     // Build a minimal count query: strip down to op, p and the WHERE clause.
     // Use the sentinel to find the outer ORDER BY — lastIndexOf('ORDER BY') would
     // incorrectly match the ORDER BY inside the lateral join subquery.
