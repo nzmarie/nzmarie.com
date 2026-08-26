@@ -1732,6 +1732,193 @@ describe('Outreach page - Card view run ordering', () => {
       });
     });
   });
+
+  it('sends streets= param in the debounced fetch after Today Run auto-selects', async () => {
+    const clusterStreets = [
+      { street: 'Alpha Street', suburb: 'Torbay', lat: -36.69, lng: 174.71, pendingCount: 2, addresses: ['3 Alpha Street', '5 Alpha Street'] },
+      { street: 'Zeta Street', suburb: 'Torbay', lat: -36.68, lng: 174.72, pendingCount: 1, addresses: ['7 Zeta Street'] },
+    ];
+    const allItems = [
+      { id: 'out-a1', property_address: '3 Alpha Street', street: 'Alpha Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:00:00Z' },
+      { id: 'out-a2', property_address: '5 Alpha Street', street: 'Alpha Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:01:00Z' },
+      { id: 'out-z', property_address: '7 Zeta Street', street: 'Zeta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:02:00Z' },
+      { id: 'out-b', property_address: '9 Beta Street', street: 'Beta Street', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T10:03:00Z' },
+    ];
+    const runStreets = ['Alpha Street', 'Zeta Street'];
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            suburb: 'Torbay',
+            groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }],
+            runs: [{ runId: 1, groups: [{ groupId: 1, streets: clusterStreets, totalPending: 3, extentMeters: 500 }], totalPending: 3, streetCount: 2 }],
+            totalPending: 3,
+            unclusteredStreets: [],
+            allStreets: [{ street: 'Alpha Street', count: 2 }, { street: 'Zeta Street', count: 1 }],
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        const u = new URL(s, 'http://localhost');
+        const streets = u.searchParams.get('streets') || '';
+        if (streets.includes('Alpha Street') && streets.includes('Zeta Street')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: allItems.filter(i => streets.split(',').includes(i.street)),
+              pagination: { page: 1, limit: 500, total: 3, totalPages: 1 },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: allItems,
+            pagination: { page: 1, limit: 50, total: 4, totalPages: 1 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    // Wait for Today Run to auto-select and the debounced fetch to fire
+    await waitFor(() => {
+      const calls = vi.mocked(global.fetch).mock.calls.map(c => String(c[0]));
+      const debouncedCall = calls.find(u =>
+        u.includes('/api/admin/outreach?') &&
+        u.includes('streets=') &&
+        u.includes('Alpha+Street') || u.includes('Alpha%20Street')
+      );
+      expect(debouncedCall).toBeTruthy();
+    }, { timeout: 4000 });
+
+    // Verify Beta Street is NOT in the streets param (only run streets)
+    const allCalls = vi.mocked(global.fetch).mock.calls.map(c => String(c[0]));
+    const debouncedCalls = allCalls.filter(u =>
+      u.includes('/api/admin/outreach?') && (u.includes('Alpha+Street') || u.includes('Alpha%20Street'))
+    );
+    for (const call of debouncedCalls) {
+      expect(call).not.toContain('Beta+Street');
+      expect(call).not.toContain('Beta%20Street');
+    }
+  });
+
+  it('does not send stale empty streets= after Today Run auto-selects (fetchItemsRef ensures latest closure)', async () => {
+    const clusterStreets = [
+      { street: 'Acacia Road', suburb: 'Torbay', lat: -36.6958, lng: 174.7453, pendingCount: 2, addresses: ['1 Acacia Road', '3 Acacia Road'] },
+    ];
+    const torbayItems = [
+      { id: 't1', property_address: '1 Acacia Road', street: 'Acacia Road', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:00:00Z' },
+      { id: 't2', property_address: '3 Acacia Road', street: 'Acacia Road', suburb: 'Torbay', city: 'Auckland', region: 'Auckland', status: 'PENDING', created_at: '2026-07-01T09:01:00Z' },
+    ];
+    const callLog: string[] = [];
+
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach/street-clusters')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            suburb: 'Torbay',
+            groups: [{ groupId: 1, streets: clusterStreets, totalPending: 2, extentMeters: 500 }],
+            runs: [{ runId: 1, groups: [{ groupId: 1, streets: clusterStreets, totalPending: 2, extentMeters: 500 }], totalPending: 2, streetCount: 1 }],
+            totalPending: 2,
+            unclusteredStreets: [],
+            allStreets: [{ street: 'Acacia Road', count: 2 }],
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        callLog.push(s);
+        const u = new URL(s, 'http://localhost');
+        const streets = u.searchParams.get('streets') || '';
+        const suburb = u.searchParams.get('suburb') || '';
+        const sentStatus = u.searchParams.get('sent_status') || '';
+        if (sentStatus === 'unsent' && suburb === 'Torbay' && streets.includes('Acacia Road')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: torbayItems,
+              pagination: { page: 1, limit: 500, total: 2, totalPages: 1 },
+            }),
+          });
+        }
+        if (sentStatus === 'unsent' && suburb === 'Torbay' && !streets) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: torbayItems,
+              pagination: { page: 1, limit: 500, total: 2, totalPages: 1 },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [],
+            pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
+    });
+
+    render(<OutreachPage />);
+
+    const pendingTab = await screen.findByRole('button', { name: /Pending/i });
+    fireEvent.click(pendingTab);
+
+    const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
+    fireEvent.click(unsentBtn);
+
+    // Wait for the Today Run auto-select to fire and the debounced fetch to use streets
+    await waitFor(() => {
+      const streetsCalls = callLog.filter(u => u.includes('streets='));
+      expect(streetsCalls.length).toBeGreaterThan(0);
+    }, { timeout: 4000 });
+
+    // Every streets= call must include Acacia Road (the run street), never empty streets
+    const streetsCalls = callLog.filter(u => u.includes('streets='));
+    for (const call of streetsCalls) {
+      expect(call).toContain('Acacia+Road');
+    }
+
+    // Eventually show the correct addresses
+    await waitFor(() => {
+      expect(screen.getByText('1 Acacia Road')).toBeTruthy();
+      expect(screen.getByText('3 Acacia Road')).toBeTruthy();
+    }, { timeout: 3000 });
+  });
 });
 
 describe('Outreach page - pagination size by view mode', () => {

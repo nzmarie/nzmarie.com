@@ -664,6 +664,7 @@ export default function OutreachPage() {
     hasMore: boolean;
   }
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+  const fetchItemsRef = useRef<(() => Promise<void>) | null>(null);
   const buildCacheKey = useCallback((page: number) => {
     return [
       activeTab, suburbFilter, streetFilter, runStreetFilter.join(','), campaignFilter,
@@ -807,14 +808,27 @@ export default function OutreachPage() {
     }
   }, [fetchPageData, isClassic, buildCacheKey]);
 
+  // Keep fetchItemsRef pointing to the latest fetchItems so effects that
+  // intentionally omit it from deps (auth, debounce-key) always call the
+  // version that closes over the current runStreetFilter / fetchPageData.
+  useEffect(() => {
+    fetchItemsRef.current = fetchItems;
+  });
+
+  // Auth effect: call fetchItems() directly on mount/status change. The
+  // initial fetchItems (with empty runStreetFilter) is correct here because
+  // this effect only fires once on mount (status goes to 'authenticated').
   useEffect(() => {
     if (status === 'authenticated') fetchItems();
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Debounce-key effect: use fetchItemsRef so the latest fetchItems (with
+  // the current runStreetFilter) is always called, avoiding stale closures
+  // that would fetch with an empty street filter.
   useEffect(() => {
     if (status !== 'authenticated' || debouncedFilterKey === 0) return;
-    fetchItems();
-  }, [debouncedFilterKey, status]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchItemsRef.current?.();
+  }, [debouncedFilterKey, status]);
 
   useEffect(() => {
     if (!isClassic || status !== 'authenticated') return;
