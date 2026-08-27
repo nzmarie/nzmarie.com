@@ -17,6 +17,14 @@ vi.mock('@/components/admin/Skeleton', () => ({
   SkeletonDashboard: () => <div>Loading Dashboard</div>,
 }));
 
+vi.mock('@/components/admin/ScanTrendsChart', () => ({
+  default: () => <div data-testid="scan-trends-chart" />,
+}));
+
+vi.mock('@/components/admin/CampaignScanLogsPanel', () => ({
+  default: () => <div data-testid="campaign-scan-logs-panel" />,
+}));
+
 (global.fetch as any) = vi.fn();
 
 describe('Dashboard Stats API', () => {
@@ -399,5 +407,60 @@ describe('Dashboard Stats API', () => {
     const order = Array.from(titles).map((el) => el.textContent);
     expect(order).toEqual(['Torbay', 'Albany', 'Browns Bay']);
     expect(container.querySelectorAll('div.text-sm.font-semibold.text-slate-800').length).toBeGreaterThan(0);
+  });
+
+  it('renders Scan Trends chart section', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: { newLeads: 0, highPriorityLeads: 0, pendingOutreach: 0, todayFollowups: 0, overdueFollowups: 0, todayDownloads: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scan Trends')).toBeTruthy();
+    }, { timeout: 3000 });
+    expect(screen.getByTestId('scan-trends-chart')).toBeTruthy();
+  });
+
+  it('renders QR Code Scan Logs section', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: { newLeads: 0, highPriorityLeads: 0, pendingOutreach: 0, todayFollowups: 0, overdueFollowups: 0, todayDownloads: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('campaign-scan-logs-panel')).toBeTruthy();
+    }, { timeout: 3000 });
   });
 });

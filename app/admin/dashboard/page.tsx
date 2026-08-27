@@ -7,6 +7,8 @@ import Link from "next/link";
 import { SkeletonDashboard } from "@/components/admin/Skeleton";
 import { SuburbFilter } from "@/components/admin/SuburbFilter";
 import DispatchTrendSection, { DispatchTrend } from "@/components/admin/DispatchTrendSection";
+import ScanTrendsChart from "@/components/admin/ScanTrendsChart";
+import CampaignScanLogsPanel from "@/components/admin/CampaignScanLogsPanel";
 import { SUBURB_PRIORITY_ORDER } from "@/lib/suburb-order";
 
 interface SentSummaryItem {
@@ -109,6 +111,8 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [suburbFilter, setSuburbFilter] = useState<string>('all');
+  const [scanLogDateFilter, setScanLogDateFilter] = useState('');
+  const [scanLogCampaign, setScanLogCampaign] = useState('');
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -370,6 +374,29 @@ export default function AdminDashboardPage() {
       </div>
 
       {stats?.dispatchTrend && <DispatchTrendSection trend={stats.dispatchTrend} />}
+
+      <div className="bg-white rounded-lg shadow-sm border border-slate-100">
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="text-lg font-semibold text-slate-900">Scan Trends</h2>
+        </div>
+        <div className="p-6">
+          <ScanTrendsChart
+            onDrillDown={(date, campaignKey) => {
+              setScanLogDateFilter(date);
+              setScanLogCampaign(campaignKey || '');
+              const el = document.getElementById('dashboard-scan-logs');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+        </div>
+      </div>
+
+      <div id="dashboard-scan-logs">
+        <CampaignScanLogsPanel
+          initialCampaign={scanLogCampaign}
+          initialDateFilter={scanLogDateFilter}
+        />
+      </div>
 
       {outreachBySuburb.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-slate-100">
