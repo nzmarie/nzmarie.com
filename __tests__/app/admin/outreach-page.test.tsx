@@ -1861,7 +1861,7 @@ describe('Outreach page - Card view run ordering', () => {
         const streets = u.searchParams.get('streets') || '';
         const suburb = u.searchParams.get('suburb') || '';
         const sentStatus = u.searchParams.get('sent_status') || '';
-        if (sentStatus === 'unsent' && suburb === 'Torbay' && streets.includes('Acacia Road')) {
+        if (sentStatus === 'unsent' && streets.includes('Acacia Road')) {
           return Promise.resolve({
             ok: true,
             json: async () => ({
@@ -1871,7 +1871,7 @@ describe('Outreach page - Card view run ordering', () => {
             }),
           });
         }
-        if (sentStatus === 'unsent' && suburb === 'Torbay' && !streets) {
+        if (sentStatus === 'unsent') {
           return Promise.resolve({
             ok: true,
             json: async () => ({

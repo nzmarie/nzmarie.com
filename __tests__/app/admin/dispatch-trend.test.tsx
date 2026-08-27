@@ -171,11 +171,10 @@ describe('DispatchTrendSection', () => {
     expect(screen.getAllByText('0')).toHaveLength(2);
   });
 
-  it('replaces the Junk column with Unsent', () => {
+  it('shows Junk column header with count and percentage', () => {
     render(<DispatchTrendSection trend={mockTrend} />);
 
-    expect(screen.queryByText('Junk')).toBeNull();
-    expect(screen.queryByText('Junk', { selector: 'th' })).toBeNull();
+    expect(screen.getByText('Junk', { selector: 'th' })).toBeTruthy();
   });
 
   it('shows unsent count in red and junk segment in yellow', () => {
@@ -226,7 +225,7 @@ describe('DispatchTrendSection', () => {
     render(<DispatchTrendSection trend={mockTrend} />);
 
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers).toEqual(['Suburb', 'First Sent', 'Last Sent', 'Sent', 'Unsent', 'Pending', 'Progress']);
+    expect(headers).toEqual(['Suburb', 'First Sent', 'Last Sent', 'Sent', 'Junk', 'Unsent', 'Pending', 'Progress']);
   });
 
   it('sorts the timeline with the most recently sent suburb first', () => {

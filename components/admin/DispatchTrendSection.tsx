@@ -224,6 +224,7 @@ function SuburbDispatchTimeline({
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">First Sent</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Last Sent</th>
               <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Sent</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Junk</th>
               <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Unsent</th>
               <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Pending</th>
               <th className="px-3 py-2.5 text-xs font-medium text-slate-500 uppercase w-2/5">Progress</th>
@@ -251,6 +252,11 @@ function SuburbDispatchTimeline({
                   <td className="px-3 py-2.5 text-slate-600">{hasActivity ? formatDate(s.first_sent_at) : '—'}</td>
                   <td className="px-3 py-2.5 text-slate-600">{hasActivity ? formatDate(s.last_sent_at) : '—'}</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-purple-700">{s.sent_count}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-amber-600">
+                    {s.junk_count > 0
+                      ? `${s.junk_count}(${s.total_count > 0 ? Math.round((s.junk_count / s.total_count) * 100) : 0}%)`
+                      : '0'}
+                  </td>
                   <td className="px-3 py-2.5 text-right font-semibold text-red-600">{unsentCount}</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{s.total_count}</td>
                   <td className="px-3 py-2.5">
