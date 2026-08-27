@@ -3031,19 +3031,24 @@ export default function OutreachPage() {
                     {activeTab === 'liked' && (
                       <button
                         onClick={async () => {
-                          if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
-                          try {
-                            const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'pending' }),
-                            });
-                            if (!res.ok) throw new Error('Failed');
-                            await res.json();
-                            showNotification('success', 'Moved to Pending');
-                            handleMarkAsSentSuccess();
-                          } catch {
-                            showNotification('error', 'Failed to move to Pending');
+                          if (selected.size > 0) {
+                            if (!window.confirm(`Move ${selected.size} selected address${selected.size === 1 ? '' : 'es'} to Pending?`)) return;
+                            await markAsPending();
+                          } else {
+                            if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
+                            try {
+                              const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'pending' }),
+                              });
+                              if (!res.ok) throw new Error('Failed');
+                              await res.json();
+                              showNotification('success', 'Moved to Pending');
+                              handleMarkAsSentSuccess();
+                            } catch {
+                              showNotification('error', 'Failed to move to Pending');
+                            }
                           }
                         }}
                         style={{
@@ -3437,19 +3442,24 @@ export default function OutreachPage() {
                                     <button
                                       type="button"
                                       onClick={async () => {
-                                        if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
-                                        try {
-                                          const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ status: 'pending' }),
-                                          });
-                                          if (!res.ok) throw new Error('Failed');
-                                          await res.json();
-                                          showNotification('success', 'Moved to Pending');
-                                          handleMarkAsSentSuccess();
-                                        } catch {
-                                          showNotification('error', 'Failed to move to Pending');
+                                        if (selected.size > 0) {
+                                          if (!window.confirm(`Move ${selected.size} selected address${selected.size === 1 ? '' : 'es'} to Pending?`)) return;
+                                          await markAsPending();
+                                        } else {
+                                          if (!window.confirm(`Move "${prop.property_address}" to Pending?`)) return;
+                                          try {
+                                            const res = await fetch(`/api/admin/outreach/${prop.id}/status`, {
+                                              method: 'PATCH',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ status: 'pending' }),
+                                            });
+                                            if (!res.ok) throw new Error('Failed');
+                                            await res.json();
+                                            showNotification('success', 'Moved to Pending');
+                                            handleMarkAsSentSuccess();
+                                          } catch {
+                                            showNotification('error', 'Failed to move to Pending');
+                                          }
                                         }
                                       }}
                                       className="transition-colors px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-medium"
