@@ -192,7 +192,9 @@ function SuburbDispatchTimeline({
   if (suburbs.length === 0) return null;
 
   // Most recently sent suburbs first; suburbs with no send activity last.
-  const sortedSuburbs = [...suburbs].sort((a, b) => {
+  const sortedSuburbs = [...suburbs]
+    .filter((s) => s.sent_count > 0 || s.junk_count > 0 || s.total_count > 0)
+    .sort((a, b) => {
     const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
     const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
     return tb - ta;
@@ -220,14 +222,14 @@ function SuburbDispatchTimeline({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Suburb</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">First Sent</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Last Sent</th>
-              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Sent</th>
-              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Junk</th>
-              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Unsent</th>
-              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Pending</th>
-              <th className="px-3 py-2.5 text-xs font-medium text-slate-500 uppercase w-2/5">Progress</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">Suburb</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">First Sent</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">Last Sent</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500">Sent</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500">Junk</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500">Unsent</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500">Pending</th>
+              <th className="px-3 py-2.5 text-xs font-medium text-slate-500 w-2/5">Progress</th>
             </tr>
           </thead>
           <tbody>
