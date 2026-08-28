@@ -45,9 +45,12 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['scanLogs'],
+    queryKey: ['scanLogs', selectedCampaign, typeFilter, dateFilter],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams({ page: String(pageParam), limit: String(limit) });
+      if (selectedCampaign && selectedCampaign !== 'all') params.set('campaign', selectedCampaign);
+      if (typeFilter && typeFilter !== 'all') params.set('type', typeFilter);
+      if (dateFilter) params.set('date', dateFilter);
       const res = await fetch(`/api/admin/analytics/scans?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load scan logs');
@@ -65,14 +68,9 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
 
   const campaigns: ScanLogCampaign[] = data?.pages?.[0]?.campaigns || [];
   const totalScans = data?.pages?.[0]?.total_scans ?? 0;
+  const totalNewDevices = data?.pages?.[0]?.total_new_devices ?? 0;
   const allLogs = data ? data.pages.flatMap((p) => p.logs || []) : [];
-
-  const filteredLogs = allLogs.filter((l: ScanLog) => {
-    const matchCampaign = selectedCampaign === 'all' || l.campaign_key === selectedCampaign;
-    const matchDate = !dateFilter || new Date(l.created_at).toISOString().split('T')[0] === dateFilter;
-    const matchType = typeFilter === 'all' || (typeFilter === 'new_device' && l.is_new_device);
-    return matchCampaign && matchDate && matchType;
-  });
+  const filteredLogs = allLogs;
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -135,7 +133,7 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              New Devices
+              New Devices ({totalNewDevices})
             </button>
             {campaigns.map((c) => (
               <button

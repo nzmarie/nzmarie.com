@@ -188,10 +188,7 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   const prevCount = Number(prevRow?.cnt ?? 0);
   const isUnique = prevCount === 0;
 
-  // A device is considered "new" only if it has never been seen across any
-  // campaign – use the global_cnt from the multi-hash lookup above.
   const isNewDevice = Number(prevRow?.global_cnt ?? 0) === 0;
-
   const visitCount = prevCount + 1;
   const firstScannedAt = prevRow?.first_scanned_at ?? null;
 

@@ -64,9 +64,10 @@ const mockScanLogs = {
   success: true,
   total_scans: 38,
   total_unique: 20,
+  total_new_devices: 1,
   campaigns: [
-    { campaign_key: '2026_q2_oteha', campaign_name: '2026 Q2 Oteha', total_pv: 28, total_uv: 14 },
-    { campaign_key: 'business_card', campaign_name: 'Business Card', total_pv: 10, total_uv: 6 },
+    { campaign_key: '2026_q2_oteha', campaign_name: '2026 Q2 Oteha', total_pv: 28, total_uv: 14, new_devices: 1 },
+    { campaign_key: 'business_card', campaign_name: 'Business Card', total_pv: 10, total_uv: 6, new_devices: 0 },
   ],
   logs: [
     {
@@ -119,7 +120,16 @@ function makeFetchMock(overrides?: {
     const s = String(url || '');
     if (s.includes('/api/admin/analytics/scans')) {
       if (overrides?.scansError) return Promise.reject(new Error('Scan logs unavailable'));
-      return Promise.resolve({ ok: true, json: async () => scanLogs });
+      const urlObj = new URL(s, 'http://localhost');
+      const camp = urlObj.searchParams.get('campaign');
+      const typ = urlObj.searchParams.get('type');
+      const date = urlObj.searchParams.get('date');
+      const baseLogs = (scanLogs as any).logs || [];
+      let filtered = [...baseLogs];
+      if (camp && camp !== 'all') filtered = filtered.filter((l: any) => l.campaign_key === camp);
+      if (typ === 'new_device') filtered = filtered.filter((l: any) => l.is_new_device);
+      if (date) filtered = filtered.filter((l: any) => l.created_at?.startsWith(date));
+      return Promise.resolve({ ok: true, json: async () => ({ ...(scanLogs as any), logs: filtered, total_logs: filtered.length }) });
     }
     if (s.includes('/api/admin/outreach/campaign-stats')) {
       if (s.includes('?campaign=')) {
@@ -511,12 +521,12 @@ describe('CampaignScanLogsPanel', () => {
   it('filters logs by New Devices when the New Devices button is clicked', async () => {
     await renderWithStats();
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'New Devices' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New Devices (1)' })).toBeTruthy());
     await waitFor(() => expect(screen.getByText('1.2.3.4')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('5.6.7.8')).toBeTruthy());
 
     // Click New Devices filter button — only shows logs with is_new_device = true
-    fireEvent.click(screen.getByRole('button', { name: 'New Devices' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New Devices (1)' }));
 
     await waitFor(() => {
       expect(screen.getByText('1.2.3.4')).toBeTruthy();

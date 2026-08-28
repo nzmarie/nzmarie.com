@@ -842,9 +842,9 @@ export default function AnalyticsPage() {
 
               <div className="p-4 border-b border-gray-100 bg-white flex flex-wrap items-center gap-2">
                 {[
-                  { key: 'all', label: 'All Types' },
-                  { key: 'new_device', label: 'New Device' },
-                  { key: 'repeat', label: 'Repeat' },
+                  { key: 'all', label: 'All Types', count: scanTotalLogs },
+                  { key: 'new_device', label: 'New Device', count: scanLogsQuery.data?.pages?.[0]?.new_device_count ?? 0 },
+                  { key: 'repeat', label: 'Repeat', count: scanLogsQuery.data?.pages?.[0]?.repeat_count ?? 0 },
                 ].map((t) => (
                   <button
                     key={t.key}
@@ -855,7 +855,7 @@ export default function AnalyticsPage() {
                         : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
                     }`}
                   >
-                    {t.label}
+                    {t.label} ({t.count})
                   </button>
                 ))}
               </div>
