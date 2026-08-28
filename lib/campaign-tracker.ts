@@ -23,7 +23,6 @@ let tablesEnsured = false;
 export async function ensureCampaignTablesExist(): Promise<void> {
   if (tablesEnsured) return;
   try {
-    // Step 1: ensure tables exist
     await marieDB.query(`
       CREATE TABLE IF NOT EXISTS campaign_analytics (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,22 +52,46 @@ export async function ensureCampaignTablesExist(): Promise<void> {
       );
     `);
 
-    // Step 2: add missing columns (separate queries so ALTER commits before indexes reference them)
     await marieDB.query(`ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS visit_count INT NOT NULL DEFAULT 1`);
     await marieDB.query(`ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS first_scanned_at TIMESTAMPTZ`);
     await marieDB.query(`ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ`);
     await marieDB.query(`ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS is_new_device BOOLEAN DEFAULT TRUE`);
 
-    // Step 3: create indexes (after columns exist)
     await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_campaign_time ON campaign_visit_logs(campaign_key, created_at DESC)`);
     await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_hash_time ON campaign_visit_logs(visitor_hash, created_at DESC)`);
+    await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_user_agent ON campaign_visit_logs(user_agent)`);
     await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_campaign_visitor ON campaign_visit_logs(campaign_key, visitor_hash)`);
     await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_new_device ON campaign_visit_logs(is_new_device)`);
+    await marieDB.query(`ALTER TABLE campaign_visit_logs ADD COLUMN IF NOT EXISTS ip_subnet VARCHAR(60)`);
+    await marieDB.query(`CREATE INDEX IF NOT EXISTS idx_visit_logs_ip_subnet ON campaign_visit_logs(ip_subnet, device_type)`);
 
-    // Backfill: correct rows that were stored with is_new_device=true due to
-    // the old ip+ua fingerprint (which changed with each mobile IP rotation).
-    // Rule: only the very first occurrence of a user_agent across all rows
-    // may be marked is_new_device=true; every later occurrence must be false.
+    await marieDB.query(`
+      UPDATE campaign_visit_logs
+      SET ip_subnet = CASE
+        WHEN ip_address LIKE '%:%' THEN
+          split_part(ip_address, ':', 1) || ':' || split_part(ip_address, ':', 2) || ':' || split_part(ip_address, ':', 3)
+        ELSE NULL
+      END
+    `);
+
+    await marieDB.query(`
+      UPDATE campaign_visit_logs
+      SET is_new_device = TRUE
+    `);
+
+    await marieDB.query(`
+      UPDATE campaign_visit_logs AS t
+      SET is_new_device = FALSE
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (PARTITION BY visitor_hash ORDER BY created_at ASC) AS rn
+        FROM campaign_visit_logs
+        WHERE visitor_hash IS NOT NULL AND visitor_hash != ''
+      ) ranked
+      WHERE t.id = ranked.id
+        AND ranked.rn > 1
+    `);
+
     await marieDB.query(`
       UPDATE campaign_visit_logs AS t
       SET is_new_device = FALSE
@@ -76,16 +99,58 @@ export async function ensureCampaignTablesExist(): Promise<void> {
         SELECT id,
                ROW_NUMBER() OVER (PARTITION BY user_agent ORDER BY created_at ASC) AS rn
         FROM campaign_visit_logs
-        WHERE is_new_device = TRUE
+        WHERE user_agent IS NOT NULL AND user_agent != ''
       ) ranked
       WHERE t.id = ranked.id
         AND ranked.rn > 1
+    `);
+
+    await marieDB.query(`
+      UPDATE campaign_visit_logs AS t
+      SET is_new_device = FALSE
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY
+                   ip_subnet,
+                   device_type
+                 ORDER BY created_at ASC
+               ) AS rn
+        FROM campaign_visit_logs
+        WHERE ip_subnet IS NOT NULL AND ip_subnet LIKE '%:%' AND device_type IS NOT NULL AND device_type != ''
+      ) ranked
+      WHERE t.id = ranked.id
+        AND ranked.rn > 1
+    `);
+
+    await marieDB.query(`
+      UPDATE campaign_analytics ca
+      SET total_uv = COALESCE(sub.uv_count, 0),
+          total_pv = COALESCE(sub.pv_count, 0)
+      FROM (
+        SELECT campaign_key,
+               COUNT(DISTINCT visitor_hash)::int as uv_count,
+               COUNT(*)::int as pv_count
+        FROM campaign_visit_logs
+        GROUP BY campaign_key
+      ) sub
+      WHERE ca.campaign_key = sub.campaign_key
     `);
 
     tablesEnsured = true;
   } catch (err) {
     console.error('Failed to ensure campaign tables exist:', err);
   }
+}
+
+export function extractIPSubnet(ip: string = ''): string {
+  if (!ip) return '';
+  if (ip.includes(':')) {
+    const clean = ip.replace('::xxx', '').replace(/::$/, '');
+    const parts = clean.split(':').filter(Boolean);
+    return parts.slice(0, 3).join(':');
+  }
+  return '';
 }
 
 export function anonymizeIP(ip: string = ''): string {
@@ -104,6 +169,7 @@ export function anonymizeIP(ip: string = ''): string {
   }
   return ip;
 }
+
 
 export function generateVisitorHash(ip: string = '', userAgent: string = '', visitorId?: string): string {
   if (visitorId) return crypto.createHash('sha256').update(`device:${visitorId}`).digest('hex');
@@ -148,40 +214,27 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   const deviceType = parseDeviceType(userAgent);
   const storedIp = anonymizeIP(ip);
 
-  // When a visitorId (e.g. from FingerprintJS) is provided, use it as the
-  // stable device key.  Otherwise fall back to a UA-only hash so that the
-  // same physical device is recognised even when its mobile IP changes
-  // between scans (very common on IPv6 LTE/5G networks).
   const uaHash = generateUAHash(userAgent);
   const ipUAHash = generateVisitorHash(ip, userAgent);
-  let visitorHash: string;
-  let hashFilter: string;
-  let hashParams: unknown[];
+  const vidHash = visitorId ? generateVisitorHash(ip, userAgent, visitorId) : null;
+  const visitorHash = vidHash || uaHash;
+  const ipSubnet = extractIPSubnet(storedIp);
 
-  if (visitorId) {
-    const vidHash = generateVisitorHash(ip, userAgent, visitorId);
-    visitorHash = vidHash;
-    const filters = [vidHash, ipUAHash, uaHash].filter((v, i, a) => a.indexOf(v) === i);
-    hashFilter = filters.length === 1 ? `visitor_hash = $2` : `visitor_hash = ANY($2::text[])`;
-    hashParams = filters.length === 1 ? [campaignKey, filters[0]] : [campaignKey, filters];
-  } else {
-    // No fingerprintjs – use the UA-only hash as the stable device identifier.
-    // We also store the ip+ua variant as a secondary lookup so historical rows
-    // (recorded before this fix) are still matched.
-    visitorHash = uaHash;
-    const allHashes = [uaHash, ipUAHash].filter((v, i, a) => a.indexOf(v) === i);
-    hashFilter = allHashes.length === 1 ? `visitor_hash = $2` : `visitor_hash = ANY($2::text[])`;
-    hashParams = allHashes.length === 1 ? [campaignKey, allHashes[0]] : [campaignKey, allHashes];
-  }
+  const candidateHashes = [vidHash, uaHash, ipUAHash].filter(Boolean) as string[];
+  const uniqueHashes = candidateHashes.filter((v, i, a) => a.indexOf(v) === i);
 
   const prev = await query<{ cnt: string | number; global_cnt: string | number; first_scanned_at: string | Date | null }>(
     `SELECT
-       COUNT(*) FILTER (WHERE campaign_key = $1 AND ${hashFilter})::int AS cnt,
+       COUNT(*) FILTER (WHERE campaign_key = $1)::int AS cnt,
        COUNT(*)::int AS global_cnt,
-       MIN(created_at) FILTER (WHERE campaign_key = $1 AND ${hashFilter}) AS first_scanned_at
+       MIN(created_at) FILTER (WHERE campaign_key = $1) AS first_scanned_at
      FROM campaign_visit_logs
-     WHERE ${hashFilter.replace('campaign_key = $1 AND ', '')}`,
-    hashParams
+     WHERE (
+       visitor_hash = ANY($3::text[])
+       OR (user_agent = $2 AND $2 != '')
+       OR ($4 != '' AND $4 LIKE '%:%' AND $5 != '' AND ip_subnet = $4 AND device_type = $5)
+     )`,
+    [campaignKey, userAgent, uniqueHashes, ipSubnet, deviceType]
   );
 
   const prevRow = prev.rows[0];
@@ -193,9 +246,9 @@ export async function recordCampaignVisit(options: CampaignVisitOptions): Promis
   const firstScannedAt = prevRow?.first_scanned_at ?? null;
 
   await query(
-    `INSERT INTO campaign_visit_logs (campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, is_new_device, visit_count, first_scanned_at, last_scanned_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, NOW()), NOW())`,
-    [campaignKey, visitorHash, storedIp, userAgent, deviceType, referrer, isUnique, isNewDevice, visitCount, firstScannedAt]
+    `INSERT INTO campaign_visit_logs (campaign_key, visitor_hash, ip_address, ip_subnet, user_agent, device_type, referrer, is_unique, is_new_device, visit_count, first_scanned_at, last_scanned_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, NOW()), NOW())`,
+    [campaignKey, visitorHash, storedIp, ipSubnet, userAgent, deviceType, referrer, isUnique, isNewDevice, visitCount, firstScannedAt]
   );
 
   await query(

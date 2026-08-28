@@ -3,19 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
-interface ScanLog {
-  id: string;
-  campaign_key: string;
-  visitor_hash: string;
-  ip_address: string;
-  user_agent: string;
-  device_type: string;
-  referrer: string;
-  is_unique: boolean;
-  is_new_device: boolean;
-  visit_count?: number;
-  created_at: string;
-}
 
 interface ScanLogCampaign {
   campaign_key: string;
