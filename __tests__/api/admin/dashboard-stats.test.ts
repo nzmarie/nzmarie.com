@@ -216,6 +216,39 @@ describe('GET /api/admin/dashboard/stats', () => {
     });
   });
 
+  it('sorts scan campaigns by new_devices DESC, then total_pv DESC, then name ASC', async () => {
+    const mockRow = {
+      new_leads: '0', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      total_scans: '100',
+      total_unique_scans: '50',
+      total_new_devices: '30',
+      scan_campaigns: [
+        { campaign_key: 'c1', campaign_name: 'Sub A', total_pv: '50', total_uv: '20', new_devices: '5' },
+        { campaign_key: 'c2', campaign_name: 'Sub B', total_pv: '20', total_uv: '15', new_devices: '15' },
+        { campaign_key: 'c3', campaign_name: 'Sub C', total_pv: '80', total_uv: '15', new_devices: '5' },
+        { campaign_key: 'c4', campaign_name: 'Sub D', total_pv: '10', total_uv: '10', new_devices: '15' },
+      ],
+    };
+
+    vi.mocked(db.execute).mockResolvedValue({ rows: [mockRow] } as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    const campaigns = body.stats.scanStats.campaigns;
+    expect(campaigns.map((c: any) => c.campaign_name)).toEqual([
+      'Sub B',
+      'Sub D',
+      'Sub C',
+      'Sub A',
+    ]);
+  });
+
   it('returns downloads by suburb breakdown', async () => {
     const mockRow = {
       new_leads: '1', high_priority_leads: '0', pending_outreach: '0',
@@ -285,13 +318,14 @@ describe('GET /api/admin/dashboard/stats', () => {
       { bucket: '2026-07-01', sent: 15, junk: 2 },
     ]);
     expect(body.stats.dispatchTrend.daily).toEqual([]);
-    expect(body.stats.dispatchTrend.seriesBySuburb.monthly.Torbay).toEqual([
+    expect(body.stats.dispatchTrend.seriesBySuburb.monthly['Torbay-Q2-2026']).toEqual([
       { bucket: '2026-07-01', sent: 10, junk: 2 },
       { bucket: '2026-08-01', sent: 5, junk: 0 },
     ]);
     expect(body.stats.dispatchTrend.bySuburb).toEqual([
       {
-        suburb: 'Torbay',
+        suburb: 'Torbay-Q2-2026',
+        raw_suburb: 'Torbay',
         sent_count: 15,
         junk_count: 2,
         unsent_count: 3,
@@ -300,7 +334,8 @@ describe('GET /api/admin/dashboard/stats', () => {
         last_sent_at: '2026-08-10T01:00:00.000Z',
       },
       {
-        suburb: 'Albany',
+        suburb: 'Albany-Q2-2026',
+        raw_suburb: 'Albany',
         sent_count: 3,
         junk_count: 1,
         unsent_count: 0,
@@ -343,7 +378,8 @@ describe('GET /api/admin/dashboard/stats', () => {
     ]);
     expect(body.stats.dispatchTrend.bySuburb).toEqual([
       {
-        suburb: 'Torbay',
+        suburb: 'Torbay-Q2-2026',
+        raw_suburb: 'Torbay',
         sent_count: 10,
         junk_count: 2,
         unsent_count: 0,
@@ -376,7 +412,7 @@ describe('GET /api/admin/dashboard/stats', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.stats.dispatchTrend.bySuburb.map((s: { suburb: string }) => s.suburb)).toEqual(['Torbay', 'Browns Bay', 'Albany']);
+    expect(body.stats.dispatchTrend.bySuburb.map((s: { suburb: string }) => s.suburb)).toEqual(['Torbay-Q2-2026', 'Browns Bay-Q2-2026', 'Albany-Q2-2026']);
   });
 
   it('includes last_sent_at in outreach by suburb and orders it by most recent send', async () => {

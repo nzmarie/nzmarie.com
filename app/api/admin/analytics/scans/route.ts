@@ -90,10 +90,9 @@ export async function GET(request: Request) {
         WHERE is_new_device = true
         GROUP BY campaign_key
       ) vl ON vl.campaign_key = ca.campaign_key
-      ORDER BY ca.total_pv DESC
+      ORDER BY COALESCE(vl.new_devices, 0) DESC, ca.total_pv DESC, ca.campaign_name ASC
     `);
 
-    // If no pagination params were provided, keep previous behaviour: return latest 100 logs
     const providedPage = searchParams.has('page') || searchParams.has('limit');
     if (!providedPage) {
       const logsQueryNoLimit = `SELECT ${columns}
@@ -121,7 +120,11 @@ export async function GET(request: Request) {
           total_uv: parseInt(row.total_uv || '0', 10),
           new_devices: parseInt(row.new_devices || '0', 10),
           last_visited_at: row.last_visited_at,
-        })),
+        })).sort((a, b) => {
+          if (b.new_devices !== a.new_devices) return b.new_devices - a.new_devices;
+          if (b.total_pv !== a.total_pv) return b.total_pv - a.total_pv;
+          return a.campaign_name.localeCompare(b.campaign_name);
+        }),
         logs: logsResult.rows,
       };
 
@@ -179,7 +182,11 @@ export async function GET(request: Request) {
         total_uv: parseInt(row.total_uv || '0', 10),
         new_devices: parseInt(row.new_devices || '0', 10),
         last_visited_at: row.last_visited_at,
-      })),
+      })).sort((a, b) => {
+        if (b.new_devices !== a.new_devices) return b.new_devices - a.new_devices;
+        if (b.total_pv !== a.total_pv) return b.total_pv - a.total_pv;
+        return a.campaign_name.localeCompare(b.campaign_name);
+      }),
       logs: logsResult.rows,
       total_logs: countResult.rows[0]?.total ?? 0,
       new_device_count: newDeviceCountResult.rows[0]?.cnt ?? 0,

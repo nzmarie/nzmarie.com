@@ -130,10 +130,19 @@ export default function AnalyticsPage() {
       const res = await fetch('/api/admin/analytics/scans');
       const data = await res.json();
       if (data.success) {
-        setScanData(data);
+        const sortedCampaigns = (data.campaigns || []).slice().sort((
+          a: { new_devices?: number; total_pv: number; campaign_name?: string; campaign_key?: string },
+          b: { new_devices?: number; total_pv: number; campaign_name?: string; campaign_key?: string }
+        ) => {
+          const ndA = a.new_devices ?? 0;
+          const ndB = b.new_devices ?? 0;
+          if (ndB !== ndA) return ndB - ndA;
+          if (b.total_pv !== a.total_pv) return b.total_pv - a.total_pv;
+          return (a.campaign_name || a.campaign_key || '').localeCompare(b.campaign_name || b.campaign_key || '');
+        });
+        setScanData({ ...data, campaigns: sortedCampaigns });
       }
     } catch {
-      // ignore
     }
   }, []);
 

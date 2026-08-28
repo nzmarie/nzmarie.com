@@ -149,13 +149,49 @@ describe('GET /api/admin/outreach/campaign-stats', () => {
     expect(response.status).toBe(200);
 
     const data = await response.json();
-    // pending = full list (pending + sent), junk is counted from the pending sublist only
     expect(data.summary.pending_count).toBe(274);
     expect(data.summary.sent_count).toBe(175);
     expect(data.summary.no_junk_mail_count).toBe(77);
     expect(data.summary.remaining_count).toBe(22);
-    // unsent + sent + no-junk must equal the total Pending list
     expect(data.summary.remaining_count + data.summary.sent_count + data.summary.no_junk_mail_count)
       .toBe(data.summary.pending_count);
+  });
+
+  it('aggregates daily_scans using new devices for uv and captures sql query', async () => {
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { email: 'admin@test.com' },
+    } as any);
+
+    let capturedScanSql = '';
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockImplementationOnce(((sql: string) => {
+        capturedScanSql = sql;
+        return {
+          rows: [
+            { scan_date: '2026-08-01', pv: 10, uv: 4 },
+            { scan_date: '2026-08-02', pv: 5, uv: 2 },
+          ],
+        };
+      }) as any)
+      .mockResolvedValueOnce({
+        rows: [
+          { scan_date: '2026-08-01', pv: 8, uv: 3 },
+        ],
+      } as any);
+
+    const response = await campaignStatsGET(
+      new Request('http://localhost:3000/api/admin/outreach/campaign-stats?campaign=2026_Q2_Oteha')
+    );
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(capturedScanSql).toContain('COUNT(*) FILTER (WHERE is_new_device = TRUE)::int AS uv');
+    expect(data.summary.total_scans_pv).toBe(15);
+    expect(data.summary.total_scans_uv).toBe(6);
+    expect(data.business_card_summary).toEqual({ pv: 8, uv: 3 });
   });
 });

@@ -4,6 +4,7 @@ import { isAdmin } from '@/lib/permissions';
 import { getCachedOrFetch } from '@/lib/redis';
 import { db } from '@/lib/drizzle';
 import { ensureCampaignTablesExist } from '@/lib/campaign-tracker';
+import { formatReportKey } from '@/lib/format-report';
 import { sql } from 'drizzle-orm';
 
 interface SuburbCountRow {
@@ -47,6 +48,7 @@ interface SuburbDownloadRow {
 
 interface TrendRow {
   suburb?: string;
+  campaign_key?: string;
   bucket?: string;
   sent?: string | number;
   junk?: string | number;
@@ -54,6 +56,7 @@ interface TrendRow {
 
 interface SuburbDispatchRow {
   suburb?: string;
+  campaign_key?: string;
   sent_count?: string | number;
   junk_count?: string | number;
   total_count?: string | number;
@@ -76,22 +79,24 @@ interface BuiltTrend {
 function buildTrend(sentRows: TrendRow[], junkRows: TrendRow[]): BuiltTrend {
   const bySuburb: Record<string, Map<string, TrendBucket>> = {};
   const allMap = new Map<string, TrendBucket>();
-  const ensure = (suburb: string, bucket: string): TrendBucket => {
-    if (!bySuburb[suburb]) bySuburb[suburb] = new Map();
-    let b = bySuburb[suburb].get(bucket);
+  const ensure = (reportName: string, bucket: string): TrendBucket => {
+    if (!bySuburb[reportName]) bySuburb[reportName] = new Map();
+    let b = bySuburb[reportName].get(bucket);
     if (!b) {
       b = { bucket, sent: 0, junk: 0 };
-      bySuburb[suburb].set(bucket, b);
+      bySuburb[reportName].set(bucket, b);
     }
     return b;
   };
   for (const r of sentRows) {
     if (!r.suburb || !r.bucket) continue;
-    ensure(r.suburb, r.bucket).sent += Number(r.sent) || 0;
+    const reportKey = formatReportKey(r.campaign_key || r.suburb, r.suburb);
+    ensure(reportKey, r.bucket).sent += Number(r.sent) || 0;
   }
   for (const r of junkRows) {
     if (!r.suburb || !r.bucket) continue;
-    ensure(r.suburb, r.bucket).junk += Number(r.junk) || 0;
+    const reportKey = formatReportKey(r.campaign_key || r.suburb, r.suburb);
+    ensure(reportKey, r.bucket).junk += Number(r.junk) || 0;
   }
   const sortArr = (arr: TrendBucket[]) => arr.sort((a, b) => a.bucket.localeCompare(b.bucket));
   const perSuburb: Record<string, TrendBucket[]> = {};
@@ -238,7 +243,7 @@ export async function GET(request: Request) {
                 WHERE is_new_device = true
                 GROUP BY campaign_key
               ) vl ON vl.campaign_key = ca.campaign_key
-              ORDER BY ca.total_pv DESC
+              ORDER BY COALESCE(vl.new_devices, 0) DESC, ca.total_pv DESC, ca.campaign_name ASC
             ),
             downloads_by_suburb_cte AS (
               SELECT
@@ -260,6 +265,7 @@ export async function GET(request: Request) {
             sent_logs_buckets AS MATERIALIZED (
               SELECT
                 sl.suburb,
+                sl.campaign_key,
                 date_trunc('day', sl.sent_at AT TIME ZONE 'Pacific/Auckland') AS day_bucket,
                 date_trunc('week', sl.sent_at AT TIME ZONE 'Pacific/Auckland') AS week_bucket,
                 date_trunc('month', sl.sent_at AT TIME ZONE 'Pacific/Auckland') AS month_bucket,
@@ -275,6 +281,7 @@ export async function GET(request: Request) {
             junk_props_buckets AS MATERIALIZED (
               SELECT
                 op.suburb,
+                op.campaign AS campaign_key,
                 date_trunc('day', (CASE WHEN p.no_junk_mail = TRUE AND p.no_junk_mail_updated_at IS NOT NULL
                                         THEN p.no_junk_mail_updated_at
                                         ELSE op.created_at
@@ -302,13 +309,15 @@ export async function GET(request: Request) {
             junk_by_suburb_cte AS (
               SELECT
                 suburb,
+                campaign_key,
                 COUNT(DISTINCT property_id)::int AS junk_count
               FROM junk_props_buckets
-              GROUP BY suburb
+              GROUP BY suburb, campaign_key
             ),
             dispatch_by_suburb_cte AS (
               SELECT
                 op.suburb,
+                COALESCE(NULLIF(sl.campaign_key, ''), NULLIF(op.campaign, ''), op.suburb) AS campaign_key,
                 COUNT(DISTINCT op.id) FILTER (WHERE sl.id IS NOT NULL OR LOWER(op.status) = 'sent') AS sent_count,
                 COUNT(DISTINCT op.id) FILTER (WHERE LOWER(op.status) IN ('pending', 'sent')) AS total_count,
                 MIN(sl.sent_at) AS first_sent_at,
@@ -316,7 +325,7 @@ export async function GET(request: Request) {
               FROM outreach_properties op
               LEFT JOIN outreach_send_logs sl ON sl.outreach_property_id = op.id
               WHERE op.suburb IS NOT NULL
-              GROUP BY op.suburb
+              GROUP BY op.suburb, COALESCE(NULLIF(sl.campaign_key, ''), NULLIF(op.campaign, ''), op.suburb)
             )
           SELECT
             (SELECT count FROM new_leads_cte) as new_leads,
@@ -341,20 +350,20 @@ export async function GET(request: Request) {
             (SELECT total_new_devices FROM scans_summary_cte) as total_new_devices,
             (SELECT json_agg(row_to_json(s)) FROM scans_by_campaign_cte s) as scan_campaigns,
             (SELECT json_agg(row_to_json(s)) FROM downloads_by_suburb_cte s) as downloads_by_suburb,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(day_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, day_bucket ORDER BY day_bucket) s) as sent_daily,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(week_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, week_bucket ORDER BY week_bucket) s) as sent_weekly,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(month_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, month_bucket ORDER BY month_bucket) s) as sent_monthly,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(quarter_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, quarter_bucket ORDER BY quarter_bucket) s) as sent_quarterly,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(day_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, day_bucket ORDER BY day_bucket) s) as junk_daily,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(week_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, week_bucket ORDER BY week_bucket) s) as junk_weekly,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(month_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, month_bucket ORDER BY month_bucket) s) as junk_monthly,
-            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(quarter_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, quarter_bucket ORDER BY quarter_bucket) s) as junk_quarterly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(day_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, campaign_key, day_bucket ORDER BY day_bucket) s) as sent_daily,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(week_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, campaign_key, week_bucket ORDER BY week_bucket) s) as sent_weekly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(month_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, campaign_key, month_bucket ORDER BY month_bucket) s) as sent_monthly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(quarter_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, campaign_key, quarter_bucket ORDER BY quarter_bucket) s) as sent_quarterly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(day_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, day_bucket ORDER BY day_bucket) s) as junk_daily,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(week_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, week_bucket ORDER BY week_bucket) s) as junk_weekly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(month_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, month_bucket ORDER BY month_bucket) s) as junk_monthly,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(quarter_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, quarter_bucket ORDER BY quarter_bucket) s) as junk_quarterly,
             (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (
-              SELECT d.suburb, d.sent_count, COALESCE(j.junk_count, 0) AS junk_count,
+              SELECT d.suburb, d.campaign_key, d.sent_count, COALESCE(j.junk_count, 0) AS junk_count,
                      GREATEST(0, d.total_count - d.sent_count - COALESCE(j.junk_count, 0)) AS unsent_count,
                      d.total_count, d.first_sent_at, d.last_sent_at
               FROM dispatch_by_suburb_cte d
-              LEFT JOIN junk_by_suburb_cte j ON j.suburb = d.suburb
+              LEFT JOIN junk_by_suburb_cte j ON j.suburb = d.suburb AND (j.campaign_key = d.campaign_key OR j.campaign_key IS NULL)
             ) s) as dispatch_by_suburb,
             (SELECT json_agg(row_to_json(r)) FROM recent_downloads_cte r) as recent_downloads
         `);
@@ -384,35 +393,72 @@ export async function GET(request: Request) {
           total_pv: Number(item?.total_pv) || 0,
           total_uv: Number(item?.total_uv) || 0,
           new_devices: Number(item?.new_devices) || 0,
-        })) : [];
+        })).sort((a, b) => {
+          if (b.new_devices !== a.new_devices) return b.new_devices - a.new_devices;
+          if (b.total_pv !== a.total_pv) return b.total_pv - a.total_pv;
+          return a.campaign_name.localeCompare(b.campaign_name);
+        }) : [];
 
         const filterRows = (rows: TrendRow[]): TrendRow[] =>
-          suburbFilter ? rows.filter((r) => r.suburb === suburb) : rows;
+          suburbFilter
+            ? rows.filter((r) => r.suburb === suburb || formatReportKey(r.campaign_key || r.suburb, r.suburb) === suburb)
+            : rows;
 
         const builtDaily = buildTrend(filterRows(toTrendRows(row.sent_daily)), filterRows(toTrendRows(row.junk_daily)));
         const builtWeekly = buildTrend(filterRows(toTrendRows(row.sent_weekly)), filterRows(toTrendRows(row.junk_weekly)));
         const builtMonthly = buildTrend(filterRows(toTrendRows(row.sent_monthly)), filterRows(toTrendRows(row.junk_monthly)));
         const builtQuarterly = buildTrend(filterRows(toTrendRows(row.sent_quarterly)), filterRows(toTrendRows(row.junk_quarterly)));
 
+        const dispatchMap = new Map<string, {
+          suburb: string;
+          raw_suburb: string;
+          sent_count: number;
+          junk_count: number;
+          unsent_count: number;
+          total_count: number;
+          first_sent_at: string | null;
+          last_sent_at: string | null;
+        }>();
+
+        for (const item of (Array.isArray(row.dispatch_by_suburb) ? row.dispatch_by_suburb as SuburbDispatchRow[] : [])) {
+          if (!item?.suburb) continue;
+          const sent = Number(item.sent_count) || 0;
+          const junk = Number(item.junk_count) || 0;
+          const total = Number(item.total_count) || 0;
+          const unsent = Number.isFinite(Number(item.unsent_count)) ? Number(item.unsent_count) : Math.max(0, total - sent - junk);
+          const reportKey = formatReportKey(item.campaign_key || item.suburb, item.suburb as string);
+
+          const existing = dispatchMap.get(reportKey);
+          if (!existing) {
+            dispatchMap.set(reportKey, {
+              suburb: reportKey,
+              raw_suburb: item.suburb as string,
+              sent_count: sent,
+              junk_count: junk,
+              unsent_count: unsent,
+              total_count: total,
+              first_sent_at: item.first_sent_at ? new Date(item.first_sent_at).toISOString() : null,
+              last_sent_at: item.last_sent_at ? new Date(item.last_sent_at).toISOString() : null,
+            });
+          } else {
+            existing.sent_count += sent;
+            existing.junk_count += junk;
+            existing.unsent_count += unsent;
+            existing.total_count += total;
+            if (item.first_sent_at) {
+              const d = new Date(item.first_sent_at).toISOString();
+              if (!existing.first_sent_at || d < existing.first_sent_at) existing.first_sent_at = d;
+            }
+            if (item.last_sent_at) {
+              const d = new Date(item.last_sent_at).toISOString();
+              if (!existing.last_sent_at || d > existing.last_sent_at) existing.last_sent_at = d;
+            }
+          }
+        }
+
         const dispatchBySuburb: Array<{ suburb: string; sent_count: number; junk_count: number; unsent_count: number; total_count: number; first_sent_at: string | null; last_sent_at: string | null }> =
-          (Array.isArray(row.dispatch_by_suburb) ? row.dispatch_by_suburb as SuburbDispatchRow[] : [])
-            .filter((item) => item?.suburb && (!suburbFilter || item.suburb === suburb))
-            .map((item) => {
-              const sent = Number(item.sent_count) || 0;
-              const junk = Number(item.junk_count) || 0;
-              const total = Number(item.total_count) || 0;
-              const unsent = Number.isFinite(Number(item.unsent_count)) ? Number(item.unsent_count) : Math.max(0, total - sent - junk);
-              return {
-                suburb: item.suburb as string,
-                sent_count: sent,
-                junk_count: junk,
-                unsent_count: unsent,
-                total_count: total,
-                first_sent_at: item.first_sent_at ? new Date(item.first_sent_at).toISOString() : null,
-                last_sent_at: item.last_sent_at ? new Date(item.last_sent_at).toISOString() : null,
-              };
-            })
-            // Most recently sent suburbs first; suburbs with no send activity last.
+          Array.from(dispatchMap.values())
+            .filter((item) => !suburbFilter || item.suburb === suburb || item.raw_suburb === suburb || item.suburb.toLowerCase().startsWith(suburb.toLowerCase()))
             .sort((a, b) => {
               const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
               const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;

@@ -92,7 +92,7 @@ describe('DispatchTrendSection', () => {
 
     expect(screen.getByText('Sent: 12')).toBeTruthy();
     expect(screen.getByText('Junk: 2')).toBeTruthy();
-    expect(screen.getByText('2 suburbs')).toBeTruthy();
+    expect(screen.getByText('2 reports')).toBeTruthy();
   });
 
   it('switches granularity and recomputes totals', () => {
@@ -141,7 +141,7 @@ describe('DispatchTrendSection', () => {
     fireEvent.click(screen.getByText('Torbay'));
     fireEvent.click(screen.getByText('Torbay ×'));
 
-    expect(screen.getByText('All suburbs')).toBeTruthy();
+    expect(screen.getByText('All reports')).toBeTruthy();
   });
 
   it('shows progress bar with sent/junk split and counts', () => {
@@ -225,7 +225,7 @@ describe('DispatchTrendSection', () => {
     render(<DispatchTrendSection trend={mockTrend} />);
 
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers).toEqual(['Suburb', 'First Sent', 'Last Sent', 'Sent', 'Junk', 'Unsent', 'Pending', 'Progress']);
+    expect(headers).toEqual(['Report', 'First Sent', 'Last Sent', 'Sent', 'Junk', 'Unsent', 'Pending', 'Progress']);
   });
 
   it('sorts the timeline with the most recently sent suburb first', () => {
@@ -268,5 +268,39 @@ describe('DispatchTrendSection', () => {
     expect(rows[1].textContent).toContain('Torbay');
     expect(rows[2].textContent).toContain('Browns Bay');
     expect(rows[3].textContent).toContain('Albany');
+  });
+
+  it('merges multiple entries of the same report without duplicating rows', () => {
+    const trend: DispatchTrend = {
+      ...mockTrend,
+      bySuburb: [
+        {
+          suburb: 'Torbay-Q2-2026',
+          sent_count: 358,
+          junk_count: 0,
+          unsent_count: 0,
+          total_count: 358,
+          first_sent_at: '2026-08-06T00:00:00.000Z',
+          last_sent_at: '2026-08-27T00:00:00.000Z',
+        },
+        {
+          suburb: 'Torbay-Q2-2026',
+          sent_count: 0,
+          junk_count: 115,
+          unsent_count: 0,
+          total_count: 115,
+          first_sent_at: null,
+          last_sent_at: null,
+        },
+      ],
+    };
+
+    render(<DispatchTrendSection trend={trend} />);
+
+    const rows = screen.getAllByRole('row');
+    expect(rows).toHaveLength(2);
+    expect(rows[1].textContent).toContain('Torbay-Q2-2026');
+    expect(rows[1].textContent).toContain('358');
+    expect(rows[1].textContent).toContain('115(24%)');
   });
 });

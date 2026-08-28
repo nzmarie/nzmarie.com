@@ -68,7 +68,10 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
 }
 
-function formatSuburbName(name: string): string {
+function formatReportName(name: string): string {
+  if (/-Q\d-\d{4}/i.test(name)) {
+    return name;
+  }
   return name.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
@@ -101,11 +104,11 @@ function DispatchVolumeChart({
                 onClick={onClearSuburb}
                 className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full hover:bg-indigo-100 transition-colors"
               >
-                {formatSuburbName(selectedSuburb)} ×
+                {formatReportName(selectedSuburb)} ×
               </button>
             ) : (
               <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                All suburbs
+                All reports
               </span>
             )}
             <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">
@@ -116,7 +119,7 @@ function DispatchVolumeChart({
             </span>
             {!selectedSuburb && (
               <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full">
-                {activeSuburbs} suburb{activeSuburbs === 1 ? '' : 's'}
+                {activeSuburbs} report{activeSuburbs === 1 ? '' : 's'}
               </span>
             )}
           </div>
@@ -191,21 +194,44 @@ function SuburbDispatchTimeline({
 }) {
   if (suburbs.length === 0) return null;
 
-  // Most recently sent suburbs first; suburbs with no send activity last.
-  const sortedSuburbs = [...suburbs]
+  const mergedMap = new Map<string, SuburbDispatch>();
+  for (const s of suburbs) {
+    const key = formatReportName(s.suburb);
+    const existing = mergedMap.get(key);
+    if (!existing) {
+      mergedMap.set(key, { ...s, suburb: key });
+    } else {
+      existing.sent_count += s.sent_count;
+      existing.junk_count += s.junk_count;
+      existing.unsent_count += s.unsent_count;
+      existing.total_count += s.total_count;
+      if (s.first_sent_at) {
+        if (!existing.first_sent_at || s.first_sent_at < existing.first_sent_at) {
+          existing.first_sent_at = s.first_sent_at;
+        }
+      }
+      if (s.last_sent_at) {
+        if (!existing.last_sent_at || s.last_sent_at > existing.last_sent_at) {
+          existing.last_sent_at = s.last_sent_at;
+        }
+      }
+    }
+  }
+
+  const sortedSuburbs = Array.from(mergedMap.values())
     .filter((s) => s.sent_count > 0 || s.junk_count > 0 || s.total_count > 0)
     .sort((a, b) => {
-    const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
-    const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
-    return tb - ta;
-  });
+      const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+      const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+      return tb - ta;
+    });
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Suburb Dispatch Timeline</h3>
-          <p className="text-sm text-slate-500 mt-1">Click a suburb to filter the volume chart.</p>
+          <p className="text-sm text-slate-500 mt-1">Click a report to filter the volume chart.</p>
         </div>
         {selectedSuburb && (
           <button
@@ -222,7 +248,7 @@ function SuburbDispatchTimeline({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">Suburb</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">Report</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">First Sent</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500">Last Sent</th>
               <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500">Sent</th>
@@ -249,7 +275,7 @@ function SuburbDispatchTimeline({
                   }`}
                 >
                   <td className="px-3 py-2.5">
-                    <span className="font-medium text-slate-900">{formatSuburbName(s.suburb)}</span>
+                    <span className="font-medium text-slate-900">{formatReportName(s.suburb)}</span>
                   </td>
                   <td className="px-3 py-2.5 text-slate-600">{hasActivity ? formatDate(s.first_sent_at) : '—'}</td>
                   <td className="px-3 py-2.5 text-slate-600">{hasActivity ? formatDate(s.last_sent_at) : '—'}</td>

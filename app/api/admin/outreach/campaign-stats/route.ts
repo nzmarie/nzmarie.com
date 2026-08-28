@@ -198,7 +198,7 @@ export async function GET(request: Request) {
       marieDB.query(
         `SELECT TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS scan_date,
                 COUNT(*)::int AS pv,
-                COUNT(*) FILTER (WHERE is_unique = TRUE)::int AS uv
+                COUNT(*) FILTER (WHERE is_new_device = TRUE)::int AS uv
          FROM campaign_visit_logs
          WHERE (LOWER(campaign_key) = LOWER($1) OR LOWER(campaign_key) = LOWER($2))
          GROUP BY TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')
@@ -208,7 +208,7 @@ export async function GET(request: Request) {
       marieDB.query(
         `SELECT TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD') AS scan_date,
                 COUNT(*)::int AS pv,
-                COUNT(*) FILTER (WHERE is_unique = TRUE)::int AS uv
+                COUNT(*) FILTER (WHERE is_new_device = TRUE)::int AS uv
          FROM campaign_visit_logs
          WHERE LOWER(campaign_key) = 'business_card'
          GROUP BY TO_CHAR(created_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD')
