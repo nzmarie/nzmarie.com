@@ -78,6 +78,7 @@ const mockScanLogs = {
       device_type: 'mobile',
       referrer: '',
       is_unique: true,
+      is_new_device: true,
       visit_count: 1,
       created_at: '2026-07-25T10:30:00.000Z',
     },
@@ -484,7 +485,7 @@ describe('CampaignScanLogsPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('abcdef123456...')).toBeTruthy();
       expect(screen.getByText('1.2.3.4')).toBeTruthy();
-      expect(screen.getByText('Unique')).toBeTruthy();
+      expect(screen.getByText('New Device')).toBeTruthy();
       expect(screen.getByText('Repeat \u00d72')).toBeTruthy();
     });
     const fingerprintEl = screen.getByText('abcdef123456...');
@@ -500,6 +501,22 @@ describe('CampaignScanLogsPanel', () => {
 
     // Click Oteha campaign — client-side filter, no new fetch needed
     fireEvent.click(screen.getByText('2026 Q2 Oteha (28)'));
+
+    await waitFor(() => {
+      expect(screen.getByText('1.2.3.4')).toBeTruthy();
+      expect(screen.queryByText('5.6.7.8')).toBeNull();
+    });
+  });
+
+  it('filters logs by New Devices when the New Devices button is clicked', async () => {
+    await renderWithStats();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New Devices' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1.2.3.4')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('5.6.7.8')).toBeTruthy());
+
+    // Click New Devices filter button — only shows logs with is_new_device = true
+    fireEvent.click(screen.getByRole('button', { name: 'New Devices' }));
 
     await waitFor(() => {
       expect(screen.getByText('1.2.3.4')).toBeTruthy();

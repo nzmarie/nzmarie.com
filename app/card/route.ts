@@ -30,7 +30,6 @@ export async function GET(request: Request) {
         ip: ipAddress,
         userAgent,
         referrer: 'qr_scan',
-        deviceType: 'mobile',
       });
     } catch (err) {
       console.error('Failed to record business card campaign visit:', err);

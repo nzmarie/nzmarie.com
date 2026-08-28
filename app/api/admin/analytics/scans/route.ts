@@ -34,55 +34,85 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const selectedCampaign = searchParams.get('campaign');
+    const typeFilter = searchParams.get('type');
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
     const limitRaw = parseInt(searchParams.get('limit') || '20', 10) || 20;
     const limit = Math.min(Math.max(1, limitRaw), 500);
     const offset = (page - 1) * limit;
-    const cacheKey = `scans_${selectedCampaign ?? 'all'}_p${page}_l${limit}`;
+    const cacheKey = `scans_${selectedCampaign ?? 'all'}_${typeFilter ?? 'all'}_p${page}_l${limit}`;
 
     const cached = getCached<unknown>(cacheKey);
     if (cached) return NextResponse.json(cached);
 
+    const typeCond =
+      typeFilter === 'new_device' ? 'is_new_device = true'
+      : typeFilter === 'repeat' ? 'is_new_device = false'
+      : '';
+
+    const columns = 'id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, is_new_device, visit_count, first_scanned_at, last_scanned_at, created_at';
+
+    const buildWhere = (withCampaign: boolean) => {
+      if (withCampaign && typeCond) return `WHERE campaign_key = $1 AND ${typeCond}`;
+      if (withCampaign) return 'WHERE campaign_key = $1';
+      if (typeCond) return `WHERE ${typeCond}`;
+      return '';
+    };
+
     // Run all 3 queries in parallel instead of sequentially
     // Build logs query with pagination
     const logsQuery = selectedCampaign
-      ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
+      ? `SELECT ${columns}
          FROM campaign_visit_logs
-         WHERE campaign_key = $1
+         ${buildWhere(true)}
          ORDER BY created_at DESC
          LIMIT $2 OFFSET $3`
-      : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
+      : `SELECT ${columns}
          FROM campaign_visit_logs
+         ${buildWhere(false)}
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`;
 
     // Count query for total logs (with optional campaign filter)
     const countQuery = selectedCampaign
-      ? `SELECT COUNT(*)::int as total FROM campaign_visit_logs WHERE campaign_key = $1`
-      : `SELECT COUNT(*)::int as total FROM campaign_visit_logs`;
+      ? `SELECT COUNT(*)::int as total FROM campaign_visit_logs ${buildWhere(true)}`
+      : `SELECT COUNT(*)::int as total FROM campaign_visit_logs ${buildWhere(false)}`;
 
     const summaryPromise = marieDB.query(`
       SELECT
         COALESCE(SUM(total_pv), 0) as total_pv,
-        COALESCE(SUM(total_uv), 0) as total_uv
+        COALESCE(SUM(total_uv), 0) as total_uv,
+        (SELECT COUNT(*)::int FROM campaign_visit_logs WHERE is_new_device = true) as total_new_devices
       FROM campaign_analytics
     `);
     const campaignsPromise = marieDB.query(`
-      SELECT campaign_key, campaign_name, total_pv, total_uv, last_visited_at
-      FROM campaign_analytics
-      ORDER BY total_pv DESC
+      SELECT
+        ca.campaign_key,
+        ca.campaign_name,
+        ca.total_pv,
+        ca.total_uv,
+        ca.last_visited_at,
+        COALESCE(vl.new_devices, 0)::int as new_devices
+      FROM campaign_analytics ca
+      LEFT JOIN (
+        SELECT campaign_key, COUNT(*)::int as new_devices
+        FROM campaign_visit_logs
+        WHERE is_new_device = true
+        GROUP BY campaign_key
+      ) vl ON vl.campaign_key = ca.campaign_key
+      ORDER BY ca.total_pv DESC
     `);
 
     // If no pagination params were provided, keep previous behaviour: return latest 100 logs
     const providedPage = searchParams.has('page') || searchParams.has('limit');
     if (!providedPage) {
       const logsQueryNoLimit = selectedCampaign
-        ? `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
+        ? `SELECT ${columns}
            FROM campaign_visit_logs
-           WHERE campaign_key = $1
+           ${buildWhere(true)}
            ORDER BY created_at DESC LIMIT 100`
-        : `SELECT id, campaign_key, visitor_hash, ip_address, user_agent, device_type, referrer, is_unique, visit_count, first_scanned_at, last_scanned_at, created_at
+        : `SELECT ${columns}
            FROM campaign_visit_logs
+           ${buildWhere(false)}
            ORDER BY created_at DESC LIMIT 100`;
 
       const [summaryResult, campaignsResult, logsResult] = await Promise.all([
@@ -97,11 +127,13 @@ export async function GET(request: Request) {
         success: true,
         total_scans: parseInt(summaryResult.rows[0]?.total_pv || '0', 10),
         total_unique: parseInt(summaryResult.rows[0]?.total_uv || '0', 10),
+        total_new_devices: parseInt(summaryResult.rows[0]?.total_new_devices || '0', 10),
         campaigns: campaignsResult.rows.map(row => ({
           campaign_key: row.campaign_key,
           campaign_name: capitalize(row.campaign_name || row.campaign_key),
           total_pv: parseInt(row.total_pv || '0', 10),
           total_uv: parseInt(row.total_uv || '0', 10),
+          new_devices: parseInt(row.new_devices || '0', 10),
           last_visited_at: row.last_visited_at,
         })),
         logs: logsResult.rows,
@@ -133,11 +165,13 @@ export async function GET(request: Request) {
       success: true,
       total_scans: parseInt(summaryResult.rows[0]?.total_pv || '0', 10),
       total_unique: parseInt(summaryResult.rows[0]?.total_uv || '0', 10),
+      total_new_devices: parseInt(summaryResult.rows[0]?.total_new_devices || '0', 10),
       campaigns: campaignsResult.rows.map(row => ({
         campaign_key: row.campaign_key,
         campaign_name: capitalize(row.campaign_name || row.campaign_key),
         total_pv: parseInt(row.total_pv || '0', 10),
         total_uv: parseInt(row.total_uv || '0', 10),
+        new_devices: parseInt(row.new_devices || '0', 10),
         last_visited_at: row.last_visited_at,
       })),
       logs: logsResult.rows,

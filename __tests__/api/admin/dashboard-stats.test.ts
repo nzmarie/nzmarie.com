@@ -78,6 +78,7 @@ describe('GET /api/admin/dashboard/stats', () => {
     expect(body.stats.scanStats).toEqual({
       total_scans: 0,
       total_unique: 0,
+      total_new_devices: 0,
       campaigns: [],
     });
     expect(body.stats.downloadsBySuburb).toEqual([]);
@@ -207,9 +208,10 @@ describe('GET /api/admin/dashboard/stats', () => {
     expect(body.stats.scanStats).toEqual({
       total_scans: 42,
       total_unique: 18,
+      total_new_devices: 0,
       campaigns: [
-        { campaign_key: '2026_Q2_Torbay', campaign_name: 'Torbay Campaign', total_pv: 30, total_uv: 12 },
-        { campaign_key: '2026_Q2_Albany', campaign_name: '2026 Q2 Albany', total_pv: 12, total_uv: 6 },
+        { campaign_key: '2026_Q2_Torbay', campaign_name: 'Torbay Campaign', total_pv: 30, total_uv: 12, new_devices: 0 },
+        { campaign_key: '2026_Q2_Albany', campaign_name: '2026 Q2 Albany', total_pv: 12, total_uv: 6, new_devices: 0 },
       ],
     });
   });

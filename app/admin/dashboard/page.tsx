@@ -27,11 +27,13 @@ interface ScanCampaign {
   campaign_name: string;
   total_pv: number;
   total_uv: number;
+  new_devices?: number;
 }
 
 interface ScanStats {
   total_scans: number;
   total_unique: number;
+  total_new_devices?: number;
   campaigns: ScanCampaign[];
 }
 
@@ -282,8 +284,13 @@ export default function AdminDashboardPage() {
                 QR Scans
               </span>
             </div>
-            <div className="text-3xl font-bold text-slate-900 mb-1">
-              {stats?.scanStats?.total_scans ?? 0}
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="text-3xl font-bold text-slate-900">
+                {stats?.scanStats?.total_scans ?? 0}
+              </span>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                {stats?.scanStats?.total_new_devices ?? 0} New Devices
+              </span>
             </div>
             <div className="text-sm text-slate-600">Total Scans</div>
           </div>
@@ -295,7 +302,7 @@ export default function AdminDashboardPage() {
                     key={c.campaign_key}
                     className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-medium border border-indigo-100"
                   >
-                    {c.campaign_name || c.campaign_key}: {c.total_pv}
+                    {c.campaign_name || c.campaign_key}: {c.new_devices ?? 0}/{c.total_pv}
                   </span>
                 ))
               ) : (

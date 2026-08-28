@@ -52,7 +52,8 @@ export async function GET(request: Request) {
         ${timeExpr} as ${timeAlias},
         campaign_key,
         COUNT(*) as total_pv,
-        COUNT(DISTINCT visitor_hash) as total_uv
+        COUNT(DISTINCT visitor_hash) as total_uv,
+        COUNT(*) FILTER (WHERE is_new_device = true) as new_devices
       FROM campaign_visit_logs
       WHERE created_at >= $1
       GROUP BY ${timeExpr}, campaign_key
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
     `, [cutoff]);
 
     const rows = result.rows;
-    const timeMap: Record<string, Record<string, { pv: number; uv: number }>> = {};
+    const timeMap: Record<string, Record<string, { pv: number; uv: number; newDevices: number }>> = {};
     const campaignSet = new Set<string>();
     const campaignNames: Record<string, string> = {};
 
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
       const label = String(raw);
       const ck = row.campaign_key;
       if (!timeMap[label]) timeMap[label] = {};
-      timeMap[label][ck] = { pv: parseInt(row.total_pv || '0', 10), uv: parseInt(row.total_uv || '0', 10) };
+      timeMap[label][ck] = { pv: parseInt(row.total_pv || '0', 10), uv: parseInt(row.total_uv || '0', 10), newDevices: parseInt(row.new_devices || '0', 10) };
       campaignSet.add(ck);
       campaignNames[ck] = ck.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
     }
@@ -83,9 +84,12 @@ export async function GET(request: Request) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([time, camps]) => {
         const point: Record<string, unknown> = { time };
+        let newDevicesTotal = 0;
         for (const ck of campaignSet) {
           point[ck] = camps[ck]?.pv ?? 0;
+          newDevicesTotal += camps[ck]?.newDevices ?? 0;
         }
+        point.newDevices = newDevicesTotal;
         return point;
       });
 

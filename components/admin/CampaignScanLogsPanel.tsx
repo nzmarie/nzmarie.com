@@ -12,6 +12,7 @@ interface ScanLog {
   device_type: string;
   referrer: string;
   is_unique: boolean;
+  is_new_device: boolean;
   visit_count?: number;
   created_at: string;
 }
@@ -31,6 +32,7 @@ interface CampaignScanLogsPanelProps {
 export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilter }: CampaignScanLogsPanelProps = {}) {
   const [selectedCampaign, setSelectedCampaign] = useState<string>(initialCampaign || 'all');
   const [dateFilter, setDateFilter] = useState(initialDateFilter || '');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'new_device'>('all');
   const [open, setOpen] = useState(true);
 
   const limit = 20;
@@ -68,7 +70,8 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
   const filteredLogs = allLogs.filter((l: ScanLog) => {
     const matchCampaign = selectedCampaign === 'all' || l.campaign_key === selectedCampaign;
     const matchDate = !dateFilter || new Date(l.created_at).toISOString().split('T')[0] === dateFilter;
-    return matchCampaign && matchDate;
+    const matchType = typeFilter === 'all' || (typeFilter === 'new_device' && l.is_new_device);
+    return matchCampaign && matchDate && matchType;
   });
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -92,7 +95,10 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
       <button
         type="button"
         onClick={() => {
-          if (!open) setDateFilter('');
+          if (!open) {
+            setDateFilter('');
+            setTypeFilter('all');
+          }
           setOpen((v) => !v);
         }}
         className="w-full flex items-center justify-between px-6 py-4 text-left focus:outline-none"
@@ -111,22 +117,33 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
           <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setSelectedCampaign('all')}
+              onClick={() => { setSelectedCampaign('all'); setTypeFilter('all'); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                selectedCampaign === 'all'
+                selectedCampaign === 'all' && typeFilter === 'all'
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
               }`}
             >
               All Campaigns ({totalScans})
             </button>
+            <button
+              type="button"
+              onClick={() => { setSelectedCampaign('all'); setTypeFilter('new_device'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                typeFilter === 'new_device'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              New Devices
+            </button>
             {campaigns.map((c) => (
               <button
                 key={c.campaign_key}
                 type="button"
-                onClick={() => setSelectedCampaign(c.campaign_key)}
+                onClick={() => { setSelectedCampaign(c.campaign_key); setTypeFilter('all'); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedCampaign === c.campaign_key
+                  selectedCampaign === c.campaign_key && typeFilter === 'all'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                 }`}
@@ -207,13 +224,13 @@ export default function CampaignScanLogsPanel({ initialCampaign, initialDateFilt
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          {log.is_unique ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                              Unique
+                          {log.is_new_device ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300">
+                              New Device
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                              Repeat{log.visit_count ? ` \u00d7${log.visit_count}` : ''}
+                              Repeat{log.visit_count ? ` ×${log.visit_count}` : ''}
                             </span>
                           )}
                         </td>

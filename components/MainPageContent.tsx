@@ -11,11 +11,13 @@ import Contact from "./Contact";
 import ReportDownloadSection from "./ReportDownloadSection";
 import Footer from "./Footer";
 import Qualifications from "./Qualifications";
+import QRScanTracker from "./QRScanTracker";
 import { Language } from "../lib/translations";
 
 export default function MainPageContent({ lang = "en" }: { lang?: Language }) {
     return (
         <main>
+            <QRScanTracker />
             <Header lang={lang} />
             <Hero lang={lang} />
             <About lang={lang} />

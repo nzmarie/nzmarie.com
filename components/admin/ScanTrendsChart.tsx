@@ -17,6 +17,8 @@ const COLORS = [
   '#0D9488', '#7C3AED', '#DB2777', '#CA8A04',
 ];
 
+const NEW_DEVICES_COLOR = '#059669';
+
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -68,13 +70,15 @@ function CustomTooltip({
     >
       <p style={{ fontWeight: 600, color: '#374151', marginBottom: 8 }}>{dateLabel}</p>
       {payload.map((p, i) => {
+        const isNewDevices = p.dataKey === 'newDevices';
         const campaign = campaigns.find(c => c.key === p.dataKey);
-        const color = colors[i % colors.length];
+        const color = isNewDevices ? NEW_DEVICES_COLOR : colors[i % colors.length];
+        const label = isNewDevices ? 'New Devices' : (campaign?.name ?? String(p.dataKey));
         return (
           <div key={String(p.dataKey)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ color: '#6b7280' }}>{campaign?.name ?? String(p.dataKey)}</span>
+              <span style={{ color: '#6b7280' }}>{label}</span>
             </div>
             <span style={{ fontWeight: 600, color: '#111827' }}>{Number(p.value).toLocaleString()}</span>
           </div>
@@ -100,6 +104,7 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isSubDay, setIsSubDay] = useState(false);
   const [visibleCampaigns, setVisibleCampaigns] = useState<Set<string>>(new Set());
+  const [showNewDevices, setShowNewDevices] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -127,7 +132,8 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
     setVisibleCampaigns(prev => {
       const next = new Set(prev);
       if (next.has(key)) {
-        if (next.size > 1) next.delete(key);
+        const canRemove = next.size > 1 || showNewDevices;
+        if (canRemove) next.delete(key);
       } else {
         next.add(key);
       }
@@ -139,7 +145,11 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
   const campaignKeys = campaignsToShow.map(c => c.key);
   const zeroScanTimes = new Set(
     data
-      .filter(d => campaignKeys.every(k => (d[k] as number || 0) === 0))
+      .filter(d => {
+        const campaignsZero = campaignKeys.length === 0 || campaignKeys.every(k => (Number(d[k]) || 0) === 0);
+        const newDevicesZero = !showNewDevices || (Number(d.newDevices) || 0) === 0;
+        return (campaignKeys.length > 0 || showNewDevices) && campaignsZero && newDevicesZero;
+      })
       .map(d => d.time as string)
   );
 
@@ -186,6 +196,27 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
+        {/* New Devices toggle — always first */}
+        <button
+          onClick={() => {
+            setShowNewDevices(v => {
+              const next = !v;
+              if (!next && visibleCampaigns.size === 0) {
+                setVisibleCampaigns(new Set(campaigns.map(c => c.key)));
+              }
+              return next;
+            });
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border"
+          style={{
+            backgroundColor: showNewDevices ? hexToRgba(NEW_DEVICES_COLOR, 0.1) : '#f9fafb',
+            borderColor: showNewDevices ? NEW_DEVICES_COLOR : '#e5e7eb',
+            color: showNewDevices ? NEW_DEVICES_COLOR : '#9ca3af',
+          }}
+        >
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: showNewDevices ? NEW_DEVICES_COLOR : '#d1d5db' }} />
+          New Devices
+        </button>
         {campaigns.map((c, i) => {
           const active = visibleCampaigns.has(c.key);
           const color = COLORS[i % COLORS.length];
@@ -248,6 +279,10 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
                   </linearGradient>
                 );
               })}
+              <linearGradient id="grad-newDevices" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={NEW_DEVICES_COLOR} stopOpacity={0.25} />
+                <stop offset="95%" stopColor={NEW_DEVICES_COLOR} stopOpacity={0.02} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
             <XAxis
@@ -294,6 +329,20 @@ export default function ScanTrendsChart({ onDrillDown }: ScanTrendsChartProps) {
                 />
               );
             })}
+            {showNewDevices && (
+              <Area
+                type="monotone"
+                dataKey="newDevices"
+                name="New Devices"
+                stroke={NEW_DEVICES_COLOR}
+                strokeWidth={2.5}
+                strokeDasharray="5 3"
+                fill="url(#grad-newDevices)"
+                dot={{ r: 3, fill: NEW_DEVICES_COLOR, strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: NEW_DEVICES_COLOR, strokeWidth: 2, stroke: 'white' }}
+                connectNulls
+              />
+            )}
             <Legend
               wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
               onClick={(e) => {

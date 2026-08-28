@@ -54,6 +54,7 @@ type ScanLogEntry = {
   device_type: string;
   referrer: string;
   is_unique: boolean;
+  is_new_device: boolean;
   visit_count?: number;
   created_at: string;
 };
@@ -114,12 +115,14 @@ export default function AnalyticsPage() {
   const [scanData, setScanData] = useState<{
     total_scans: number;
     total_unique: number;
-    campaigns: Array<{ campaign_key: string; campaign_name: string; total_pv: number; total_uv: number; last_visited_at: string | null }>;
-    logs: Array<{ id: string; campaign_key: string; visitor_hash: string; ip_address: string; user_agent: string; device_type: string; referrer: string; is_unique: boolean; visit_count?: number; created_at: string }>;
-  }>({ total_scans: 0, total_unique: 0, campaigns: [], logs: [] });
+    total_new_devices?: number;
+    campaigns: Array<{ campaign_key: string; campaign_name: string; total_pv: number; total_uv: number; new_devices?: number; last_visited_at: string | null }>;
+    logs: Array<{ id: string; campaign_key: string; visitor_hash: string; ip_address: string; user_agent: string; device_type: string; referrer: string; is_unique: boolean; is_new_device: boolean; visit_count?: number; created_at: string }>;
+  }>({ total_scans: 0, total_unique: 0, total_new_devices: 0, campaigns: [], logs: [] });
 
   const [showScanLogsModal, setShowScanLogsModal] = useState(false);
   const [selectedScanCampaign, setSelectedScanCampaign] = useState<string>('all');
+  const [scanLogTypeFilter, setScanLogTypeFilter] = useState<string>('all');
   const [scanLogDateFilter, setScanLogDateFilter] = useState<string>('');
 
   const fetchScanData = useCallback(async () => {
@@ -136,10 +139,11 @@ export default function AnalyticsPage() {
 
   const limit = 20;
   const scanLogsQuery = useInfiniteQuery({
-    queryKey: ['scanLogs', selectedScanCampaign, scanLogDateFilter],
+    queryKey: ['scanLogs', selectedScanCampaign, scanLogTypeFilter, scanLogDateFilter],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams({ page: String(pageParam), limit: String(limit) });
       if (selectedScanCampaign && selectedScanCampaign !== 'all') params.set('campaign', selectedScanCampaign);
+      if (scanLogTypeFilter && scanLogTypeFilter !== 'all') params.set('type', scanLogTypeFilter);
       if (scanLogDateFilter) params.set('date', scanLogDateFilter);
       const res = await fetch(`/api/admin/analytics/scans?${params.toString()}`);
       const json = await res.json();
@@ -402,8 +406,13 @@ export default function AnalyticsPage() {
               onClick={() => setShowScanLogsModal(true)}
               className="text-left w-full hover:opacity-80 transition-opacity"
             >
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                {scanData.total_scans}
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-3xl font-bold text-gray-900">
+                  {scanData.total_scans}
+                </span>
+                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  {scanData.total_new_devices ?? 0} New Devices
+                </span>
               </div>
               <div className="text-sm text-gray-600">Total Scans</div>
             </button>
@@ -416,12 +425,12 @@ export default function AnalyticsPage() {
                     key={c.campaign_key}
                     className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
                   >
-                    {c.campaign_name || c.campaign_key}: {c.total_pv}
+                    {c.campaign_name || c.campaign_key}: {c.new_devices ?? 0}/{c.total_pv}
                   </span>
                 ))
               ) : (
                 <span className="text-xs bg-gray-50 text-gray-600 px-2 py-0.5 rounded-md font-medium">
-                  Oteha: 0
+                  No scans yet
                 </span>
               )}
             </div>
@@ -829,7 +838,27 @@ export default function AnalyticsPage() {
                   </button>
                 </span>
               )}
-            </div>
+              </div>
+
+              <div className="p-4 border-b border-gray-100 bg-white flex flex-wrap items-center gap-2">
+                {[
+                  { key: 'all', label: 'All Types' },
+                  { key: 'new_device', label: 'New Device' },
+                  { key: 'repeat', label: 'Repeat' },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setScanLogTypeFilter(t.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      scanLogTypeFilter === t.key
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
 
             <div className="flex-1 overflow-y-auto p-6">
               {scanLogs.length === 0 && !scanLogsQuery.isFetching ? (
@@ -861,10 +890,10 @@ export default function AnalyticsPage() {
                             <div className="text-gray-400 truncate max-w-[200px] select-text" title={log.user_agent}>{log.device_type ? `${log.device_type} · ` : ''}{log.user_agent || 'Unknown UA'}</div>
                           </td>
                           <td className="py-3 px-4">
-                            {log.is_unique ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Unique</span>
+                            {log.is_new_device ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300">New Device</span>
                             ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Repeat{log.visit_count ? ` \u00d7${log.visit_count}` : ''}</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Repeat{log.visit_count ? ` ×${log.visit_count}` : ''}</span>
                             )}
                           </td>
                         </tr>

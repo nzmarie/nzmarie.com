@@ -188,10 +188,25 @@ describe('ScanTrendsChart', () => {
       await waitFor(() => expect(screen.queryByTestId('area-campaign_a')).toBeNull());
     });
 
-    it('prevents hiding the last visible campaign', async () => {
+    it('allows hiding all campaigns to view New Devices alone', async () => {
       render(<ScanTrendsChart onDrillDown={() => {}} />);
       await waitFor(() => expect(screen.getByText('Campaign A')).toBeTruthy());
       fireEvent.click(screen.getByText('Campaign B').closest('button')!);
+      fireEvent.click(screen.getByText('Campaign A').closest('button')!);
+      // All campaigns hidden, but New Devices area remains
+      expect(screen.queryByTestId('area-campaign_a')).toBeNull();
+      expect(screen.queryByTestId('area-campaign_b')).toBeNull();
+      expect(screen.getByTestId('area-newDevices')).toBeTruthy();
+    });
+
+    it('prevents hiding the last visible campaign when New Devices is disabled', async () => {
+      render(<ScanTrendsChart onDrillDown={() => {}} />);
+      await waitFor(() => expect(screen.getByText('New Devices')).toBeTruthy());
+      // Turn off New Devices first
+      fireEvent.click(screen.getByText('New Devices').closest('button')!);
+      // Now hide Campaign B
+      fireEvent.click(screen.getByText('Campaign B').closest('button')!);
+      // Trying to hide Campaign A (the last campaign) should be prevented
       fireEvent.click(screen.getByText('Campaign A').closest('button')!);
       expect(screen.getByTestId('area-campaign_a')).toBeTruthy();
     });

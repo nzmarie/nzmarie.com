@@ -29,6 +29,7 @@ interface ScanCampaignItem {
   campaign_name: string;
   total_pv: number;
   total_uv: number;
+  new_devices: number;
 }
 
 interface ScanCampaignRow {
@@ -36,6 +37,7 @@ interface ScanCampaignRow {
   campaign_name?: string | null;
   total_pv?: string | number;
   total_uv?: string | number;
+  new_devices?: string | number;
 }
 
 interface SuburbDownloadRow {
@@ -218,17 +220,25 @@ export async function GET(request: Request) {
             scans_summary_cte AS (
               SELECT
                 COALESCE(SUM(total_pv), 0) as total_pv,
-                COALESCE(SUM(total_uv), 0) as total_uv
+                COALESCE(SUM(total_uv), 0) as total_uv,
+                (SELECT COUNT(*)::int FROM campaign_visit_logs WHERE is_new_device = true) as total_new_devices
               FROM campaign_analytics
             ),
             scans_by_campaign_cte AS (
               SELECT
-                campaign_key,
-                campaign_name,
-                total_pv,
-                total_uv
-              FROM campaign_analytics
-              ORDER BY total_pv DESC
+                ca.campaign_key,
+                ca.campaign_name,
+                ca.total_pv,
+                ca.total_uv,
+                COALESCE(vl.new_devices, 0)::int as new_devices
+              FROM campaign_analytics ca
+              LEFT JOIN (
+                SELECT campaign_key, COUNT(*)::int as new_devices
+                FROM campaign_visit_logs
+                WHERE is_new_device = true
+                GROUP BY campaign_key
+              ) vl ON vl.campaign_key = ca.campaign_key
+              ORDER BY ca.total_pv DESC
             ),
             downloads_by_suburb_cte AS (
               SELECT
@@ -328,6 +338,7 @@ export async function GET(request: Request) {
             (SELECT COALESCE(SUM(sent_count), 0) FROM sent_summary_cte) as sent_summary_total_sent,
             (SELECT total_pv FROM scans_summary_cte) as total_scans,
             (SELECT total_uv FROM scans_summary_cte) as total_unique_scans,
+            (SELECT total_new_devices FROM scans_summary_cte) as total_new_devices,
             (SELECT json_agg(row_to_json(s)) FROM scans_by_campaign_cte s) as scan_campaigns,
             (SELECT json_agg(row_to_json(s)) FROM downloads_by_suburb_cte s) as downloads_by_suburb,
             (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, TO_CHAR(day_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT outreach_property_id)::int AS sent FROM sent_logs_buckets GROUP BY suburb, day_bucket ORDER BY day_bucket) s) as sent_daily,
@@ -372,6 +383,7 @@ export async function GET(request: Request) {
           campaign_name: (item?.campaign_name || item?.campaign_key || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
           total_pv: Number(item?.total_pv) || 0,
           total_uv: Number(item?.total_uv) || 0,
+          new_devices: Number(item?.new_devices) || 0,
         })) : [];
 
         const filterRows = (rows: TrendRow[]): TrendRow[] =>
@@ -430,6 +442,7 @@ export async function GET(request: Request) {
           scanStats: {
             total_scans: Number(row.total_scans) || 0,
             total_unique: Number(row.total_unique_scans) || 0,
+            total_new_devices: Number(row.total_new_devices) || 0,
             campaigns: scanCampaigns,
           },
           downloadsBySuburb: Array.isArray(row.downloads_by_suburb) ? (row.downloads_by_suburb as SuburbDownloadRow[]).map((item) => ({
