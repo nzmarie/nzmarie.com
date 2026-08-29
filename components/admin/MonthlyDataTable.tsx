@@ -172,10 +172,11 @@ export default function MonthlyDataTable({
     return generateInsight(selectedRow.period, sd, dataMode === 'monthly' ? 'month' : 'quarter');
   }, [selectedRow, activeFocusSuburb, isDistrict, dataMode]);
 
-  const noDetail = !isDistrict && (
-    activeData.length === 0 ||
-    !activeData.some(d => d.suburbs[activeFocusSuburb]?.median != null)
-  );
+  const hasDetail = !isDistrict && activeData.length > 0 && activeData.some(d => {
+    const sd = d.suburbs[activeFocusSuburb];
+    return sd != null && (sd.median != null || sd.sales > 0 || sd.days != null);
+  });
+  const noDetail = !isDistrict && (activeData.length === 0 || !hasDetail);
 
   if (activeData.length === 0) {
     return (

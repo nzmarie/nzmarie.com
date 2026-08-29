@@ -348,6 +348,49 @@ describe('MonthlyDataTable', () => {
     expect(screen.getByText('2025-Q1')).toBeDefined();
   });
 
+  it('shows table when suburb has sales but no median price', () => {
+    const dataWithNullMedian: MonthlyDataPoint[] = [
+      {
+        period: '2025-01',
+        periodRaw: '2025-01-01',
+        cityMedian: 900000,
+        citySales: 50,
+        cityDays: 35,
+        cityDetail: null,
+        suburbs: {
+          'Stanley Point': {
+            median: null,
+            sales: 3,
+            days: null,
+            priceDiffMomPct: null,
+            priceDiff1yrPct: null,
+            medianListPrice: null,
+            saleToValuationPct: null,
+            listToValuationPct: null,
+            totalVolume: null,
+            medianPrice1yrPrior: null,
+            medianPrice3yrsPrior: null,
+            priceDiff3yrsPct: null,
+            housePriceIndex: null,
+          },
+        },
+      },
+    ];
+    render(
+      <MonthlyDataTable
+        monthlyData={dataWithNullMedian}
+        dataMode="monthly"
+        onModeChange={onModeChange}
+        activeFocusSuburb="Stanley Point"
+        availableSuburbs={['Stanley Point']}
+        onFocusChange={onFocusChange}
+      />
+    );
+
+    expect(screen.queryByText(/No detailed data available/)).toBeNull();
+    expect(screen.getByText('3')).toBeDefined();
+  });
+
   it('shows empty state when no data', () => {
     render(
       <MonthlyDataTable

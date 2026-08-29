@@ -475,7 +475,7 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      <ScanTrendsChart
+       <ScanTrendsChart
         onDrillDown={(date, campaignKey) => {
           setScanLogDateFilter(date);
           setSelectedScanCampaign(campaignKey || 'all');
@@ -483,82 +483,22 @@ export default function AnalyticsPage() {
         }}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversion Funnel</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm"><span>Mail sent</span><span>{stats.totalMailed}</span></div>
-            <div className="flex justify-between text-sm"><span>Downloads</span><span>{stats.totalDownloads}</span></div>
-            <div className="flex justify-between text-sm"><span>Appraisals</span><span>{stats.totalAppraisals}</span></div>
-            <div className="flex justify-between text-sm"><span>Conversions</span><span>{stats.totalConversions}</span></div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">ROI Snapshot</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm"><span>Revenue</span><span>${stats.totalRevenue.toLocaleString('en-NZ')}</span></div>
-            <div className="flex justify-between text-sm"><span>Cost</span><span>${stats.totalCost.toLocaleString('en-NZ')}</span></div>
-            <div className="flex justify-between text-sm font-semibold">
-              <span>Net</span>
-              <span>${(stats.totalRevenue - stats.totalCost).toLocaleString('en-NZ')}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {locationStats.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">📍 Geographic Distribution</h3>
-          <p className="text-sm text-gray-500 mb-4">Appraisal requests grouped by region and city with share of total leads</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {regionStats.map((region) => {
-              const percent = locationTotal > 0 ? Math.round((region.count / locationTotal) * 100) : 0;
-              return (
-                <div key={region.region} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Region</div>
-                      <div className="text-sm font-semibold text-slate-900">{region.region}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">{region.count}</div>
-                      <div className="text-xs text-slate-400">{percent}%</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 h-2 rounded-full bg-slate-200">
-                    <div className="h-2 rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locationStats.slice(0, 9).map((loc) => {
-              const percent = locationTotal > 0 ? Math.round((loc.count / locationTotal) * 100) : 0;
-              return (
-                <div key={`${loc.region}-${loc.city}`} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold text-slate-800">{loc.region}</div>
-                      <div className="text-xs text-slate-500">{loc.city}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">{loc.count}</div>
-                      <div className="text-xs text-slate-400">{percent}%</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
-                    <div
-                      className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Market Data Table */}
+      <MonthlyDataTable
+        monthlyData={monthlyData}
+        dataMode={tableDataMode}
+        onModeChange={setTableDataMode}
+        activeFocusSuburb={activeFocusSuburb}
+        availableSuburbs={availableSuburbs}
+        onFocusChange={(suburb) => {
+          setActiveFocusSuburb(suburb);
+          if (suburb !== 'North Shore City') {
+            setSelectedSuburbs([suburb]);
+          } else {
+            setSelectedSuburbs([]);
+          }
+        }}
+      />
 
       {/* Market Trends Section */}
       <div className="space-y-4">
@@ -661,23 +601,6 @@ export default function AnalyticsPage() {
         })()}
       </div>
 
-      {/* Market Data Table */}
-      <MonthlyDataTable
-        monthlyData={monthlyData}
-        dataMode={tableDataMode}
-        onModeChange={setTableDataMode}
-        activeFocusSuburb={activeFocusSuburb}
-        availableSuburbs={availableSuburbs}
-        onFocusChange={(suburb) => {
-          setActiveFocusSuburb(suburb);
-          if (suburb !== 'North Shore City') {
-            setSelectedSuburbs([suburb]);
-          } else {
-            setSelectedSuburbs([]);
-          }
-        }}
-      />
-
       {/* Last Sold Data For Sale */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -774,7 +697,7 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Excel Upload Section */}
+             {/* Excel Upload Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ExcelUploadForm onSuccess={(suburb) => {
           if (suburb && !selectedSuburbs.includes(suburb)) {
@@ -792,6 +715,83 @@ export default function AnalyticsPage() {
             <p>3. Table is auto-created if needed, data is imported</p>
             <p>4. Chart refreshes automatically with the uploaded data</p>
             <p>5. Click suburb buttons to compare multiple suburbs</p>
+          </div>
+        </div>
+      </div>
+
+      {locationStats.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">📍 Geographic Distribution</h3>
+          <p className="text-sm text-gray-500 mb-4">Appraisal requests grouped by region and city with share of total leads</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {regionStats.map((region) => {
+              const percent = locationTotal > 0 ? Math.round((region.count / locationTotal) * 100) : 0;
+              return (
+                <div key={region.region} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Region</div>
+                      <div className="text-sm font-semibold text-slate-900">{region.region}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-600">{region.count}</div>
+                      <div className="text-xs text-slate-400">{percent}%</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 rounded-full bg-slate-200">
+                    <div className="h-2 rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {locationStats.slice(0, 9).map((loc) => {
+              const percent = locationTotal > 0 ? Math.round((loc.count / locationTotal) * 100) : 0;
+              return (
+                <div key={`${loc.region}-${loc.city}`} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-slate-800">{loc.region}</div>
+                      <div className="text-xs text-slate-500">{loc.city}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-blue-600">{loc.count}</div>
+                      <div className="text-xs text-slate-400">{percent}%</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversion Funnel</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm"><span>Mail sent</span><span>{stats.totalMailed}</span></div>
+            <div className="flex justify-between text-sm"><span>Downloads</span><span>{stats.totalDownloads}</span></div>
+            <div className="flex justify-between text-sm"><span>Appraisals</span><span>{stats.totalAppraisals}</span></div>
+            <div className="flex justify-between text-sm"><span>Conversions</span><span>{stats.totalConversions}</span></div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">ROI Snapshot</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm"><span>Revenue</span><span>${stats.totalRevenue.toLocaleString('en-NZ')}</span></div>
+            <div className="flex justify-between text-sm"><span>Cost</span><span>${stats.totalCost.toLocaleString('en-NZ')}</span></div>
+            <div className="flex justify-between text-sm font-semibold">
+              <span>Net</span>
+              <span>${(stats.totalRevenue - stats.totalCost).toLocaleString('en-NZ')}</span>
+            </div>
           </div>
         </div>
       </div>
