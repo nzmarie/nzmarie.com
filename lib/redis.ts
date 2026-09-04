@@ -219,3 +219,55 @@ export async function invalidateStreetClustersForSuburb(suburb: string): Promise
   } catch {
   }
 }
+
+export { redis };
+
+export async function getStreetViewCachedUrl(propertyId: string): Promise<string | null> {
+  if (!redis || !propertyId) return null;
+  try {
+    const v = await redis.get<string>(`sv:url:${propertyId}`);
+    if (typeof v === 'string' && v.startsWith('http')) return v;
+  } catch {}
+  return null;
+}
+
+export async function setStreetViewCachedUrl(propertyId: string, url: string): Promise<void> {
+  if (!redis || !propertyId) return;
+  try {
+    await redis.set(`sv:url:${propertyId}`, url, { ex: 86400 });
+  } catch {}
+}
+
+export async function getStreetViewFail(propertyId: string): Promise<boolean> {
+  if (!redis || !propertyId) return false;
+  try {
+    const v = await redis.get(`sv:fail:${propertyId}`);
+    return !!v;
+  } catch {
+    return false;
+  }
+}
+
+export async function setStreetViewFail(propertyId: string): Promise<void> {
+  if (!redis || !propertyId) return;
+  try {
+    await redis.set(`sv:fail:${propertyId}`, '1', { ex: 604800 });
+  } catch {}
+}
+
+export async function acquireStreetViewLock(propertyId: string): Promise<boolean> {
+  if (!redis || !propertyId) return true;
+  try {
+    const res = await redis.set(`sv:lock:${propertyId}`, '1', { ex: 10, nx: true });
+    return res === 'OK';
+  } catch {
+    return true;
+  }
+}
+
+export async function releaseStreetViewLock(propertyId: string): Promise<void> {
+  if (!redis || !propertyId) return;
+  try {
+    await redis.del(`sv:lock:${propertyId}`);
+  } catch {}
+}

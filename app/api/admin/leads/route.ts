@@ -116,17 +116,19 @@ export async function GET(request: Request) {
     const total = parseInt(countResult.rows[0]?.total || '0');
 
     try {
-      const ids = (dataResult.rows as Array<Record<string, unknown>>)
+      const rows = dataResult.rows as Array<Record<string, unknown>>;
+      const ids = rows
+        .filter(r => typeof r.image_url === 'string' && !String(r.image_url).includes('reports.nzmarie.com') && !String(r.image_url).includes('no-photo') && !String(r.image_url).includes('placeholder') && !String(r.image_url).includes('No+Image'))
         .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null))
         .filter(Boolean) as string[];
       const cleanIds = ids.map(id => String(id).replace(/-/g, ''));
       if (cleanIds.length > 0) {
         const map = await batchGetCachedR2Urls(cleanIds);
-        for (const row of dataResult.rows as Array<Record<string, unknown>>) {
+        for (const row of rows) {
           const pidRaw = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
           const pid = pidRaw ? String(pidRaw).replace(/-/g, '') : null;
           const cached = pid ? map.get(pid) : null;
-          if (cached && typeof row.image_url === 'string' && !row.image_url.includes('reports.nzmarie.com')) {
+          if (cached && typeof row.image_url === 'string' && !String(row.image_url).includes('reports.nzmarie.com')) {
             row.image_url = cached;
           }
         }

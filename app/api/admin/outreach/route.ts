@@ -279,18 +279,22 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   const result = await marieDB.query(dataQuery, params);
 
   try {
-    const ids = (result.rows as Array<Record<string, unknown>>)
+    const rows = result.rows as Array<Record<string, unknown>>;
+    const ids = rows
+      .filter(r => typeof r.cover_image_url === 'string' && !String(r.cover_image_url).includes('reports.nzmarie.com'))
       .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null))
       .filter(Boolean) as string[];
-    if (ids.length > 0) {
-      const map = await batchGetCachedR2Urls(ids);
-      for (const row of result.rows as Array<Record<string, unknown>>) {
-        const pid = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
+    const cleanIds = ids.map(id => String(id).replace(/-/g, ''));
+    if (cleanIds.length > 0) {
+      const map = await batchGetCachedR2Urls(cleanIds);
+      for (const row of rows) {
+        const pidRaw = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
+        const pid = pidRaw ? String(pidRaw).replace(/-/g, '') : null;
         const cached = pid ? map.get(pid) : null;
-        if (cached && typeof row.cover_image_url === 'string' && !row.cover_image_url.includes('reports.nzmarie.com')) {
+        if (cached && typeof row.cover_image_url === 'string' && !String(row.cover_image_url).includes('reports.nzmarie.com')) {
           row.cover_image_url = cached;
         }
-        if (cached && typeof (row as Record<string, unknown>).image_url === 'string') {
+        if (cached && typeof (row as Record<string, unknown>).image_url === 'string' && !String((row as Record<string, unknown>).image_url).includes('reports.nzmarie.com')) {
           (row as Record<string, unknown>).image_url = cached;
         }
       }
@@ -602,19 +606,24 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const result = await marieDB.query(query, params);
 
   try {
-    const ids = (result.rows as Array<Record<string, unknown>>)
+    const rows = result.rows as Array<Record<string, unknown>>;
+    const ids = rows
+      .filter(r => {
+        const u = (r.image_url as string) || (r.cover_image_url as string) || '';
+        return typeof u === 'string' && !u.includes('reports.nzmarie.com') && !u.includes('no-photo') && !u.includes('placeholder') && !u.includes('No+Image');
+      })
       .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null) || (r as Record<string, unknown>).property_id as string || null)
       .filter(Boolean) as string[];
     const cleanIds = ids.map(id => String(id).replace(/-/g, ''));
     if (cleanIds.length > 0) {
       const map = await batchGetCachedR2Urls(cleanIds);
-      for (const row of result.rows as Array<Record<string, unknown>>) {
+      for (const row of rows) {
         const pidRaw = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
         const pid = pidRaw ? String(pidRaw).replace(/-/g, '') : null;
         const cached = pid ? map.get(pid) : null;
         if (cached) {
-          if (typeof row.image_url === 'string' && !row.image_url.includes('reports.nzmarie.com')) row.image_url = cached;
-          if (typeof row.cover_image_url === 'string' && !row.cover_image_url.includes('reports.nzmarie.com')) row.cover_image_url = cached;
+          if (typeof row.image_url === 'string' && !String(row.image_url).includes('reports.nzmarie.com')) row.image_url = cached;
+          if (typeof row.cover_image_url === 'string' && !String(row.cover_image_url).includes('reports.nzmarie.com')) row.cover_image_url = cached;
         }
       }
     }

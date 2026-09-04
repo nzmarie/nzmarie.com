@@ -446,7 +446,7 @@ export async function GET(request: Request) {
     }));
 
     try {
-      const streetRows = properties.map(p => ({ id: p.id, latitude: p.latitude, longitude: p.longitude, image_url: p.image_url }));
+      const streetRows = properties.map(p => ({ id: p.id, latitude: p.latitude, longitude: p.longitude, image_url: p.image_url, address: p.address, suburb: p.suburb, city: p.city }));
       const resolved = await batchResolveStreetViews(streetRows);
       const urlMap = new Map(resolved.map(r => [r.id, r.image_url]));
       properties = properties.map(p => ({ ...p, image_url: urlMap.get(p.id) || p.image_url }));

@@ -121,3 +121,40 @@ describe('shared R2 across 3 pages', () => {
     expect(isR2StreetViewUrl(url)).toBe(true);
   });
 });
+
+describe('optimizations', () => {
+  it('batchResolve skips R2 and placeholder without Google call', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    const rows = [
+      { id: '1', latitude: -36.7, longitude: 174.7, image_url: 'https://reports.nzmarie.com/streetview/1.jpg' },
+      { id: '2', latitude: -36.7, longitude: 174.7, image_url: 'https://via.placeholder.com/400' },
+      { id: '3', latitude: -36.7, longitude: 174.7, cover_image_url: 'https://reports.nzmarie.com/streetview/3.jpg' },
+    ];
+    const res = await batchResolveStreetViews(rows as never);
+    expect(res).toHaveLength(3);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('getOrCreate uses geocode fallback when lat/lng missing', async () => {
+    const originalKey = process.env.GOOGLE_MAPS_SERVER_KEY;
+    process.env.GOOGLE_MAPS_SERVER_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'OK', results: [{ geometry: { location: { lat: -36.7, lng: 174.7 } } }] }) } as never)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'OK' }) } as never)
+      .mockResolvedValueOnce({ ok: true, headers: { get: () => 'image/jpeg' }, arrayBuffer: async () => new ArrayBuffer(8000) } as never);
+    vi.stubGlobal('fetch', fetchMock);
+    const url = 'https://example.com/old.jpg';
+    const result = await getOrCreateStreetViewUrl('geo-test', null, null, url, '1 Acacia Road', 'Torbay', 'Auckland');
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result).toBe('https://reports.nzmarie.com/streetview/geo-test.jpg');
+    vi.unstubAllGlobals();
+    if (originalKey) process.env.GOOGLE_MAPS_SERVER_KEY = originalKey;
+    else delete process.env.GOOGLE_MAPS_SERVER_KEY;
+  });
+
+  it('batchGetCachedR2Urls handles empty and null', async () => {
+    expect((await batchGetCachedR2Urls([])).size).toBe(0);
+    expect((await batchGetCachedR2Urls([''])) .size).toBe(0);
+  });
+});
