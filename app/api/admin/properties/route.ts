@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { batchResolveStreetViews } from '@/lib/streetview';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -392,7 +393,7 @@ export async function GET(request: Request) {
       no_junk_mail: boolean;
     }>(query, params);
 
-    const properties = result.rows.map(row => ({
+    let properties = result.rows.map(row => ({
       id: row.id,
       address: row.address,
       suburb: row.suburb,
@@ -443,6 +444,13 @@ export async function GET(request: Request) {
       rent_listing_status: row.rent_listing_status ?? null,
       rent_price: row.rent_price ?? null,
     }));
+
+    try {
+      const streetRows = properties.map(p => ({ id: p.id, latitude: p.latitude, longitude: p.longitude, image_url: p.image_url }));
+      const resolved = await batchResolveStreetViews(streetRows);
+      const urlMap = new Map(resolved.map(r => [r.id, r.image_url]));
+      properties = properties.map(p => ({ ...p, image_url: urlMap.get(p.id) || p.image_url }));
+    } catch {}
 
     return NextResponse.json({
       success: true,

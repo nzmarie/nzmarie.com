@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
+import { batchGetCachedR2Urls } from '@/lib/streetview';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -113,6 +114,24 @@ export async function GET(request: Request) {
       marieDB.query(dataQuery, dataParams),
     ]);
     const total = parseInt(countResult.rows[0]?.total || '0');
+
+    try {
+      const ids = (dataResult.rows as Array<Record<string, unknown>>)
+        .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null))
+        .filter(Boolean) as string[];
+      const cleanIds = ids.map(id => String(id).replace(/-/g, ''));
+      if (cleanIds.length > 0) {
+        const map = await batchGetCachedR2Urls(cleanIds);
+        for (const row of dataResult.rows as Array<Record<string, unknown>>) {
+          const pidRaw = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
+          const pid = pidRaw ? String(pidRaw).replace(/-/g, '') : null;
+          const cached = pid ? map.get(pid) : null;
+          if (cached && typeof row.image_url === 'string' && !row.image_url.includes('reports.nzmarie.com')) {
+            row.image_url = cached;
+          }
+        }
+      }
+    } catch {}
 
     return NextResponse.json({
       success: true,

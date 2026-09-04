@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { invalidateStreetClustersForSuburb } from '@/lib/redis';
+import { batchGetCachedR2Urls } from '@/lib/streetview';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -252,11 +253,11 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   params.push(limit, offset);
 
   const cardFields = `
-    id, property_address, suburb, city, region, street,
+    id, property_id, property_address, suburb, city, region, street,
     campaign, status, created_at, sent_at, no_junk_mail, owner_name,
     property_type, notes, selected_by, selected_at, last_campaign,
     total_send_count, last_sent_at,
-    cover_image_url, bedrooms, bathrooms, car_spaces,
+    joined_property_id, cover_image_url, bedrooms, bathrooms, car_spaces,
     capital_value, last_sold_price, last_sold_date, year_built,
     on_market_sale, sale_listing_status, sale_price, sale_agent,
     on_market_rent, rent_listing_status, rent_price,
@@ -276,6 +277,25 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   `;
 
   const result = await marieDB.query(dataQuery, params);
+
+  try {
+    const ids = (result.rows as Array<Record<string, unknown>>)
+      .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null))
+      .filter(Boolean) as string[];
+    if (ids.length > 0) {
+      const map = await batchGetCachedR2Urls(ids);
+      for (const row of result.rows as Array<Record<string, unknown>>) {
+        const pid = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
+        const cached = pid ? map.get(pid) : null;
+        if (cached && typeof row.cover_image_url === 'string' && !row.cover_image_url.includes('reports.nzmarie.com')) {
+          row.cover_image_url = cached;
+        }
+        if (cached && typeof (row as Record<string, unknown>).image_url === 'string') {
+          (row as Record<string, unknown>).image_url = cached;
+        }
+      }
+    }
+  } catch {}
 
   // Only compute total on the first page (offset === 0) or when the caller
   // explicitly asks for it (classic pagination).  Subsequent infinite-scroll
@@ -580,6 +600,25 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   }
 
   const result = await marieDB.query(query, params);
+
+  try {
+    const ids = (result.rows as Array<Record<string, unknown>>)
+      .map(r => (r.joined_property_id as string) || (r.property_id ? String(r.property_id).replace(/-/g, '') : null) || (r as Record<string, unknown>).property_id as string || null)
+      .filter(Boolean) as string[];
+    const cleanIds = ids.map(id => String(id).replace(/-/g, ''));
+    if (cleanIds.length > 0) {
+      const map = await batchGetCachedR2Urls(cleanIds);
+      for (const row of result.rows as Array<Record<string, unknown>>) {
+        const pidRaw = (row.joined_property_id as string) || (row.property_id ? String(row.property_id).replace(/-/g, '') : null);
+        const pid = pidRaw ? String(pidRaw).replace(/-/g, '') : null;
+        const cached = pid ? map.get(pid) : null;
+        if (cached) {
+          if (typeof row.image_url === 'string' && !row.image_url.includes('reports.nzmarie.com')) row.image_url = cached;
+          if (typeof row.cover_image_url === 'string' && !row.cover_image_url.includes('reports.nzmarie.com')) row.cover_image_url = cached;
+        }
+      }
+    }
+  } catch {}
 
   // Only compute total on the first page or when the caller explicitly asks
   // for it (classic pagination) — skip the full-table COUNT on infinite-scroll
