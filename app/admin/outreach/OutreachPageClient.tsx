@@ -28,6 +28,7 @@ import {
 } from 'react-icons/fa';
 import { aggregateLikedStreets, filterLikedItemsByStreet, extractStreetFromLikedItem } from '@/lib/liked-street-filter';
 import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
+import { copyText, buildPropertyAddress } from '@/lib/clipboard';
 
 interface OutreachProperty {
   id: string;
@@ -232,6 +233,26 @@ export default function OutreachPage() {
       next.add(id);
       return next;
     });
+  }, []);
+
+  const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
+  const handleCopyAddress = useCallback(async (id: string, address: string, suburb: string, city: string, region: string) => {
+    const full = buildPropertyAddress(address, suburb, city, region);
+    const ok = await copyText(full || address);
+    if (ok) {
+      setCopiedIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      window.setTimeout(() => {
+        setCopiedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 1800);
+    }
   }, []);
 
   const [addressInput, setAddressInput] = useState('');
@@ -2863,28 +2884,34 @@ export default function OutreachPage() {
                       >
                         Edit
                       </button>
-                      <a
-                        href={`https://www.google.com/maps?q=${encodeURIComponent([prop.property_address, prop.suburb, prop.city, prop.region].filter(Boolean).join(', '))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleCopyAddress(prop.id, prop.property_address, prop.suburb, prop.city, prop.region);
+                        }}
+                        aria-label={`Copy address ${prop.property_address}`}
                         style={{
                           fontSize: '0.75rem',
-                          color: '#2563eb',
+                          color: copiedIds.has(prop.id) ? '#15803d' : '#2563eb',
                           fontWeight: '600',
-                          textDecoration: 'none',
                           padding: '4px 10px',
                           borderRadius: '8px',
-                          background: '#eff6ff',
-                          border: '1px solid #bfdbfe',
+                          background: copiedIds.has(prop.id) ? '#dcfce7' : '#eff6ff',
+                          border: copiedIds.has(prop.id) ? '1px solid #86efac' : '1px solid #bfdbfe',
                           transition: 'all 0.2s',
                           whiteSpace: 'nowrap',
+                          cursor: 'pointer',
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                        onMouseEnter={(e) => {
+                          if (!copiedIds.has(prop.id)) { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!copiedIds.has(prop.id)) { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }
+                        }}
                       >
-                        Street
-                      </a>
+                        {copiedIds.has(prop.id) ? 'Copied!' : 'Copy'}
+                      </button>
                     </div>
                   </div>
                   <div style={{ fontSize: '0.85rem', color: '#718096', marginBottom: '12px' }}>

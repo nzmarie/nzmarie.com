@@ -73,10 +73,14 @@ describe('SentDateFilter', () => {
   });
 
   it('removes a date when an already-selected calendar day is clicked', () => {
-    const selected = ['2026-08-15'];
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const dateStr = `${y}-${m}-15`;
+    const selected = [dateStr];
     render(<SentDateFilter dates={selected} onChange={mockOnChange} />);
     fireEvent.click(screen.getByRole('button', { name: 'Toggle calendar' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle 2026-08-15' }));
+    fireEvent.click(screen.getByRole('button', { name: `Toggle ${dateStr}` }));
     expect(mockOnChange).toHaveBeenCalledWith([]);
   });
 

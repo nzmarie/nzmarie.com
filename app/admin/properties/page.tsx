@@ -20,6 +20,7 @@ import { extractStreetNameFromAddress } from "@/lib/street-ordering";
 import type { StreetProgressEntry } from "@/lib/street-progress";
 import { getFixedImageUrl } from "@/lib/google-maps";
 import { PropertyHistoryView } from "@/components/admin/PropertyHistoryView";
+import { copyText, buildPropertyAddress } from "@/lib/clipboard";
 
 const CARD_PAGE_SIZE = 9;
 const LIST_PAGE_SIZE = 18;
@@ -225,7 +226,17 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
 }) => {
   const [imageError, setImageError] = useState(false);
   const [optimisticNoJunk, setOptimisticNoJunk] = useState<boolean | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
   const queryClient = useQueryClient();
+
+  const handleCopyAddress = useCallback(async () => {
+    const fullAddress = buildPropertyAddress(property.address, property.suburb, property.city, property.region, property.postcode ?? null);
+    const ok = await copyText(fullAddress || property.address);
+    if (ok) {
+      setCopyFeedback(true);
+      window.setTimeout(() => setCopyFeedback(false), 1800);
+    }
+  }, [property.address, property.suburb, property.city, property.region, property.postcode]);
 
   const fixedImageUrl = getFixedImageUrl(property.image_url);
 
@@ -648,28 +659,35 @@ const PropertyCard = ({ property, isLiked, onToggleLike }: {
                 Edit
               </button>
             </div>
-            <a
-              href={`https://www.google.com/maps?q=${encodeURIComponent([property.address, property.suburb, property.city, property.region].filter(Boolean).join(', '))}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                void handleCopyAddress();
+              }}
+              aria-label={`Copy address ${property.address}`}
               style={{
                 fontSize: '0.75rem',
-                color: '#2563eb',
+                color: copyFeedback ? '#15803d' : '#2563eb',
                 fontWeight: '600',
-                textDecoration: 'none',
                 padding: '4px 10px',
                 borderRadius: '8px',
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
+                background: copyFeedback ? '#dcfce7' : '#eff6ff',
+                border: copyFeedback ? '1px solid #86efac' : '1px solid #bfdbfe',
                 transition: 'all 0.2s',
                 whiteSpace: 'nowrap',
+                cursor: 'pointer',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+              onMouseEnter={(e) => {
+                if (!copyFeedback) { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }
+              }}
+              onMouseLeave={(e) => {
+                if (!copyFeedback) { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }
+              }}
             >
-              Street
-            </a>
+              {copyFeedback ? 'Copied!' : 'Copy'}
+            </button>
           </div>
         </div>
 
