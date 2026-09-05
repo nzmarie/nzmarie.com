@@ -9,6 +9,7 @@ import MarketTrendsChart from '@/components/admin/MarketTrendsChart';
 import ExcelUploadForm from '@/components/admin/ExcelUploadForm';
 import MonthlyDataTable from '@/components/admin/MonthlyDataTable';
 import ScanTrendsChart from '@/components/admin/ScanTrendsChart';
+import SuburbSectionAnalytics from '@/components/admin/SuburbSectionAnalytics';
 import { isSuperAdmin } from '@/lib/permissions';
 import type { MonthlyDataPoint } from '@/lib/market-data-aggregator';
 import { sortSuburbs, SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
@@ -482,6 +483,8 @@ export default function AnalyticsPage() {
           setShowScanLogsModal(true);
         }}
       />
+
+      <SuburbSectionAnalytics />
 
       {/* Market Data Table */}
       <MonthlyDataTable

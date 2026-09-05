@@ -130,6 +130,21 @@ async function initDatabase() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_appraisal_leads_created_at ON appraisal_leads (created_at DESC);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_appraisal_leads_follow_up ON appraisal_leads (follow_up_at) WHERE follow_up_at IS NOT NULL AND status IN ('Pending', 'Contacted');`);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS section_view_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_key VARCHAR(50),
+        visitor_hash VARCHAR(64) NOT NULL,
+        section_name VARCHAR(50) NOT NULL,
+        is_new_device BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_section_view_campaign ON section_view_logs(campaign_key, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_section_view_visitor ON section_view_logs(visitor_hash, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_section_view_section ON section_view_logs(section_name, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_section_view_time ON section_view_logs(created_at DESC);
+    `);
+
     const reportCount = await pool.query('SELECT COUNT(*) FROM market_reports');
     if (parseInt(reportCount.rows[0].count) === 0) {
       await pool.query(`

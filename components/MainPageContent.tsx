@@ -12,6 +12,7 @@ import ReportDownloadSection from "./ReportDownloadSection";
 import Footer from "./Footer";
 import Qualifications from "./Qualifications";
 import QRScanTracker from "./QRScanTracker";
+import SectionTracker from "./SectionTracker";
 import { Language } from "../lib/translations";
 
 export default function MainPageContent({ lang = "en" }: { lang?: Language }) {
@@ -19,14 +20,30 @@ export default function MainPageContent({ lang = "en" }: { lang?: Language }) {
         <main>
             <QRScanTracker />
             <Header lang={lang} />
-            <Hero lang={lang} />
-            <About lang={lang} />
-            <AppraisalSection lang={lang} />
-            <Services lang={lang} />
-            <PropertyListings lang={lang} />
-            <Qualifications lang={lang} />
-            <Contact lang={lang} />
-            <ReportDownloadSection lang={lang} />
+            <SectionTracker name="hero">
+                <Hero lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="about">
+                <About lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="appraisal">
+                <AppraisalSection lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="services">
+                <Services lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="property_listings">
+                <PropertyListings lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="qualifications">
+                <Qualifications lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="contact">
+                <Contact lang={lang} />
+            </SectionTracker>
+            <SectionTracker name="report_download">
+                <ReportDownloadSection lang={lang} />
+            </SectionTracker>
             <Footer lang={lang} />
         </main>
     );
