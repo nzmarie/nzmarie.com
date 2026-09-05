@@ -50,6 +50,8 @@ class MockIntersectionObserver {
 globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
 
 describe('Outreach page', () => {
+  let scrollToSpy: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     mockPush.mockReset();
     mockSession = {
@@ -57,12 +59,15 @@ describe('Outreach page', () => {
       status: 'authenticated',
     };
     global.fetch = vi.fn();
+    scrollToSpy = vi.fn();
+    vi.stubGlobal('scrollTo', scrollToSpy);
   });
 
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
     window.localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it('renders pending address row and shows mark as sent button', async () => {
@@ -2205,6 +2210,117 @@ describe('Outreach page - Last Sold resets to All when default report applies', 
     }, { timeout: 3000 });
     expect(marketScope().getByRole('button', { name: 'All' }).style.backgroundColor).not.toBe('white');
     expect(propTypeScope().getByRole('button', { name: 'House' }).style.backgroundColor).toBe('white');
+  });
+});
+
+describe('Outreach page - scroll to top after actions', () => {
+  let scrollToSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    scrollToSpy = vi.fn();
+    vi.stubGlobal('scrollTo', scrollToSpy);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  function makeOutreachFetch() {
+    return (global.fetch as any) = vi.fn((url: RequestInfo, init?: RequestInit) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 'addr-1', property_address: '1 Main St', suburb: 'Takapuna', city: 'North Shore', region: 'Auckland', status: 'liked', created_at: '2024-01-01', bedrooms: 3, bathrooms: 1, car_spaces: 1, capital_value: 500000, last_sold_price: 400000, last_sold_date: '2020-01-01', build_year: 1990, image_url: '', property_url: '' },
+              { id: 'addr-2', property_address: '2 Oak Ave', suburb: 'Takapuna', city: 'North Shore', region: 'Auckland', status: 'liked', created_at: '2024-01-02', bedrooms: 4, bathrooms: 2, car_spaces: 2, capital_value: 600000, last_sold_price: 500000, last_sold_date: '2021-01-01', build_year: 1995, image_url: '', property_url: '' },
+            ],
+            pagination: { page: 1, limit: 9, total: 2, totalPages: 1 },
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach/') && s.includes('/status') && init?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, data: {} }) });
+      }
+      if (s.includes('/api/admin/outreach/') && init?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+  }
+
+  it('scrolls to top after marking selected addresses as Pending', async () => {
+    makeOutreachFetch();
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    checkboxes.forEach((cb) => fireEvent.click(cb));
+
+    const pendingBtn = screen.getByRole('button', { name: /Mark as Pending/i });
+    fireEvent.click(pendingBtn);
+
+    await waitFor(() => {
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+    }, { timeout: 3000 });
+  });
+
+  it('scrolls to top after deleting selected addresses', async () => {
+    makeOutreachFetch();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const checkbox = screen.getAllByRole('checkbox')[0];
+    fireEvent.click(checkbox);
+
+    const deleteBtn = screen.getAllByRole('button', { name: /Delete/i })[0];
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => {
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+    }, { timeout: 3000 });
+
+    confirmSpy.mockRestore();
+  });
+
+  it('scrolls to top after inline Pending action on a liked card', async () => {
+    makeOutreachFetch();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const pendingBtn = screen.getAllByRole('button', { name: /⇨ Pending/i })[0];
+    fireEvent.click(pendingBtn);
+
+    await waitFor(() => {
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+    }, { timeout: 3000 });
+
+    confirmSpy.mockRestore();
   });
 });
 

@@ -431,6 +431,7 @@ export default function OutreachPage() {
       showNotification('success', `Lead created for ${convertingProperty.property_address}`);
       setConvertModalOpen(false);
       setConvertingProperty(null);
+      window.scrollTo(0, 0);
     } catch {
       showNotification('error', 'Failed to convert to lead');
     } finally {
@@ -555,6 +556,7 @@ export default function OutreachPage() {
 
       showNotification('success', 'Property updated successfully');
       setEditingProperty(null);
+      window.scrollTo(0, 0);
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Failed to update property');
     } finally {
@@ -961,6 +963,7 @@ export default function OutreachPage() {
     } else {
       fetchItems();
     }
+    window.scrollTo(0, 0);
   };
 
   const toggleStreet = (suburb: string, street: string) => {
@@ -1054,6 +1057,7 @@ export default function OutreachPage() {
       const res = await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed');
       showNotification('success', '已从 Liked 移除 / Removed from Liked');
+      window.scrollTo(0, 0);
     } catch {
       setItems((prev) => [...prev, prop]);
       setClassicItems((prev) => [...prev, prop]);
@@ -1080,6 +1084,7 @@ export default function OutreachPage() {
       showNotification('success', `Copied ${data.added || 0} address(es) to ${name}`);
       clearSelected();
       fetchItems();
+      window.scrollTo(0, 0);
     } catch (err) {
       console.error('Start new campaign failed:', err);
       showNotification('error', 'Failed to start new campaign');
@@ -1100,6 +1105,7 @@ export default function OutreachPage() {
     clearSelected();
     setItems((prev) => prev.filter((item) => !idsToDelete.has(item.id)));
     setClassicItems((prev) => prev.filter((item) => !idsToDelete.has(item.id)));
+    window.scrollTo(0, 0);
 
     try {
       await Promise.all(
@@ -3200,8 +3206,10 @@ export default function OutreachPage() {
                             setItems((prev) => prev.filter((item) => item.id !== itemId));
                             setClassicItems((prev) => prev.filter((item) => item.id !== itemId));
                             try {
-                              await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
-                              showNotification('success', 'Address deleted');
+                                             await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
+                                             showNotification('success', 'Address deleted');
+                                             window.scrollTo(0, 0);
+                              window.scrollTo(0, 0);
                             } catch {
                               showNotification('error', 'Failed to delete');
                             }
@@ -3581,6 +3589,7 @@ export default function OutreachPage() {
                                           try {
                                             await fetch(`/api/admin/outreach/${prop.id}`, { method: 'DELETE' });
                                             showNotification('success', 'Address deleted');
+                                            window.scrollTo(0, 0);
                                           } catch {
                                             showNotification('error', 'Failed to delete');
                                           }
@@ -3983,6 +3992,7 @@ export default function OutreachPage() {
           } else {
             fetchItems();
           }
+          window.scrollTo(0, 0);
         }}
       />
 
