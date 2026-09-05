@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildFullAddress, buildPropertyAddress, copyText } from '@/lib/clipboard';
+import { buildFullAddress, buildPropertyAddress, copyText, openGoogleMaps, buildGoogleMapsUrl } from '@/lib/clipboard';
 
 describe('buildFullAddress', () => {
   it('joins non-empty parts with comma', () => {
@@ -114,5 +114,81 @@ describe('copyText', () => {
 
     const ok = await copyText('exec returns false');
     expect(ok).toBe(false);
+  });
+});
+
+describe('buildGoogleMapsUrl', () => {
+  it('returns encoded Google Maps URL', () => {
+    expect(buildGoogleMapsUrl('1A Barker Rise, Northcross')).toBe(
+      'https://maps.google.com/?q=1A%20Barker%20Rise%2C%20Northcross',
+    );
+  });
+
+  it('encodes special characters', () => {
+    expect(buildGoogleMapsUrl('1A & B Street')).toContain('%26');
+  });
+
+  it('encodes empty string', () => {
+    expect(buildGoogleMapsUrl('')).toBe('https://maps.google.com/?q=');
+  });
+});
+
+describe('openGoogleMaps', () => {
+  let openSpy: ReturnType<typeof vi.fn>;
+  const originalUA = navigator.userAgent;
+
+  beforeEach(() => {
+    openSpy = vi.fn();
+    vi.stubGlobal('open', openSpy);
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing for empty address', () => {
+    openGoogleMaps('');
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens Google Maps in new tab on desktop', () => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120', configurable: true });
+    openGoogleMaps('1A Barker Rise, Northcross');
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://maps.google.com/?q=1A%20Barker%20Rise%2C%20Northcross',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  it('does not call window.open on mobile (uses location.href instead)', () => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile/15E148', configurable: true });
+    openGoogleMaps('1A Barker Rise, Northcross');
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not call window.open on Android (uses location.href instead)', () => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Linux; Android 14) Mobile/15E148', configurable: true });
+    openGoogleMaps('1A Barker Rise, Northcross');
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not call window.open on iPad (uses location.href instead)', () => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPad; CPU OS 17_0) Mobile/15E148', configurable: true });
+    openGoogleMaps('1A Barker Rise, Northcross');
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('encodes special characters in address', () => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120', configurable: true });
+    openGoogleMaps('1A & B Street, North Shore');
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('maps.google.com/?q='),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(openSpy.mock.calls[0][0]).toContain('%26');
   });
 });

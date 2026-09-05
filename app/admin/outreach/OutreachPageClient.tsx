@@ -28,7 +28,7 @@ import {
 } from 'react-icons/fa';
 import { aggregateLikedStreets, filterLikedItemsByStreet, extractStreetFromLikedItem } from '@/lib/liked-street-filter';
 import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
-import { copyText, buildPropertyAddress } from '@/lib/clipboard';
+import { openGoogleMaps, buildPropertyAddress } from '@/lib/clipboard';
 
 interface OutreachProperty {
   id: string;
@@ -233,26 +233,6 @@ export default function OutreachPage() {
       next.add(id);
       return next;
     });
-  }, []);
-
-  const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
-  const handleCopyAddress = useCallback(async (id: string, address: string, suburb: string, city: string, region: string) => {
-    const full = buildPropertyAddress(address, suburb, city, region);
-    const ok = await copyText(full || address);
-    if (ok) {
-      setCopiedIds((prev) => {
-        const next = new Set(prev);
-        next.add(id);
-        return next;
-      });
-      window.setTimeout(() => {
-        setCopiedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }, 1800);
-    }
   }, []);
 
   const [addressInput, setAddressInput] = useState('');
@@ -2888,29 +2868,33 @@ export default function OutreachPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleCopyAddress(prop.id, prop.property_address, prop.suburb, prop.city, prop.region);
+                          e.preventDefault();
+                          const full = buildPropertyAddress(prop.property_address, prop.suburb, prop.city, prop.region);
+                          openGoogleMaps(full || prop.property_address);
                         }}
-                        aria-label={`Copy address ${prop.property_address}`}
+                        aria-label={`Open ${prop.property_address} in Google Maps`}
                         style={{
                           fontSize: '0.75rem',
-                          color: copiedIds.has(prop.id) ? '#15803d' : '#2563eb',
+                          color: '#2563eb',
                           fontWeight: '600',
                           padding: '4px 10px',
                           borderRadius: '8px',
-                          background: copiedIds.has(prop.id) ? '#dcfce7' : '#eff6ff',
-                          border: copiedIds.has(prop.id) ? '1px solid #86efac' : '1px solid #bfdbfe',
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
                           transition: 'all 0.2s',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer',
                         }}
                         onMouseEnter={(e) => {
-                          if (!copiedIds.has(prop.id)) { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }
+                          e.currentTarget.style.background = '#dbeafe';
+                          e.currentTarget.style.borderColor = '#93c5fd';
                         }}
                         onMouseLeave={(e) => {
-                          if (!copiedIds.has(prop.id)) { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }
+                          e.currentTarget.style.background = '#eff6ff';
+                          e.currentTarget.style.borderColor = '#bfdbfe';
                         }}
                       >
-                        {copiedIds.has(prop.id) ? 'Copied!' : 'Copy'}
+                        Street
                       </button>
                     </div>
                   </div>

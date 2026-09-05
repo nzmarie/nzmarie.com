@@ -21,6 +21,24 @@ export function buildPropertyAddress(
   return buildFullAddress([address ?? '', suburb ?? '', city ?? '', region ?? '', postcode ?? '']);
 }
 
+export function buildGoogleMapsUrl(address: string): string {
+  return `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+}
+
+function isMobileDevice(): boolean {
+  return typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+export function openGoogleMaps(address: string): void {
+  if (!address) return;
+  const url = buildGoogleMapsUrl(address);
+  if (isMobileDevice()) {
+    window.location.href = url;
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
 export async function copyText(text: string): Promise<boolean> {
   if (!text) return false;
   // Try modern async clipboard API
