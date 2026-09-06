@@ -59,6 +59,7 @@ interface Filters {
   type: string;
   last_sold_min_years: string;
   last_sold_max_years: string;
+  sort_by: string;
 }
 
 interface PropertyHistoryRecord {
@@ -483,6 +484,7 @@ const DEFAULT_FILTERS: Filters = {
   type: "sale",
   last_sold_min_years: "",
   last_sold_max_years: "",
+  sort_by: "date",
 };
 
 export default function RealestatePage() {
@@ -534,6 +536,7 @@ export default function RealestatePage() {
       if (filters.last_sold_min_years) params.append('last_sold_min_years', filters.last_sold_min_years);
       if (filters.last_sold_max_years) params.append('last_sold_max_years', filters.last_sold_max_years);
     }
+    if (filters.sort_by === 'street') params.append('sort_by', 'street');
 
     const response = await fetch(`/api/admin/realestate?${params}`);
     const result = await response.json();
@@ -644,7 +647,7 @@ export default function RealestatePage() {
 
   const handleClearFilters = () => {
     setAddressInput("");
-    setFilters(DEFAULT_FILTERS);
+    setFilters({ ...DEFAULT_FILTERS, sort_by: 'date' });
     setLastSoldPreset('');
   };
 
@@ -1145,17 +1148,53 @@ export default function RealestatePage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button
-            onClick={handleClearFilters}
-            style={{
-              padding: "12px 24px", backgroundColor: "#e2e8f0", color: "#4a5568",
-              borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: "600",
-              fontSize: "0.95rem", transition: "all 0.2s",
-            }}
-          >
-            Clear All
-          </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-end", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            <div style={{ display: "flex", gap: "4px", borderRadius: "10px", overflow: "hidden", border: "2px solid #e2e8f0" }}>
+              <button
+                onClick={() => {
+                  setFilters((prev) => ({ ...prev, sort_by: 'date' }));
+                }}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: filters.sort_by === 'date' ? '#3b82f6' : 'white',
+                  color: filters.sort_by === 'date' ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: filters.sort_by === 'date' ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Time: Newest first
+              </button>
+              <button
+                onClick={() => {
+                  setFilters((prev) => ({ ...prev, sort_by: 'street' }));
+                }}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: filters.sort_by === 'street' ? '#3b82f6' : 'white',
+                  color: filters.sort_by === 'street' ? 'white' : '#4a5568',
+                  border: 'none', cursor: "pointer", fontSize: "0.9rem",
+                  fontWeight: filters.sort_by === 'street' ? "600" : "500",
+                  transition: "all 0.2s",
+                }}
+              >
+                Street name
+              </button>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              onClick={handleClearFilters}
+              style={{
+                padding: "12px 24px", backgroundColor: "#e2e8f0", color: "#4a5568",
+                borderRadius: "10px", border: "none", cursor: "pointer", fontWeight: "600",
+                fontSize: "0.95rem", transition: "all 0.2s",
+              }}
+            >
+              Clear All
+            </button>
+          </div>
         </div>
       </div>
 

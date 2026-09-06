@@ -52,6 +52,7 @@ function buildQuery(
   lastSoldMinYears: string | null,
   lastSoldMaxYears: string | null,
   lastSoldNone: string | null,
+  sortBy: string | null,
   limit: number,
   offset: number
 ) {
@@ -168,7 +169,21 @@ function buildQuery(
     }
   }
 
-  query += ` ORDER BY r.listing_date DESC NULLS LAST, r.address ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+  if (sortBy === 'street') {
+    query += ` ORDER BY r.address ASC NULLS LAST`;
+  } else {
+    query += ` ORDER BY COALESCE(
+      r.listing_date::timestamptz,
+      r.listing_date_parsed::timestamptz,
+      CASE
+        WHEN r.listing_date_raw ~ '^\d{1,2}\s+\w+\s+\d{4}$' THEN to_date(r.listing_date_raw, 'DD Month YYYY')::timestamptz
+        WHEN r.listing_date_raw ~ '^\d{1,2}\s+\w+$' THEN to_date(r.listing_date_raw || ' ' || EXTRACT(YEAR FROM CURRENT_DATE), 'DD Month YYYY')::timestamptz
+        ELSE NULL
+      END
+    ) DESC NULLS LAST, r.address ASC`;
+  }
+
+  query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
 
   return { query, paramIndex };
@@ -327,6 +342,7 @@ export async function GET(request: Request) {
   const lastSoldMinYears = searchParams.get('last_sold_min_years');
   const lastSoldMaxYears = searchParams.get('last_sold_max_years');
   const lastSoldNone = searchParams.get('last_sold_none');
+  const sortBy = searchParams.get('sort_by');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '18');
   const offset = (page - 1) * limit;
@@ -335,7 +351,7 @@ export async function GET(request: Request) {
   const { query } = buildQuery(
     listingType, COLUMNS, dataParams,
     search, region, city, suburb, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, propertyType,
-    lastSoldMinYears, lastSoldMaxYears, lastSoldNone, limit, offset
+    lastSoldMinYears, lastSoldMaxYears, lastSoldNone, sortBy, limit, offset
   );
 
   const countParams: unknown[] = [];

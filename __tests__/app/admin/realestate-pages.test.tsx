@@ -283,13 +283,59 @@ describe('Realestate Page', () => {
     });
   });
 
-  it('renders Clear All button', async () => {
-    const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
-    render(<RealestatePage />);
+   it('renders Clear All button', async () => {
+     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+     render(<RealestatePage />);
 
-    expect(screen.getByText('Clear All')).toBeDefined();
-  });
-});
+     expect(screen.getByText('Clear All')).toBeDefined();
+   });
+
+   it('renders Time: Newest first sort button', async () => {
+     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+     render(<RealestatePage />);
+
+     expect(screen.getByText('Time: Newest first')).toBeDefined();
+   });
+
+   it('renders Street name sort button', async () => {
+     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+     render(<RealestatePage />);
+
+     expect(screen.getByText('Street name')).toBeDefined();
+   });
+
+   it('calls fetch with sort_by=street when Street name button is clicked', async () => {
+     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+     render(<RealestatePage />);
+
+     await waitFor(() => {
+       expect(screen.getByText('Street name')).toBeDefined();
+     });
+
+     const streetBtn = screen.getByText('Street name').closest('button') as HTMLElement;
+     fireEvent.click(streetBtn);
+
+     await waitFor(() => {
+       expect(streetBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+     });
+   });
+
+   it('calls fetch with sort_by=date when Time: Newest first button is clicked', async () => {
+     const RealestatePage = (await import('../../../app/admin/realestate/page')).default;
+     render(<RealestatePage />);
+
+     await waitFor(() => {
+       expect(screen.getByText('Time: Newest first')).toBeDefined();
+     });
+
+     const dateBtn = screen.getByText('Time: Newest first').closest('button') as HTMLElement;
+     fireEvent.click(dateBtn);
+
+     await waitFor(() => {
+       expect(dateBtn.style.backgroundColor).toBe('rgb(59, 130, 246)');
+     });
+   });
+ });
 
 describe('Realestate Page - Edit Functionality', () => {
   beforeEach(() => {
