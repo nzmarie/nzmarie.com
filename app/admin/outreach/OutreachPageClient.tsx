@@ -4029,15 +4029,23 @@ function ReportFilterSection({
 }) {
   const [loaded, setLoaded] = useState(availableReports.length > 0);
   const [loading, setLoading] = useState(false);
+  const [suburbSentStats, setSuburbSentStats] = useState<Record<string, { total: number; sent: number; unsent: number }>>({});
+  const [showAllSuburbs, setShowAllSuburbs] = useState(false);
+
+  const loadSentStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/outreach/suburb-sent-stats');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) setSuburbSentStats(data.stats);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const loadReports = useCallback(async () => {
     if (loading || loaded) return;
     setLoading(true);
 
-    // Optimistic: apply the default report as soon as it arrives (parallel
-    // with the report list) so the list + "Displaying" data load immediately.
-    // The default report represents a fixed set of addresses, so the Last Sold
-    // preset (e.g. the "5-15 years" default) must be reset to "All" to avoid
-    // silently hiding properties that fall outside the preset's range.
     let optimisticDefault: { suburb: string; label: string } | null = null;
     const applyDefault = async () => {
       try {
@@ -4067,7 +4075,6 @@ function ReportFilterSection({
           }));
           setAvailableReports(reports);
           setLoaded(true);
-          // Re-validate the optimistically-applied default against the list.
           const optimistic = optimisticDefault;
           if (optimistic) {
             const exists = reports.some((r: { suburb: string; quarter: string; year: number }) =>
@@ -4084,14 +4091,15 @@ function ReportFilterSection({
       } catch { /* ignore */ }
     };
 
-    await Promise.all([applyDefault(), loadList()]);
+    await Promise.all([applyDefault(), loadList(), loadSentStats()]);
     setLoading(false);
-  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter, setLastSoldPreset]);
+  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter, setLastSoldPreset, loadSentStats]);
 
   const initRef = useRef(false);
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
+    loadSentStats();
     if (!loaded) {
       loadReports();
     }
@@ -4128,6 +4136,7 @@ function ReportFilterSection({
   const orderedSuburbs = useMemo(() => {
     const latestBySuburb = new Map<string, string>();
     for (const r of availableReports) {
+      if (r.suburb === 'North Shore') continue;
       const ts = r.uploaded_at || '';
       const cur = latestBySuburb.get(r.suburb);
       if (cur === undefined || ts > cur) latestBySuburb.set(r.suburb, ts);
@@ -4136,6 +4145,28 @@ function ReportFilterSection({
       .sort((a, b) => (b[1] || '').localeCompare(a[1] || ''))
       .map(([s]) => s);
   }, [availableReports]);
+
+  const fullySentSuburbs = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of orderedSuburbs) {
+      const stats = suburbSentStats[s];
+      if (stats && stats.unsent === 0 && stats.sent > 0) set.add(s);
+    }
+    return set;
+  }, [orderedSuburbs, suburbSentStats]);
+
+  const visibleSuburbs = useMemo(() => {
+    if (showAllSuburbs) return orderedSuburbs;
+    return orderedSuburbs.filter(s => !fullySentSuburbs.has(s));
+  }, [orderedSuburbs, fullySentSuburbs, showAllSuburbs]);
+
+  const hiddenCount = fullySentSuburbs.size;
+
+  useEffect(() => {
+    if (reportSuburbFilter && fullySentSuburbs.has(reportSuburbFilter)) {
+      setShowAllSuburbs(true);
+    }
+  }, [reportSuburbFilter, fullySentSuburbs]);
 
   const orderedQuarters = useMemo(() => {
     const latestByQuarter = new Map<string, string>();
@@ -4161,7 +4192,7 @@ function ReportFilterSection({
           <button onClick={loadReports} disabled={loading}
             style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >{loading ? 'Loading...' : 'Show Reports'}</button>
-        ) : orderedSuburbs.map(s => (
+        ) : visibleSuburbs.map(s => (
           <button
             key={s}
             onClick={() => {
@@ -4187,6 +4218,38 @@ function ReportFilterSection({
             {s}{defaultReport?.suburb === s ? ' ★' : ''}
           </button>
         ))}
+        {!showAllSuburbs && hiddenCount > 0 && (
+          <button
+            onClick={() => setShowAllSuburbs(true)}
+            style={{
+              padding: '7px 14px',
+              backgroundColor: '#f1f5f9',
+              color: '#64748b',
+              border: '2px solid #cbd5e1',
+              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            More ({hiddenCount})
+          </button>
+        )}
+        {showAllSuburbs && hiddenCount > 0 && (
+          <button
+            onClick={() => setShowAllSuburbs(false)}
+            style={{
+              padding: '7px 14px',
+              backgroundColor: '#f1f5f9',
+              color: '#64748b',
+              border: '2px solid #cbd5e1',
+              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Hide
+          </button>
+        )}
         {reportSuburbFilter && (
           <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); onClearRunFilter(); }}
             style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
