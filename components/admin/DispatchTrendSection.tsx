@@ -11,6 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { SUBURB_PRIORITY_ORDER } from '@/lib/suburb-order';
 
 export type TrendGranularity = 'daily' | 'weekly' | 'monthly' | 'quarterly';
 
@@ -218,13 +219,29 @@ function SuburbDispatchTimeline({
     }
   }
 
-  const sortedSuburbs = Array.from(mergedMap.values())
-    .filter((s) => s.sent_count > 0 || s.junk_count > 0 || s.total_count > 0)
+  const merged = Array.from(mergedMap.values())
+    .filter((s) => s.sent_count > 0 || s.junk_count > 0 || s.total_count > 0);
+
+  const sentSuburbs = merged
+    .filter((s) => s.sent_count > 0)
     .sort((a, b) => {
-      const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
-      const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+      const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : 0;
+      const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : 0;
       return tb - ta;
     });
+
+  const unsentSuburbs = merged
+    .filter((s) => s.sent_count === 0)
+    .sort((a, b) => {
+      const stripQuarter = (name: string) => name.replace(/-Q\d-\d{4}$/i, '').trim();
+      const ia = SUBURB_PRIORITY_ORDER.indexOf(stripQuarter(a.suburb) as (typeof SUBURB_PRIORITY_ORDER)[number]);
+      const ib = SUBURB_PRIORITY_ORDER.indexOf(stripQuarter(b.suburb) as (typeof SUBURB_PRIORITY_ORDER)[number]);
+      const rankA = ia === -1 ? SUBURB_PRIORITY_ORDER.length : ia;
+      const rankB = ib === -1 ? SUBURB_PRIORITY_ORDER.length : ib;
+      return rankA - rankB;
+    });
+
+  const sortedSuburbs = [...sentSuburbs, ...unsentSuburbs];
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
