@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         file_name VARCHAR(200) NOT NULL,
         file_size INT DEFAULT 0,
         uploaded_by VARCHAR(255),
+        scan_count INT DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(suburb)
       )

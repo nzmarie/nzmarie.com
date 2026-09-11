@@ -1892,3 +1892,102 @@ describe('Properties Page - pagination size by view mode', () => {
     });
   });
 });
+
+describe('Properties Page - suburb QR code modal', () => {
+  beforeEach(() => {
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ properties: defaultProperties, total: 45 }] },
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+    });
+    mockUseQuery.mockImplementation(() => ({
+      data: { properties: defaultProperties, total: 45 },
+      isLoading: false,
+      isFetching: false,
+    }));
+  });
+
+  it('shows QR icon next to each suburb button in Quick Filter', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('📷').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('opens QR modal when clicking the QR icon', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('📷').length).toBeGreaterThan(0);
+    });
+
+    const qrIcons = screen.getAllByText('📷');
+    fireEvent.click(qrIcons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to visit/)).toBeDefined();
+    });
+  });
+
+  it('shows correct suburb name and URL in QR modal', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('📷').length).toBeGreaterThan(0);
+    });
+
+    const qrIcons = screen.getAllByText('📷');
+    fireEvent.click(qrIcons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to visit Northcross/)).toBeDefined();
+      expect(screen.getByText('https://nzmarie.com/northcross')).toBeDefined();
+    });
+  });
+
+  it('closes QR modal when clicking Close button', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('📷').length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByText('📷')[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to visit/)).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('Close'));
+    await waitFor(() => {
+      expect(screen.queryByText(/Scan to visit/)).toBeNull();
+    });
+  });
+
+  it('closes QR modal when clicking overlay', async () => {
+    const PropertiesPage = (await import('../../../app/admin/properties/page')).default;
+    render(<PropertiesPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('📷').length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByText('📷')[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to visit/)).toBeDefined();
+    });
+
+    const overlay = screen.getByText(/Scan to visit/).closest('div')?.parentElement;
+    expect(overlay).toBeTruthy();
+    fireEvent.click(overlay!);
+    await waitFor(() => {
+      expect(screen.queryByText(/Scan to visit/)).toBeNull();
+    });
+  });
+});

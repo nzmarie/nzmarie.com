@@ -949,6 +949,10 @@ export default function PropertiesPage() {
   const startStreetRef = useRef('');
   const streetNextOffsetRef = useRef<number | null>(0);
 
+  const toSlug = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
+  const [qrSuburb, setQrSuburb] = useState<string | null>(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+
   // streetModeOn: true only when street mode is active AND a specific street has
   // been selected. Without a selectedStreet, react-query stays enabled so the
   // suburb-level list still shows while the user picks a street.
@@ -2155,6 +2159,7 @@ export default function PropertiesPage() {
                   fontWeight: filters.suburb === suburb ? '600' : '500',
                   transition: 'all 0.2s ease',
                   boxShadow: filters.suburb === suburb ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  position: 'relative',
                 }}
                 onMouseEnter={(e) => {
                   if (filters.suburb !== suburb) {
@@ -2170,10 +2175,86 @@ export default function PropertiesPage() {
                 }}
               >
                 {suburb}
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setQrSuburb(suburb);
+                    setQrModalOpen(true);
+                  }}
+                  style={{
+                    marginLeft: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    opacity: 0.7,
+                  }}
+                  title="Scan QR Code"
+                  aria-hidden="true"
+                >
+                  📷
+                </span>
               </button>
             ))}
           </div>
         </div>
+
+        {qrModalOpen && qrSuburb && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+            }}
+            onClick={() => { setQrModalOpen(false); setQrSuburb(null); }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                padding: '24px',
+                textAlign: 'center',
+                minWidth: '300px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: '600', color: '#1a202c' }}>
+                Scan to visit {qrSuburb}
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '16px' }}>
+                https://nzmarie.com/{toSlug(qrSuburb)}
+              </p>
+              <Image
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`https://nzmarie.com/${toSlug(qrSuburb)}`)}`}
+                alt={`${qrSuburb} QR Code`}
+                width={300}
+                height={300}
+                unoptimized
+                style={{ display: 'block', margin: '0 auto 16px', borderRadius: '8px' }}
+              />
+              <button
+                onClick={() => { setQrModalOpen(false); setQrSuburb(null); }}
+                style={{
+                  padding: '8px 24px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filter by Street */}
         <div style={{ marginBottom: "20px", padding: "16px", border: "1px solid #e2e8f0", borderRadius: "12px", backgroundColor: streetModeApplied ? "#f0f9ff" : "#f8fafc" }}>

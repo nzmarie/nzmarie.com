@@ -5,12 +5,12 @@ export async function GET(request: Request) {
   try {
     await marieDB.query(
       'UPDATE suburb_qr_codes SET scan_count = scan_count + 1 WHERE suburb = $1',
-      ['devonport']
+      ['rosedale']
     );
   } catch {
   }
   const redirectUrl = new URL('/', request.url);
   redirectUrl.searchParams.set('utm_source', 'qr');
-  redirectUrl.searchParams.set('utm_campaign', 'devonport');
+  redirectUrl.searchParams.set('utm_campaign', 'rosedale');
   return NextResponse.redirect(redirectUrl);
 }
