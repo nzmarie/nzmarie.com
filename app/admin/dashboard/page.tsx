@@ -198,6 +198,8 @@ export default function AdminDashboardPage() {
     return tb - ta;
   });
 
+  const sentSummarySuburbs = [...(stats?.sentSummary?.suburbs ?? [])].sort((a, b) => b.sent_count - a.sent_count);
+
   return (
     <div className="space-y-6">
       {error && (
@@ -258,8 +260,8 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100">
             <div className="flex flex-wrap gap-1.5">
-              {stats?.sentSummary?.suburbs && stats.sentSummary.suburbs.length > 0 ? (
-                stats.sentSummary.suburbs.map((item) => (
+              {stats?.sentSummary?.suburbs && sentSummarySuburbs.length > 0 ? (
+                sentSummarySuburbs.map((item) => (
                   <span
                     key={item.suburb}
                     className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
