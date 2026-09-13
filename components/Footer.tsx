@@ -1,10 +1,15 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
+import Image from "next/image";
 import { FaEnvelope, FaFacebookF, FaLinkedinIn, FaPhone } from "react-icons/fa";
+import WeChatIcon from "./WeChatIcon";
 import { translations, Language } from "../lib/translations";
 
 export default function Footer({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].footer;
   const PROFILE_URL = 'https://www.barfoot.co.nz/our-people/m.nian';
+  const [showWechatQr, setShowWechatQr] = useState(false);
 
   const renderAboutTextWithLink = (text: string) => {
     // Preserve newlines and replace Barfoot & Thompson with a safe external link
@@ -69,6 +74,10 @@ export default function Footer({ lang = "en" }: { lang?: Language }) {
               </li>
             </ul>
             <p className="mt-3 flex items-center gap-3 text-sm text-gray-300">
+              <WeChatIcon className="w-5 h-5 text-green-400 shrink-0" />
+              <span>{t.wechat}: {t.wechatNumber}</span>
+            </p>
+            <p className="mt-3 flex items-center gap-3 text-sm text-gray-300">
               <span className="text-blue-400">🏛️</span>
               {lang === 'zh' ? (
                 <a href={PROFILE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white underline">
@@ -93,6 +102,14 @@ export default function Footer({ lang = "en" }: { lang?: Language }) {
               >
                 <FaEnvelope className="text-white text-base" />
               </a>
+              <button
+                type="button"
+                aria-label="WeChat"
+                onClick={() => setShowWechatQr(!showWechatQr)}
+                className="w-10 h-10 rounded-full bg-green-600 hover:bg-green-700 flex items-center justify-center transition-colors duration-300"
+              >
+                <WeChatIcon className="w-5 h-5 text-white" />
+              </button>
               <a
                 href="https://www.facebook.com/nian.hong.10"
                 target="_blank"
@@ -112,6 +129,20 @@ export default function Footer({ lang = "en" }: { lang?: Language }) {
                 <FaLinkedinIn className="text-white text-base" />
               </a>
             </div>
+            {showWechatQr && (
+              <div className="mt-4 flex justify-center">
+                <div className="bg-white rounded-xl p-4 shadow-lg">
+                  <Image
+                    src="/Marie-Wechat.jpg"
+                    alt={t.wechatQrAlt}
+                    width={150}
+                    height={150}
+                    className="rounded-lg"
+                  />
+                  <p className="text-center text-xs text-gray-500 mt-2">{t.wechatScanHint}</p>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

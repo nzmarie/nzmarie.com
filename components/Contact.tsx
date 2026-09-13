@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import { FaEnvelope, FaFacebookF, FaLinkedinIn } from "react-icons/fa";
 import { translations, Language } from "../lib/translations";
+
+const PROFILE_URL = 'https://www.barfoot.co.nz/our-people/m.nian';
 
 export default function Contact({ lang = "en" }: { lang?: Language }) {
   const t = translations[lang].contact;
@@ -78,36 +81,67 @@ export default function Contact({ lang = "en" }: { lang?: Language }) {
           </div>
         </div>
 
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {contactLinks.map(({ label, href, Icon, target, detail, copyKey }) => (
-              <div
-                key={label}
-                className="flex flex-col items-center gap-3 bg-white shadow-md rounded-xl p-8 transition transform hover:-translate-y-1 hover:shadow-lg"
-              >
-                <a
-                  href={href}
-                  target={target}
-                  rel={target === "_blank" ? "noopener noreferrer" : undefined}
-                  className="flex flex-col items-center gap-2"
+              <React.Fragment key={label}>
+                <div
+                  className="flex flex-col items-center gap-3 bg-white shadow-md rounded-xl p-8 transition transform hover:-translate-y-1 hover:shadow-lg"
                 >
-                  <Icon className="text-4xl text-gray-800" />
-                  <span className="text-lg font-semibold text-gray-700">{label}</span>
-                </a>
-                {detail && copyKey && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleCopy(detail, copyKey);
-                    }}
-                    className="text-sm text-gray-500 underline underline-offset-4"
+                  <a
+                    href={href}
+                    target={target}
+                    rel={target === "_blank" ? "noopener noreferrer" : undefined}
+                    className="flex flex-col items-center gap-2"
                   >
-                    {copiedKey === copyKey ? (lang === "zh" ? "已复制！" : "Copied!") : detail}
-                  </button>
+                    <Icon className="text-4xl text-gray-800" />
+                    <span className="text-lg font-semibold text-gray-700">{label}</span>
+                  </a>
+                  {detail && copyKey && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        handleCopy(detail, copyKey);
+                      }}
+                      className="text-sm text-gray-500 underline underline-offset-4"
+                    >
+                      {copiedKey === copyKey ? (lang === "zh" ? "已复制！" : "Copied!") : detail}
+                    </button>
+                  )}
+                </div>
+                {copyKey === "email" && (
+                  <>
+                    <div className="flex flex-col items-center gap-3 bg-white shadow-md rounded-xl p-8 transition transform hover:-translate-y-1 hover:shadow-lg">
+                      <div className="flex flex-col items-center gap-2">
+                        <Image
+                          src="/Marie-Wechat.jpg"
+                          alt={t.wechatQrAlt}
+                          width={120}
+                          height={120}
+                          className="rounded-lg"
+                        />
+                        <span className="text-lg font-semibold text-gray-700">{t.wechat}</span>
+                      </div>
+                      <p className="text-sm text-gray-500">{t.wechatScanHint}</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-3 bg-white shadow-md rounded-xl p-8 transition transform hover:-translate-y-1 hover:shadow-lg">
+                      <a
+                        href={PROFILE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-2"
+                      >
+                        <span className="text-4xl">🏛️</span>
+                        <span className="text-lg font-semibold text-gray-700">
+                          {lang === "zh" ? "Marie 的 Barfoot 资料" : "Marie's Barfoot Profile"}
+                        </span>
+                      </a>
+                    </div>
+                  </>
                 )}
-              </div>
+              </React.Fragment>
             ))}
           </div>
         </div>

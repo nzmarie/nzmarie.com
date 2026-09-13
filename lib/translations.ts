@@ -45,6 +45,9 @@ export const translations = {
             name: "Marie Nian",
             fluent: "Fluent in English & Mandarin",
             contactBtn: "Contact Me",
+            wechat: "WeChat",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie WeChat QR Code",
         },
         services: {
             title: "Why Choose My Services?",
@@ -99,6 +102,10 @@ export const translations = {
             subtitle: "Marie Nian | Licensed Real Estate Salesperson, Barfoot & Thompson",
             motto: "Specialise in Hyper-Local Property Movements across North Shore & Greater Auckland",
             email: "Email Marie",
+            wechat: "WeChat",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie WeChat QR Code",
+            wechatScanHint: "Scan to connect on WeChat",
         },
         footer: {
             aboutTitle: "About Me",
@@ -107,6 +114,10 @@ export const translations = {
             socialText: "Let us be social",
             copyright: "Copyright © {year} NZ Marie. All rights reserved.",
             license: "Marie Nian · Licensed Residential Sales · Barfoot & Thompson · Under REAA 2008",
+            wechat: "WeChat",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie WeChat QR Code",
+            wechatScanHint: "Scan to connect on WeChat",
         },
         qualifications: {
             title: "My Qualifications",
@@ -243,6 +254,9 @@ export const translations = {
             name: "Marie Nian",
             fluent: "精通英语与普通话",
             contactBtn: "联系我",
+            wechat: "微信",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie 微信二维码",
         },
         services: {
             title: "为什么选择我的服务？",
@@ -297,6 +311,10 @@ export const translations = {
             subtitle: "Marie Nian | 持牌房地产销售人员, Barfoot & Thompson",
             motto: "专注于奥克兰北岸及大奥克兰地区的超本地化房产动态",
             email: "发送邮件",
+            wechat: "微信",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie 微信二维码",
+            wechatScanHint: "扫码添加微信",
         },
         footer: {
             aboutTitle: "关于我",
@@ -305,6 +323,10 @@ export const translations = {
             socialText: "社交媒体",
             copyright: "版权所有 © {year} NZ Marie。保留所有权利。",
             license: "Marie Nian · 持牌房地产销售人员 · Barfoot & Thompson · Under REAA 2008",
+            wechat: "微信",
+            wechatNumber: "+64 21 069 3089",
+            wechatQrAlt: "Marie 微信二维码",
+            wechatScanHint: "扫码添加微信",
         },
         qualifications: {
             title: "专业资质",
