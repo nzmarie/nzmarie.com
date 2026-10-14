@@ -5,6 +5,7 @@ import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { invalidateStreetClustersForSuburb } from '@/lib/redis';
 import { batchGetCachedR2Urls } from '@/lib/streetview';
+import { parseReportQuarter } from '@/lib/outreach-quarter';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -74,11 +75,21 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
 
   const conditions: string[] = [];
   const params: unknown[] = [];
+  const qi = parseReportQuarter(reportQuarter);
 
   if (status === 'sent') {
-    conditions.push(`EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = id)`);
+    if (qi) {
+      let sub = `EXISTS (SELECT 1 FROM outreach_send_logs sl2 LEFT JOIN suburb_reports sr2 ON sl2.suburb_report_id = sr2.id WHERE sl2.outreach_property_id = outreach_enriched.id`;
+      sub += ` AND ((sr2.quarter = $${params.length + 1} AND sr2.year = $${params.length + 2}) OR sl2.campaign_key ~ $${params.length + 3}))`;
+      params.push(qi.quarter, qi.year, qi.campaignPattern);
+      conditions.push(sub);
+    } else {
+      conditions.push(`EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = outreach_enriched.id)`);
+    }
   } else if (status === 'pending') {
-    if (sentStatus === 'all' || !sentStatus) {
+    if (qi) {
+      conditions.push(`status IN ('pending', 'sent')`);
+    } else if (sentStatus === 'all' || !sentStatus) {
       conditions.push(`status IN ('pending', 'sent')`);
     } else if (sentStatus === 'sent') {
       conditions.push(`(status = 'sent' OR status = 'pending')`);
@@ -107,7 +118,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
         .map((_, i) => `(sl6.sent_at >= $${params.length + 1 + i * 2} AND sl6.sent_at < $${params.length + 2 + i * 2})`)
         .join(' OR ');
       conditions.push(
-        `EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = id AND (${rangeClauses}))`
+        `EXISTS (SELECT 1 FROM outreach_send_logs sl6 WHERE sl6.outreach_property_id = outreach_enriched.id AND (${rangeClauses}))`
       );
       for (const range of dateRanges) {
         params.push(range.start, range.end);
@@ -116,7 +127,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   }
 
   if (campaign) {
-    conditions.push(`(campaign = $${params.length + 1} OR last_campaign = $${params.length + 1} OR EXISTS (SELECT 1 FROM outreach_send_logs sl WHERE sl.outreach_property_id = id AND sl.campaign_key = $${params.length + 1}))`);
+    conditions.push(`(campaign = $${params.length + 1} OR last_campaign = $${params.length + 1} OR EXISTS (SELECT 1 FROM outreach_send_logs sl WHERE sl.outreach_property_id = outreach_enriched.id AND sl.campaign_key = $${params.length + 1}))`);
     params.push(campaign);
   }
   if (region) {
@@ -185,48 +196,42 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     conditions.push('(no_junk_mail = false OR no_junk_mail IS NULL)');
   }
 
-  if (sentStatus === 'sent') {
-    if (suburb) {
-      let sub = `EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
-      params.push(suburb);
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          const q = parts[1];
-          const qAlt = reportQuarter.replace('-', '_');
-          sub += ` AND ((sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}) OR sl3.campaign_key = $${params.length + 3} OR sl3.campaign_key = $${params.length + 4} OR last_campaign = $${params.length + 3} OR last_campaign = $${params.length + 4})`;
-          params.push(q, isNaN(y) ? 0 : y, reportQuarter, qAlt);
-        }
+  if (sentStatus === 'sent' || sentStatus === 'unsent') {
+    const isSent = sentStatus === 'sent';
+    const existsOp = isSent ? 'EXISTS' : 'NOT EXISTS';
+    if (qi) {
+      let sub = `SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = outreach_enriched.id`;
+      if (suburb) {
+        sub += ` AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
+        params.push(suburb);
       }
-      sub += ') OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\'';
-      conditions.push(`(${sub})`);
-    } else {
-      conditions.push('(EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id) OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\')');
-    }
-  } else if (sentStatus === 'unsent') {
-    if (suburb) {
-      let sub = `NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
-      params.push(suburb);
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          const q = parts[1];
-          const qAlt = reportQuarter.replace('-', '_');
-          sub += ` AND ((sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}) OR sl3.campaign_key = $${params.length + 3} OR sl3.campaign_key = $${params.length + 4} OR last_campaign = $${params.length + 3} OR last_campaign = $${params.length + 4})`;
-          params.push(q, isNaN(y) ? 0 : y, reportQuarter, qAlt);
-        }
+      sub += ` AND ((sr3.quarter = $${params.length + 1} AND sr3.year = $${params.length + 2}) OR sl3.campaign_key ~ $${params.length + 3} OR last_campaign ~ $${params.length + 3})`;
+      params.push(qi.quarter, qi.year, qi.campaignPattern);
+      conditions.push(`${existsOp} (${sub})`);
+    } else if (suburb) {
+      if (isSent) {
+        let sub = `EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = outreach_enriched.id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
+        params.push(suburb);
+        sub += ') OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\'';
+        conditions.push(`(${sub})`);
+      } else {
+        let sub = `NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 LEFT JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = outreach_enriched.id AND (sl3.suburb = $${params.length + 1} OR sr3.suburb = $${params.length + 1} OR sl3.suburb IS NULL)`;
+        params.push(suburb);
+        sub += ') AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\'';
+        conditions.push(`(${sub})`);
       }
-      sub += ') AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\'';
-      conditions.push(`(${sub})`);
+    } else if (isSent) {
+      conditions.push('(EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = outreach_enriched.id) OR COALESCE(total_send_count, 0) > 0 OR last_sent_at IS NOT NULL OR sent_at IS NOT NULL OR status = \'sent\')');
     } else {
-      conditions.push('(NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = id) AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\')');
+      conditions.push('(NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = outreach_enriched.id) AND COALESCE(total_send_count, 0) = 0 AND last_sent_at IS NULL AND sent_at IS NULL AND status <> \'sent\')');
     }
-    conditions.push('(no_junk_mail IS NULL OR no_junk_mail = false)');
+    if (!isSent) {
+      conditions.push('(no_junk_mail IS NULL OR no_junk_mail = false)');
+    }
   }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+  const whereParamCount = params.length;
 
   const orderDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
   let orderClause: string;
@@ -250,6 +255,14 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   if (startStreet) {
     params.push(startStreet);
   }
+
+  let quarterStatusSelect = '';
+  if (qi) {
+    const base = params.length;
+    quarterStatusSelect = `, CASE WHEN EXISTS (SELECT 1 FROM outreach_send_logs slq LEFT JOIN suburb_reports srq ON slq.suburb_report_id = srq.id WHERE slq.outreach_property_id = outreach_enriched.id AND ((srq.quarter = $${base + 1} AND srq.year = $${base + 2}) OR slq.campaign_key ~ $${base + 3})) THEN 'sent' ELSE 'pending' END AS status`;
+    params.push(qi.quarter, qi.year, qi.campaignPattern);
+  }
+  const limitIdx = params.length + 1;
   params.push(limit, offset);
 
   const cardFields = `
@@ -266,14 +279,14 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
     latest_send_quarter, latest_send_year, latest_send_report_suburb
   `;
 
-  const selectClause = view === 'card' ? cardFields : '*';
+  const selectClause = (view === 'card' ? cardFields : '*') + quarterStatusSelect;
 
   const dataQuery = `
     SELECT ${selectClause}
     FROM outreach_enriched
     ${whereClause}
     ${orderClause}
-    LIMIT $${params.length - 1} OFFSET $${params.length}
+    LIMIT $${limitIdx} OFFSET $${limitIdx + 1}
   `;
 
   const result = await marieDB.query(dataQuery, params);
@@ -307,7 +320,7 @@ async function handleMVQuery(searchParams: URLSearchParams, view: string) {
   // full table scan on every load.
   let total = 0;
   if (offset === 0 || includeTotal) {
-    const countParams = params.slice(0, params.length - 2); // strip LIMIT / OFFSET
+    const countParams = params.slice(0, whereParamCount); // WHERE-clause params only
     const countResult = await marieDB.query(
       `SELECT COUNT(*) AS total FROM outreach_enriched ${whereClause}`,
       countParams
@@ -352,6 +365,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   const noJunkMail = searchParams.get('no_junk_mail');
   const sentStatus = searchParams.get('sent_status');
   const reportQuarter = searchParams.get('report_quarter');
+  const qiLegacy = parseReportQuarter(reportQuarter);
   const sentDates = (searchParams.get('sent_dates') || '').split(',').map(s => s.trim()).filter(Boolean);
   const sortMode = searchParams.get('sort_mode');
   const startStreet = searchParams.get('start_street')?.trim() || '';
@@ -359,7 +373,7 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
 
   let query = `
     SELECT
-      op.*,
+      op.*@@QUARTER_STATUS@@,
       ls.report_title as latest_send_title,
       ls.sent_at as latest_sent_at,
       ls.campaign_key as latest_campaign,
@@ -414,9 +428,17 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
   let idx = 1;
 
   if (status === 'sent') {
-    query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = op.id)`;
+    if (qiLegacy) {
+      query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl2 LEFT JOIN suburb_reports sr2 ON sl2.suburb_report_id = sr2.id WHERE sl2.outreach_property_id = op.id AND ((sr2.quarter = $${idx} AND sr2.year = $${idx + 1}) OR sl2.campaign_key ~ $${idx + 2}))`;
+      params.push(qiLegacy.quarter, qiLegacy.year, qiLegacy.campaignPattern);
+      idx += 3;
+    } else {
+      query += ` AND EXISTS (SELECT 1 FROM outreach_send_logs sl2 WHERE sl2.outreach_property_id = op.id)`;
+    }
   } else if (status === 'pending') {
-    if (sentStatus === 'all' || !sentStatus) {
+    if (qiLegacy) {
+      query += ` AND op.status IN ('pending', 'sent')`;
+    } else if (sentStatus === 'all' || !sentStatus) {
       query += ` AND op.status IN ('pending', 'sent')`;
     } else if (sentStatus === 'sent') {
       query += ` AND (op.status = 'sent' OR op.status = 'pending')`;
@@ -501,43 +523,39 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     query += ` AND (p.no_junk_mail = false OR p.no_junk_mail IS NULL)`;
   }
 
-  if (sentStatus === 'sent') {
-    if (suburb) {
-      let sub = `SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = op.id AND sr3.suburb = $${idx}`;
+  if (sentStatus === 'sent' || sentStatus === 'unsent') {
+    const isSent = sentStatus === 'sent';
+    const existsOp = isSent ? 'EXISTS' : 'NOT EXISTS';
+    let sub = `SELECT 1 FROM outreach_send_logs sl3 ${qiLegacy ? 'LEFT JOIN' : 'JOIN'} suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = op.id`;
+    if (qiLegacy) {
+      if (suburb) {
+        sub += ` AND (sl3.suburb = $${idx} OR sr3.suburb = $${idx} OR sl3.suburb IS NULL)`;
+        params.push(suburb);
+        idx++;
+      }
+      sub += ` AND ((sr3.quarter = $${idx} AND sr3.year = $${idx + 1}) OR sl3.campaign_key ~ $${idx + 2} OR op.last_campaign ~ $${idx + 2})`;
+      params.push(qiLegacy.quarter, qiLegacy.year, qiLegacy.campaignPattern);
+      idx += 3;
+      query += ` AND (${existsOp} (${sub}))`;
+    } else if (suburb) {
+      sub += ` AND sr3.suburb = $${idx}`;
       params.push(suburb);
       idx++;
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx + 1}`;
-          params.push(parts[1], isNaN(y) ? 0 : y);
-          idx += 2;
-        }
+      if (isSent) {
+        query += ` AND (EXISTS (${sub}) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
+      } else {
+        query += ` AND (NOT EXISTS (${sub}) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
       }
-      query += ` AND (EXISTS (${sub}) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
     } else {
-      query += ` AND (EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
-    }
-  } else if (sentStatus === 'unsent') {
-    if (suburb) {
-      let sub = `SELECT 1 FROM outreach_send_logs sl3 JOIN suburb_reports sr3 ON sl3.suburb_report_id = sr3.id WHERE sl3.outreach_property_id = op.id AND sr3.suburb = $${idx}`;
-      params.push(suburb);
-      idx++;
-      if (reportQuarter) {
-        const parts = reportQuarter.split('-');
-        if (parts.length === 2) {
-          const y = parseInt(parts[0], 10);
-          sub += ` AND sr3.quarter = $${idx} AND sr3.year = $${idx + 1}`;
-          params.push(parts[1], isNaN(y) ? 0 : y);
-          idx += 2;
-        }
+      if (isSent) {
+        query += ` AND (EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
+      } else {
+        query += ` AND (NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
       }
-      query += ` AND (NOT EXISTS (${sub}) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
-    } else {
-      query += ` AND (NOT EXISTS (SELECT 1 FROM outreach_send_logs sl3 WHERE sl3.outreach_property_id = op.id) AND op.status <> 'sent' AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
     }
-    query += ` AND (p.no_junk_mail IS NULL OR p.no_junk_mail = false)`;
+    if (!isSent) {
+      query += ` AND (p.no_junk_mail IS NULL OR p.no_junk_mail = false)`;
+    }
   }
 
   if (sentDates.length > 0) {
@@ -602,6 +620,14 @@ async function handleLegacyQuery(searchParams: URLSearchParams) {
     }
     params.push(limit, offset);
   }
+
+  let quarterStatusSelect = '';
+  if (qiLegacy) {
+    const base = params.length;
+    quarterStatusSelect = `, CASE WHEN EXISTS (SELECT 1 FROM outreach_send_logs slq LEFT JOIN suburb_reports srq ON slq.suburb_report_id = srq.id WHERE slq.outreach_property_id = op.id AND ((srq.quarter = $${base + 1} AND srq.year = $${base + 2}) OR slq.campaign_key ~ $${base + 3})) THEN 'sent' ELSE 'pending' END AS status`;
+    params.push(qiLegacy.quarter, qiLegacy.year, qiLegacy.campaignPattern);
+  }
+  query = query.replace('@@QUARTER_STATUS@@', quarterStatusSelect);
 
   const result = await marieDB.query(query, params);
 

@@ -33,7 +33,7 @@ describe('Cron MV Refresh GET /api/cron/refresh-outreach-mv', () => {
   });
 
   it('refreshes MV with correct auth', async () => {
-    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+    vi.mocked(marieDB.query).mockResolvedValue({ rows: [] } as any);
 
     const response = await GET(new Request('http://localhost:3000/api/cron/refresh-outreach-mv', {
       headers: { Authorization: 'Bearer test-secret' },
@@ -42,6 +42,15 @@ describe('Cron MV Refresh GET /api/cron/refresh-outreach-mv', () => {
     expect(response.status).toBe(200);
     expect(marieDB.query).toHaveBeenCalledWith(
       'REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched'
+    );
+    expect(marieDB.query).toHaveBeenCalledWith(
+      'REFRESH MATERIALIZED VIEW mv_suburb_quarter_summary'
+    );
+    expect(marieDB.query).toHaveBeenCalledWith(
+      'REFRESH MATERIALIZED VIEW mv_quarter_overview'
+    );
+    expect(marieDB.query).toHaveBeenCalledWith(
+      'REFRESH MATERIALIZED VIEW mv_dispatch_timeline'
     );
   });
 

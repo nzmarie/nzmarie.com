@@ -8,7 +8,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    await marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched');
+    await Promise.all([
+      marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched'),
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_suburb_quarter_summary'),
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_quarter_overview'),
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_dispatch_timeline'),
+    ]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Cron MV refresh failed:', error);

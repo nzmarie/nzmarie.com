@@ -73,6 +73,7 @@ describe('GET /api/admin/dashboard/stats', () => {
       total_sent: 10,
       suburb_count: 1,
       suburbs: [{ suburb: 'Albany', sent_count: 10 }],
+      quarterly: [],
     });
     expect(body.stats.outreachBySuburb).toHaveLength(1);
     expect(body.stats.scanStats).toEqual({
@@ -162,7 +163,7 @@ describe('GET /api/admin/dashboard/stats', () => {
 
     let capturedSql = '';
     vi.mocked(db.execute).mockImplementation(((sql: any) => {
-      capturedSql = JSON.stringify(sql?.queryChunks ?? []);
+      capturedSql += JSON.stringify(sql?.queryChunks ?? []);
       return { rows: [mockRow] };
     }) as any);
 
@@ -181,6 +182,7 @@ describe('GET /api/admin/dashboard/stats', () => {
         { suburb: 'Albany', sent_count: 5 },
         { suburb: 'Torbay', sent_count: 3 },
       ],
+      quarterly: [],
     });
   });
 
@@ -326,6 +328,8 @@ describe('GET /api/admin/dashboard/stats', () => {
       {
         suburb: 'Torbay-Q2-2026',
         raw_suburb: 'Torbay',
+        quarter_key: null,
+        report_url: null,
         sent_count: 15,
         junk_count: 2,
         unsent_count: 3,
@@ -336,6 +340,8 @@ describe('GET /api/admin/dashboard/stats', () => {
       {
         suburb: 'Albany-Q2-2026',
         raw_suburb: 'Albany',
+        quarter_key: null,
+        report_url: null,
         sent_count: 3,
         junk_count: 1,
         unsent_count: 0,
@@ -380,6 +386,8 @@ describe('GET /api/admin/dashboard/stats', () => {
       {
         suburb: 'Torbay-Q2-2026',
         raw_suburb: 'Torbay',
+        quarter_key: null,
+        report_url: null,
         sent_count: 10,
         junk_count: 2,
         unsent_count: 0,
@@ -431,7 +439,7 @@ describe('GET /api/admin/dashboard/stats', () => {
 
     let capturedSql = '';
     vi.mocked(db.execute).mockImplementation(((sql: any) => {
-      capturedSql = JSON.stringify(sql?.queryChunks ?? []);
+      capturedSql += JSON.stringify(sql?.queryChunks ?? []);
       return { rows: [mockRow] };
     }) as any);
 
@@ -467,5 +475,159 @@ describe('GET /api/admin/dashboard/stats', () => {
       seriesBySuburb: { daily: {}, weekly: {}, monthly: {}, quarterly: {} },
       bySuburb: [],
     });
+  });
+
+  it('builds quarterly sent summary with report links and dispatch quarter keys', async () => {
+    const mainRow = {
+      new_leads: '0', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      sent_summary_suburbs: null, sent_summary_suburb_count: '0', sent_summary_total_sent: '0',
+      quarterly_suburb_sent: [
+        { quarter_key: '2026-Q3', suburb: 'Oteha', sent_count: '5', last_sent_at: '2026-10-11T00:00:00.000Z' },
+        { quarter_key: '2026-Q3', suburb: 'Torbay', sent_count: '3', last_sent_at: '2026-10-12T00:00:00.000Z' },
+        { quarter_key: '2026-Q2', suburb: 'Oteha', sent_count: '209', last_sent_at: '2026-10-01T00:00:00.000Z' },
+        { quarter_key: null, suburb: 'Broken', sent_count: '1', last_sent_at: null },
+      ],
+      dispatch_by_suburb: [
+        { suburb: 'Oteha', campaign_key: '2026_Q3_Oteha', sent_count: '5', junk_count: '0', total_count: '5', first_sent_at: null, last_sent_at: '2026-10-11T00:00:00.000Z' },
+        { suburb: 'Oteha', campaign_key: '2026_Q2_Oteha', sent_count: '209', junk_count: '0', total_count: '209', first_sent_at: null, last_sent_at: '2026-10-01T00:00:00.000Z' },
+        { suburb: 'Torbay', campaign_key: 'Torbay', sent_count: '1', junk_count: '0', total_count: '1', first_sent_at: null, last_sent_at: null },
+      ],
+      sent_daily: [], junk_daily: [], sent_weekly: [], junk_weekly: [],
+      sent_monthly: [], junk_monthly: [], sent_quarterly: [], junk_quarterly: [],
+    };
+
+    let allSql = '';
+    vi.mocked(db.execute).mockImplementation(((sql: any) => {
+      const text = JSON.stringify(sql?.queryChunks ?? []);
+      if (text.includes('file_url')) {
+        return { rows: [
+          { suburb: 'Oteha', quarter: 'Q3', year: 2026, file_url: 'https://example.com/oteha-q3.pdf' },
+          { suburb: 'Oteha', quarter: 'Q2', year: 2026, file_url: 'https://example.com/oteha-q2.pdf' },
+        ] };
+      }
+      allSql += text;
+      return { rows: [mainRow] };
+    }) as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(allSql).toContain('quarterly_suburb_sent_cte');
+    expect(allSql).toContain('substring(sl.campaign_key');
+    expect(allSql).toContain('COUNT(DISTINCT op.id)');
+    expect(allSql).toContain('[0-9]{4}');
+    expect(allSql).not.toContain('^d{4}');
+    expect(body.stats.sentSummary.total_sent).toBe(217);
+    expect(body.stats.sentSummary.quarterly).toEqual([
+      {
+        quarter_key: '2026-Q3',
+        total_sent: 8,
+        suburbs: [
+          { suburb: 'Oteha', sent_count: 5, last_sent_at: '2026-10-11T00:00:00.000Z', report_url: 'https://example.com/oteha-q3.pdf' },
+          { suburb: 'Torbay', sent_count: 3, last_sent_at: '2026-10-12T00:00:00.000Z', report_url: null },
+        ],
+      },
+      {
+        quarter_key: '2026-Q2',
+        total_sent: 209,
+        suburbs: [
+          { suburb: 'Oteha', sent_count: 209, last_sent_at: '2026-10-01T00:00:00.000Z', report_url: 'https://example.com/oteha-q2.pdf' },
+        ],
+      },
+    ]);
+
+    const bySuburb = body.stats.dispatchTrend.bySuburb;
+    const otehaQ3 = bySuburb.find((s: { suburb: string }) => s.suburb === 'Oteha-Q3-2026');
+    const otehaQ2 = bySuburb.find((s: { suburb: string }) => s.suburb === 'Oteha-Q2-2026');
+    expect(otehaQ3).toMatchObject({
+      quarter_key: '2026-Q3',
+      report_url: 'https://example.com/oteha-q3.pdf',
+    });
+    expect(otehaQ2).toMatchObject({
+      quarter_key: '2026-Q2',
+      report_url: 'https://example.com/oteha-q2.pdf',
+    });
+    const plainTorbay = bySuburb.find((s: { suburb: string }) => s.suburb.startsWith('Torbay-'));
+    expect(plainTorbay).toMatchObject({ quarter_key: null, report_url: null });
+  });
+
+  it('matches report URLs case-insensitively', async () => {
+    const mainRow = {
+      new_leads: '0', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      sent_summary_suburbs: null, sent_summary_suburb_count: '0', sent_summary_total_sent: '0',
+      quarterly_suburb_sent: [
+        { quarter_key: '2026-Q2', suburb: 'Oteha', sent_count: '209', last_sent_at: '2026-10-01T00:00:00.000Z' },
+      ],
+      dispatch_by_suburb: [],
+      sent_daily: [], junk_daily: [], sent_weekly: [], junk_weekly: [],
+      sent_monthly: [], junk_monthly: [], sent_quarterly: [], junk_quarterly: [],
+    };
+
+    vi.mocked(db.execute).mockImplementation(((sql: any) => {
+      const text = JSON.stringify(sql?.queryChunks ?? []);
+      if (text.includes('file_url')) {
+        return { rows: [
+          { suburb: 'oteha', quarter: 'q2', year: 2026, file_url: 'https://example.com/oteha-q2.pdf' },
+        ] };
+      }
+      return { rows: [mainRow] };
+    }) as any);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.stats.sentSummary.quarterly[0].suburbs[0].report_url).toBe('https://example.com/oteha-q2.pdf');
+  });
+
+  it('keeps report_url when merging fallback-campaign rows with proper campaign rows', async () => {
+    const baseRow = {
+      new_leads: '0', high_priority_leads: '0', pending_outreach: '0',
+      sent_outreach: '0', today_followups: '0', overdue_followups: '0',
+      today_downloads: '0', total_downloads: '0', month_downloads: '0',
+      total_bookings: '0', month_bookings: '0', qr_codes_total: '0',
+      pdf_reports_total: '0', outreach_by_suburb: null, recent_downloads: null,
+      sent_summary_suburbs: null, sent_summary_suburb_count: '0', sent_summary_total_sent: '0',
+      quarterly_suburb_sent: [],
+      sent_daily: [], junk_daily: [], sent_weekly: [], junk_weekly: [],
+      sent_monthly: [], junk_monthly: [], sent_quarterly: [], junk_quarterly: [],
+    };
+
+    const dispatchRowsFallbackFirst = [
+      { suburb: 'Albany', campaign_key: 'favorites', sent_count: '133', junk_count: '0', total_count: '133', first_sent_at: null, last_sent_at: null },
+      { suburb: 'Albany', campaign_key: '2026_Q2_Albany', sent_count: '188', junk_count: '0', total_count: '188', first_sent_at: null, last_sent_at: '2026-09-20T00:00:00.000Z' },
+    ];
+
+    for (const dispatchRows of [dispatchRowsFallbackFirst, [...dispatchRowsFallbackFirst].reverse()]) {
+      vi.clearAllMocks();
+      vi.mocked(db.execute).mockImplementation(((sql: any) => {
+        const text = JSON.stringify(sql?.queryChunks ?? []);
+        if (text.includes('file_url')) {
+          return { rows: [{ suburb: 'Albany', quarter: 'Q2', year: 2026, file_url: 'https://example.com/albany-q2.pdf' }] };
+        }
+        return { rows: [{ ...baseRow, dispatch_by_suburb: dispatchRows }] };
+      }) as any);
+
+      const res = await GET(makeRequest());
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      const albany = body.stats.dispatchTrend.bySuburb.find((s: { raw_suburb: string }) => s.raw_suburb === 'Albany');
+      expect(albany).toMatchObject({
+        quarter_key: '2026-Q2',
+        report_url: 'https://example.com/albany-q2.pdf',
+        sent_count: 321,
+        total_count: 321,
+      });
+    }
   });
 });

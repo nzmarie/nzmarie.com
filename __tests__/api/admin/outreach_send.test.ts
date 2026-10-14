@@ -11,7 +11,7 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/db', () => ({
   marieDB: {
     query: vi.fn(),
-    ensureOutreachTablesExist: vi.fn(),
+    ensureOutreachTablesExist: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -49,7 +49,9 @@ describe('Outreach Send and History API Routes', () => {
         .mockResolvedValueOnce({
           rows: [{ id: 'log-1', outreach_property_id: 'prop-1', campaign_key: '2026_Q2_Oteha' }],
         } as any)
-        .mockResolvedValueOnce({ rows: [] } as any);
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any) // upsertQuarterStatus: SELECT suburb_report_id
+        .mockResolvedValueOnce({ rows: [] } as any); // upsertQuarterStatus: UPSERT
 
       const request = new Request('http://localhost:3000/api/admin/outreach/send', {
         method: 'POST',
@@ -81,7 +83,9 @@ describe('Outreach Send and History API Routes', () => {
         .mockResolvedValueOnce({
           rows: [{ id: 'log-1', outreach_property_id: 'prop-torbay-1', campaign_key: '2026_Q2_Torbay' }],
         } as any)
-        .mockResolvedValueOnce({ rows: [] } as any);
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any) // upsertQuarterStatus: SELECT
+        .mockResolvedValueOnce({ rows: [] } as any); // upsertQuarterStatus: UPSERT
 
       const request = new Request('http://localhost:3000/api/admin/outreach/send', {
         method: 'POST',
@@ -102,6 +106,81 @@ describe('Outreach Send and History API Routes', () => {
       const updateCall = mockQuery.mock.calls[2];
       expect(updateCall[0]).toContain('UPDATE outreach_properties');
       expect(updateCall[1]?.[0]).toBe('2026_Q2_Torbay');
+    });
+
+    it('upserts quarter status without writing the generated quarter_key column', async () => {
+      vi.mocked(auth).mockResolvedValueOnce({
+        user: { email: 'nzlouis.com@gmail.com' },
+      } as any);
+
+      const mockQuery = vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'prop-1', suburb: 'Oteha' }],
+        } as any)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'log-1', outreach_property_id: 'prop-1', campaign_key: '2026_Q3_Oteha' }],
+        } as any)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [{ id: 'report-3' }] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const request = new Request('http://localhost:3000/api/admin/outreach/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_ids: ['prop-1'],
+          campaign_key: '2026_Q3_Oteha',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const reportLookup = mockQuery.mock.calls[3];
+      expect(reportLookup[0]).toContain('SELECT id FROM suburb_reports');
+      expect(reportLookup[1]).toEqual(['Oteha', 'Q3', 2026]);
+
+      const upsertCall = mockQuery.mock.calls[4];
+      expect(upsertCall[0]).toContain('INSERT INTO outreach_property_quarter_status');
+      expect(upsertCall[0]).not.toContain('quarter_key,');
+      expect(upsertCall[0]).not.toContain('VALUES ($1, $2, $3, $4, $5, $6,');
+      expect(upsertCall[1]).toEqual(['prop-1', 'report-3', 'Oteha', 'Q3', 2026, '2026_Q3_Oteha']);
+    });
+
+    it('refreshes quarter materialized views directly without the incremental function', async () => {
+      vi.mocked(auth).mockResolvedValueOnce({
+        user: { email: 'nzlouis.com@gmail.com' },
+      } as any);
+
+      const mockQuery = vi.mocked(marieDB.query)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'prop-1', suburb: 'Oteha' }],
+        } as any)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'log-1', outreach_property_id: 'prop-1', campaign_key: '2026_Q2_Oteha' }],
+        } as any)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const request = new Request('http://localhost:3000/api/admin/outreach/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_ids: ['prop-1'],
+          campaign_key: '2026_Q2_Oteha',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      const statements = mockQuery.mock.calls.map(c => String(c[0]));
+      expect(statements).toContain('REFRESH MATERIALIZED VIEW mv_suburb_quarter_summary');
+      expect(statements).toContain('REFRESH MATERIALIZED VIEW mv_quarter_overview');
+      expect(statements).toContain('REFRESH MATERIALIZED VIEW mv_dispatch_timeline');
+      expect(statements.some(s => s.includes('refresh_quarter_mv_incremental'))).toBe(false);
     });
   });
 

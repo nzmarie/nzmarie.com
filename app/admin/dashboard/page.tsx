@@ -16,10 +16,24 @@ interface SentSummaryItem {
   sent_count: number;
 }
 
+interface QuarterlySentSuburb {
+  suburb: string;
+  sent_count: number;
+  last_sent_at: string | null;
+  report_url: string | null;
+}
+
+interface QuarterlySentSummary {
+  quarter_key: string;
+  total_sent: number;
+  suburbs: QuarterlySentSuburb[];
+}
+
 interface SentSummary {
   total_sent: number;
   suburb_count: number;
   suburbs: SentSummaryItem[];
+  quarterly: QuarterlySentSummary[];
 }
 
 interface ScanCampaign {
@@ -258,23 +272,44 @@ export default function AdminDashboardPage() {
             </div>
             <div className="text-sm text-slate-600">Total Sent</div>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <div className="flex flex-wrap gap-1.5">
-              {stats?.sentSummary?.suburbs && sentSummarySuburbs.length > 0 ? (
-                sentSummarySuburbs.map((item) => (
-                  <span
-                    key={item.suburb}
-                    className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
-                  >
-                    {item.suburb}: {item.sent_count}
+          <div className="mt-4 pt-3 border-t border-slate-100 space-y-2.5">
+            {stats?.sentSummary?.quarterly && stats.sentSummary.quarterly.length > 0 ? (
+              stats.sentSummary.quarterly.map((q) => (
+                <div key={q.quarter_key} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">{q.quarter_key}</span>
+                    <span className="text-xs text-slate-500">{q.total_sent} sent</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {q.suburbs.map((s) => (
+                      <span
+                        key={s.suburb}
+                        className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
+                      >
+                        {s.suburb}: {s.sent_count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {stats?.sentSummary?.suburbs && sentSummarySuburbs.length > 0 ? (
+                  sentSummarySuburbs.map((item) => (
+                    <span
+                      key={item.suburb}
+                      className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100"
+                    >
+                      {item.suburb}: {item.sent_count}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                    No suburb with sent &gt; 1
                   </span>
-                ))
-              ) : (
-                <span className="text-xs bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md font-medium">
-                  No suburb with sent &gt; 1
-                </span>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

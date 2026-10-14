@@ -13,11 +13,8 @@ import SendReportModal from './components/SendReportModal';
 import DispatchHistoryDrawer from './components/DispatchHistoryDrawer';
 import SentDateFilter from './components/SentDateFilter';
 import TodayRunSection, { type TodayRunData } from './components/TodayRunSection';
-import nextDynamic from 'next/dynamic';
+import DynamicMapView from './components/DynamicMapView';
 import OutreachMapSidebar from './components/OutreachMapSidebar';
-// OutreachMapView uses @vis.gl/react-google-maps which references window/google at
-// module level — must never be server-side rendered.
-const OutreachMapView = nextDynamic(() => import('./components/OutreachMapView'), { ssr: false });
 import {
   FaBed,
   FaBath,
@@ -262,7 +259,7 @@ export default function OutreachPage() {
   const [likedApiLoading, setLikedApiLoading] = useState(false);
 
   const [reportSuburbFilter, setReportSuburbFilter] = useState('');
-  const [reportQuarterFilter, setReportQuarterFilter] = useState('');
+  const [activeQuarter, setActiveQuarter] = useState('');
   const [sentStatusFilter, setSentStatusFilter] = useState<'all' | 'sent' | 'unsent'>('all');
   const [sortMode, setSortMode] = useState<'address' | 'time'>('address');
   const [sentDateFilter, setSentDateFilter] = useState<string[]>([todayDateKey()]);
@@ -309,7 +306,7 @@ export default function OutreachPage() {
     return () => {
       if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStartStreet]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, sentStatusFilter, sortMode, sentDateFilter, likedStartStreet, activeQuarter]);
 
   // The "Today's Run" planner auto-selects the first run's streets whenever
   // "Unsent" mode loads its street-cluster data (sets runStreetFilter to that
@@ -322,6 +319,37 @@ export default function OutreachPage() {
     setRunStreetFilter([]);
     setStreetFilter('');
   }, [sentStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab !== 'sent' || availableReports.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/pdf/reports?status=active');
+        if (res.ok) {
+          const data = await res.json();
+          const reports = (data.reports || []).map((r: { suburb: string; quarter: string; year: number; id: string; uploaded_at?: string }) => ({
+            suburb: r.suburb, quarter: r.quarter, year: r.year, id: r.id, uploaded_at: r.uploaded_at || '',
+          }));
+          if (!cancelled) setAvailableReports(reports);
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, availableReports.length]);
+
+  const sentQuarterOptions = useMemo(() => {
+    const latestByQuarter = new Map<string, string>();
+    for (const r of availableReports) {
+      const label = `${r.year}-${r.quarter}`;
+      const ts = r.uploaded_at || '';
+      const cur = latestByQuarter.get(label);
+      if (cur === undefined || ts > cur) latestByQuarter.set(label, ts);
+    }
+    return [...latestByQuarter.entries()]
+      .sort((a, b) => (b[1] || '').localeCompare(a[1] || '') || b[0].localeCompare(a[0]))
+      .map(([q]) => q);
+  }, [availableReports]);
 
   const [viewMode, setViewMode] = useState<'card' | 'list' | 'map'>('card');
   const pageSize = viewMode === 'list' ? LIST_PAGE_SIZE : CARD_PAGE_SIZE;
@@ -672,13 +700,14 @@ export default function OutreachPage() {
     return [
       activeTab, suburbFilter, streetFilter, runStreetFilter.join(','), campaignFilter,
       debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset,
-      reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode,
+      reportSuburbFilter, sentStatusFilter, sortMode,
       sentDateFilter.join(','),
       likedStreetModeApplied ? `start:${likedStartStreet}` : '',
       `v:${pageSize}`,
       `p${page}`,
+      `q:${activeQuarter || 'none'}`,
     ].join('|');
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize, activeQuarter]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(addressInput), 500);
@@ -736,7 +765,7 @@ export default function OutreachPage() {
       }
     }
     if (sentStatusFilter) params.set('sent_status', sentStatusFilter);
-    if (reportQuarterFilter) params.set('report_quarter', reportQuarterFilter);
+    if (activeQuarter) params.set('report_quarter', activeQuarter);
     if (sortMode === 'time') params.set('sort_mode', 'time');
     if (activeTab === 'sent' && sentDateFilter.length > 0) params.set('sent_dates', sentDateFilter.join(','));
     if (activeTab === 'liked' && likedStreetModeApplied && likedStartStreet) params.set('start_street', likedStartStreet);
@@ -756,7 +785,7 @@ export default function OutreachPage() {
       pagination: data.pagination ?? null,
       effectiveLimit,
     };
-  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, reportQuarterFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize]);
+  }, [activeTab, suburbFilter, streetFilter, runStreetFilter, campaignFilter, debouncedSearch, sortOrder, propertyFilter, marketStatus, junkFilter, lastSoldPreset, reportSuburbFilter, sentStatusFilter, sortMode, sentDateFilter, likedStreetModeApplied, likedStartStreet, pageSize, activeQuarter]);
 
   const fetchItems = useCallback(async () => {
     if (isClassic) return;
@@ -927,13 +956,24 @@ export default function OutreachPage() {
     if (isClassic) return;
     const el = lastPropertyElementRef.current;
     if (!el || !hasMore || loadingMore || loading) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
-        loadMore();
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+    try {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+          loadMore();
+        }
+      }, { rootMargin: '400px 0px' });
+      if (typeof observer?.observe === 'function') {
+        observer.observe(el);
+        return () => {
+          try {
+            observer.disconnect?.();
+          } catch {
+          }
+        };
       }
-    }, { rootMargin: '400px 0px' });
-    observer.observe(el);
-    return () => observer.disconnect();
+    } catch {
+    }
   }, [hasMore, loadingMore, loading, loadMore, isClassic, viewMode]);
 
   useEffect(() => {
@@ -1041,6 +1081,12 @@ export default function OutreachPage() {
     } catch {
       showNotification('error', 'Bulk update failed');
     }
+  };
+
+  const returnToPending = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Return ${selected.size} address${selected.size === 1 ? '' : 'es'} to Pending? Their send records will be removed.`)) return;
+    await markAsPending();
   };
 
   // Remove a property from the Liked tab: confirm, DELETE the outreach record,
@@ -1184,7 +1230,7 @@ export default function OutreachPage() {
     // report lands after the first fetch), the previously selected streets no
     // longer belong to the new suburb/quarter and would filter the list to zero
     // addresses. Drop them until the new street-cluster data auto-selects.
-    const todayRunKey = `${todayRunSuburb}|${reportQuarterFilter || ''}`;
+    const todayRunKey = `${todayRunSuburb}|${activeQuarter || ''}`;
     if (todayRunSuburbQuarterRef.current !== todayRunKey) {
       todayRunSuburbQuarterRef.current = todayRunKey;
       setRunStreetFilter([]);
@@ -1213,8 +1259,8 @@ export default function OutreachPage() {
     if (effectiveStartStreet) {
       params.set('start_street', effectiveStartStreet);
     }
-    if (reportQuarterFilter) {
-      params.set('report_quarter', reportQuarterFilter);
+    if (activeQuarter) {
+      params.set('report_quarter', activeQuarter);
     }
     fetch(`/api/admin/outreach/street-clusters?${params}`)
       .then((res) => res.json())
@@ -1240,7 +1286,7 @@ export default function OutreachPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, reportQuarterFilter, todayRunRefreshKey]);
+  }, [activeTab, sentStatusFilter, todayRunSuburb, todayRunBudget, todayRunStartStreet, todayRunRefreshKey, activeQuarter]);
 
   const groupedBySuburb = useMemo(() => {
     const sourceItems = filteredLikedItems ?? displayItems;
@@ -1432,7 +1478,7 @@ export default function OutreachPage() {
             {(['liked', 'pending', 'sent'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter(''); setReportQuarterFilter(''); setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); setRunStreetFilter([]); setStreetFilter(''); if (tab !== 'liked') { setLikedStreetModeApplied(false); setLikedSelectedStreet(''); setLikedStreetSearch(''); setLikedStartStreet(''); setLikedApiStreets([]); setLikedOrderedStreets([]); } }}
+                onClick={() => { setActiveTab(tab); setCurrentPage(1); setReportSuburbFilter('');  setSentStatusFilter('all'); setSortMode(tab === 'sent' ? 'time' : 'address'); setSortOrder('asc'); setSentDateFilter(tab === 'sent' ? [todayDateKey()] : []); setRunStreetFilter([]); setStreetFilter(''); if (tab !== 'liked') { setLikedStreetModeApplied(false); setLikedSelectedStreet(''); setLikedStreetSearch(''); setLikedStartStreet(''); setLikedApiStreets([]); setLikedOrderedStreets([]); } }}
                 style={{
                   padding: '8px 18px',
                   backgroundColor: activeTab === tab ? (tab === 'liked' ? '#ec4899' : tab === 'pending' ? '#3b82f6' : '#8b5cf6') : 'white',
@@ -1471,8 +1517,10 @@ export default function OutreachPage() {
               setAvailableReports={setAvailableReports}
               reportSuburbFilter={reportSuburbFilter}
               setReportSuburbFilter={setReportSuburbFilter}
-              reportQuarterFilter={reportQuarterFilter}
-              setReportQuarterFilter={setReportQuarterFilter}
+              
+              
+              activeQuarter={activeQuarter}
+              setActiveQuarter={setActiveQuarter}
               sentStatusFilter={sentStatusFilter}
               setSentStatusFilter={setSentStatusFilter}
               setSuburbFilter={setSuburbFilter}
@@ -1504,7 +1552,7 @@ export default function OutreachPage() {
               setRunStreetFilter([]);
               setStreetFilter(street);
             }}
-            reportQuarter={reportQuarterFilter || undefined}
+            reportQuarter={activeQuarter || undefined}
             onOrderApplied={handleTodayRunOrderApplied}
             onResetManualOrder={handleResetManualOrder}
             startStreet={todayRunStartStreet}
@@ -1513,6 +1561,47 @@ export default function OutreachPage() {
               setTodayRunStartStreet(street);
             }}
           />
+        )}
+
+        {activeTab === 'sent' && (
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
+              📅 Filter by Quarter
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              <button
+                onClick={() => { setActiveQuarter(''); }}
+                style={{
+                  padding: '7px 14px',
+                  backgroundColor: activeQuarter === '' ? '#8b5cf6' : 'white',
+                  color: activeQuarter === '' ? 'white' : '#4a5568',
+                  border: activeQuarter === '' ? '2px solid #8b5cf6' : '2px solid #e2e8f0',
+                  borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                  fontWeight: activeQuarter === '' ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                All
+              </button>
+              {sentQuarterOptions.map(label => (
+                <button
+                  key={label}
+                  onClick={() => { setActiveQuarter(label); }}
+                  style={{
+                    padding: '7px 14px',
+                    backgroundColor: activeQuarter === label ? '#8b5cf6' : 'white',
+                    color: activeQuarter === label ? 'white' : '#4a5568',
+                    border: activeQuarter === label ? '2px solid #8b5cf6' : '2px solid #e2e8f0',
+                    borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                    fontWeight: activeQuarter === label ? '600' : '500',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {label}{activeQuarter === label ? ' ●' : ' ○'}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {activeTab === 'sent' && (
@@ -1995,7 +2084,7 @@ export default function OutreachPage() {
         </div>
 
         {/* Property Type & Market Status */}
-        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
+        {(!isMobile || !(reportSuburbFilter || activeQuarter)) && (
           <div style={{ marginTop: "16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-start" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
@@ -2141,7 +2230,7 @@ export default function OutreachPage() {
         )}
 
         {/* Last Sold */}
-        {(!isMobile || !(reportSuburbFilter || reportQuarterFilter)) && (
+        {(!isMobile || !(reportSuburbFilter || activeQuarter)) && (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               Last Sold
@@ -2184,7 +2273,7 @@ export default function OutreachPage() {
         )}
 
         {/* No Junk Mail filter — always available on mobile, even when a report filter is active */}
-        {isMobile && (reportSuburbFilter || reportQuarterFilter) && (
+        {isMobile && (reportSuburbFilter || activeQuarter) && (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
               No Junk Mail
@@ -2249,7 +2338,7 @@ export default function OutreachPage() {
         )}
 
         <div className="flex flex-wrap gap-3">
-          {isMobile && (reportSuburbFilter || reportQuarterFilter) && addressInput && (
+          {isMobile && (reportSuburbFilter || activeQuarter) && addressInput && (
             <button
               onClick={() => setAddressInput('')}
               style={{
@@ -2280,7 +2369,7 @@ export default function OutreachPage() {
               setMarketStatus('all');
               setActiveTab('liked');
               setReportSuburbFilter('');
-              setReportQuarterFilter('');
+              
               setSentStatusFilter('all');
               setSortMode('address');
               setRunStreetFilter([]);
@@ -2490,6 +2579,13 @@ export default function OutreachPage() {
             <span className="ml-1">Mark as Sent</span>
           </button>
           <button
+            onClick={returnToPending}
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 transition-colors"
+          >
+            <span aria-hidden="true">⇦</span>
+            <span className="ml-1">Return to Pending</span>
+          </button>
+          <button
             onClick={markAsLiked}
             className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 transition-colors"
           >
@@ -2519,6 +2615,7 @@ export default function OutreachPage() {
           <button
             onClick={async () => {
               if (selected.size === 0) return;
+              if (!window.confirm(`Return ${selected.size} address${selected.size === 1 ? '' : 'es'} to Pending? Their send records will be removed.`)) return;
               try {
                 const results = await Promise.all(
                   Array.from(selected).map(async (id) => {
@@ -2908,7 +3005,8 @@ export default function OutreachPage() {
                     {prop.suburb}, {prop.city}
                   </div>
 
-                  {(activeTab === 'pending' || activeTab === 'sent') && prop.latest_send_title && (
+                  {(activeTab === 'pending' || activeTab === 'sent') && prop.latest_send_title &&
+                    (!activeQuarter || `${prop.latest_send_year}-${prop.latest_send_quarter}` === activeQuarter) && (
                     <div style={{
                       fontSize: '0.8rem', color: '#7c3aed', marginBottom: '14px',
                       padding: '8px 12px', backgroundColor: '#f5f3ff', borderRadius: '8px',
@@ -3115,7 +3213,11 @@ export default function OutreachPage() {
                       title="View dispatch history"
                     >
                       <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
-                      {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                      {activeQuarter
+                        ? 'History'
+                        : prop.total_send_count && prop.total_send_count > 0
+                          ? `${prop.total_send_count}x Sent`
+                          : 'History'}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); openConvertModal(prop); }}
@@ -3370,12 +3472,12 @@ export default function OutreachPage() {
           )}
 
           <div style={{ height: 600, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-            <OutreachMapView
+            <DynamicMapView
               suburb={reportSuburbFilter || todayRunData?.suburb || firstPendingSuburb}
               activeRunId={activeMapRunId}
               selectedStreet={activeMapStreet}
               sentStatus="all"
-              reportQuarter={reportQuarterFilter || undefined}
+              reportQuarter={activeQuarter || undefined}
               onCoordsLoaded={handleMapCoordsLoaded}
               statusFilter={mapStatusFilter}
               onStatusFilterChange={setMapStatusFilter}
@@ -3568,7 +3670,11 @@ export default function OutreachPage() {
                                     title="View dispatch history"
                                   >
                                     <FaHistory style={{ display: 'inline', marginRight: '4px' }} />
-                                    {prop.total_send_count && prop.total_send_count > 0 ? `${prop.total_send_count}x Sent` : 'History'}
+                                    {activeQuarter
+                                      ? 'History'
+                                      : prop.total_send_count && prop.total_send_count > 0
+                                        ? `${prop.total_send_count}x Sent`
+                                        : 'History'}
                                   </button>
                                   <button
                                     type="button"
@@ -4005,11 +4111,11 @@ export default function OutreachPage() {
     </div>
   );
 }
-
-function ReportFilterSection({
+export function ReportFilterSection({
   availableReports, setAvailableReports,
   reportSuburbFilter, setReportSuburbFilter,
-  reportQuarterFilter, setReportQuarterFilter,
+  
+  activeQuarter, setActiveQuarter,
   sentStatusFilter, setSentStatusFilter,
   setSuburbFilter,
   setLastSoldPreset,
@@ -4019,8 +4125,10 @@ function ReportFilterSection({
   setAvailableReports: React.Dispatch<React.SetStateAction<Array<{ suburb: string; quarter: string; year: number; id: string; uploaded_at: string }>>>;
   reportSuburbFilter: string;
   setReportSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
-  reportQuarterFilter: string;
-  setReportQuarterFilter: React.Dispatch<React.SetStateAction<string>>;
+  
+  
+  activeQuarter: string;
+  setActiveQuarter: React.Dispatch<React.SetStateAction<string>>;
   sentStatusFilter: 'all' | 'sent' | 'unsent';
   setSentStatusFilter: React.Dispatch<React.SetStateAction<'all' | 'sent' | 'unsent'>>;
   setSuburbFilter: React.Dispatch<React.SetStateAction<string>>;
@@ -4031,38 +4139,56 @@ function ReportFilterSection({
   const [loading, setLoading] = useState(false);
   const [suburbSentStats, setSuburbSentStats] = useState<Record<string, { total: number; sent: number; unsent: number }>>({});
   const [showAllSuburbs, setShowAllSuburbs] = useState(false);
+  const sentStatsReqIdRef = useRef(0);
 
   const loadSentStats = useCallback(async () => {
+    const reqId = ++sentStatsReqIdRef.current;
     try {
-      const res = await fetch('/api/admin/outreach/suburb-sent-stats');
+      const url = activeQuarter
+        ? `/api/admin/outreach/suburb-sent-stats?quarter=${encodeURIComponent(activeQuarter)}`
+        : '/api/admin/outreach/suburb-sent-stats';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (data.stats) setSuburbSentStats(data.stats);
+        if (reqId === sentStatsReqIdRef.current && data.stats) setSuburbSentStats(data.stats);
       }
     } catch { /* ignore */ }
-  }, []);
+  }, [activeQuarter]);
+
+  useEffect(() => {
+    setSuburbSentStats({});
+    setShowAllSuburbs(false);
+    loadSentStats();
+  }, [activeQuarter, loadSentStats]);
 
   const loadReports = useCallback(async () => {
     if (loading || loaded) return;
     setLoading(true);
 
     let optimisticDefault: { suburb: string; label: string } | null = null;
+
     const applyDefault = async () => {
       try {
-        const dr = await fetch('/api/admin/outreach/default-report');
+        const url = activeQuarter
+          ? `/api/admin/outreach/default-report?quarter=${encodeURIComponent(activeQuarter)}`
+          : '/api/admin/outreach/default-report';
+        const dr = await fetch(url);
         if (dr.ok) {
           const d = await dr.json();
           if (d?.defaultReport?.suburb && d?.defaultReport?.label) {
             const { suburb, label } = d.defaultReport;
-            optimisticDefault = { suburb, label };
-            setDefaultReport(optimisticDefault);
-            setSuburbFilter(suburb);
-            setReportSuburbFilter(suburb);
-            setReportQuarterFilter(label);
-            setLastSoldPreset('all');
+            if (!activeQuarter || label === activeQuarter) {
+              optimisticDefault = { suburb, label };
+              setDefaultReport(optimisticDefault);
+              setSuburbFilter(suburb);
+              setReportSuburbFilter(suburb);
+              setActiveQuarter(label);
+              setLastSoldPreset('all');
+            }
           }
         }
-      } catch { /* ignore */ }
+      } catch {
+      }
     };
 
     const loadList = async () => {
@@ -4084,7 +4210,7 @@ function ReportFilterSection({
               setDefaultReport(null);
               setSuburbFilter('Northcross');
               setReportSuburbFilter('');
-              setReportQuarterFilter('');
+              
             }
           }
         }
@@ -4093,7 +4219,7 @@ function ReportFilterSection({
 
     await Promise.all([applyDefault(), loadList(), loadSentStats()]);
     setLoading(false);
-  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setReportQuarterFilter, setLastSoldPreset, loadSentStats]);
+  }, [loading, loaded, setAvailableReports, setSuburbFilter, setReportSuburbFilter, setLastSoldPreset, loadSentStats, activeQuarter, setActiveQuarter]);
 
   const initRef = useRef(false);
   useEffect(() => {
@@ -4110,17 +4236,17 @@ function ReportFilterSection({
   const [savingDefault, setSavingDefault] = useState(false);
 
   const setAsDefault = async () => {
-    if (!reportSuburbFilter || !reportQuarterFilter) return;
+    if (!reportSuburbFilter || !activeQuarter) return;
     setSavingDefault(true);
     try {
       const res = await fetch('/api/admin/outreach/default-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ suburb: reportSuburbFilter, label: reportQuarterFilter }),
+        body: JSON.stringify({ suburb: reportSuburbFilter, label: activeQuarter, quarter: activeQuarter }),
       });
       const data = await res.json();
       if (res.ok && data?.success) {
-        setDefaultReport({ suburb: reportSuburbFilter, label: reportQuarterFilter });
+        setDefaultReport({ suburb: reportSuburbFilter, label: activeQuarter });
       }
     } catch { /* ignore */ }
     setSavingDefault(false);
@@ -4129,22 +4255,43 @@ function ReportFilterSection({
   const isCurrentDefault =
     !!defaultReport &&
     defaultReport.suburb === reportSuburbFilter &&
-    defaultReport.label === reportQuarterFilter;
+    defaultReport.label === activeQuarter;
 
-  // Most recently uploaded report first: order suburbs by their latest upload
-  // date (descending) so freshly uploaded reports appear leftmost.
+  const allQuarters = useMemo(() => {
+    const latestByQuarter = new Map<string, string>();
+    for (const r of availableReports) {
+      const label = `${r.year}-${r.quarter}`;
+      const ts = r.uploaded_at || '';
+      const cur = latestByQuarter.get(label);
+      if (cur === undefined || ts > cur) latestByQuarter.set(label, ts);
+    }
+    return [...latestByQuarter.entries()]
+      .sort((a, b) => (b[1] || '').localeCompare(a[1] || '') || b[0].localeCompare(a[0]))
+      .map(([q]) => q);
+  }, [availableReports]);
+
+  useEffect(() => {
+    if (!activeQuarter && allQuarters.length > 0) {
+      setActiveQuarter(allQuarters[0]);
+    }
+  }, [activeQuarter, allQuarters, setActiveQuarter]);
+
   const orderedSuburbs = useMemo(() => {
     const latestBySuburb = new Map<string, string>();
     for (const r of availableReports) {
       if (r.suburb === 'North Shore') continue;
+      if (activeQuarter) {
+        const label = `${r.year}-${r.quarter}`;
+        if (label !== activeQuarter) continue;
+      }
       const ts = r.uploaded_at || '';
       const cur = latestBySuburb.get(r.suburb);
       if (cur === undefined || ts > cur) latestBySuburb.set(r.suburb, ts);
     }
     return [...latestBySuburb.entries()]
-      .sort((a, b) => (b[1] || '').localeCompare(a[1] || ''))
+      .sort((a, b) => (b[1] || '').localeCompare(a[1] || '') || a[0].localeCompare(b[0]))
       .map(([s]) => s);
-  }, [availableReports]);
+  }, [availableReports, activeQuarter]);
 
   const fullySentSuburbs = useMemo(() => {
     const set = new Set<string>();
@@ -4168,20 +4315,6 @@ function ReportFilterSection({
     }
   }, [reportSuburbFilter, fullySentSuburbs]);
 
-  const orderedQuarters = useMemo(() => {
-    const latestByQuarter = new Map<string, string>();
-    for (const r of availableReports) {
-      if (r.suburb !== reportSuburbFilter) continue;
-      const label = `${r.year}-${r.quarter}`;
-      const ts = r.uploaded_at || '';
-      const cur = latestByQuarter.get(label);
-      if (cur === undefined || ts > cur) latestByQuarter.set(label, ts);
-    }
-    return [...latestByQuarter.entries()]
-      .sort((a, b) => (b[1] || '').localeCompare(a[1] || ''))
-      .map(([q]) => q);
-  }, [availableReports, reportSuburbFilter]);
-
   return (
     <>
       <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", color: "#4a5568", marginBottom: "8px" }}>
@@ -4192,108 +4325,133 @@ function ReportFilterSection({
           <button onClick={loadReports} disabled={loading}
             style={{ padding: '7px 14px', backgroundColor: '#eff6ff', color: '#2563eb', border: '2px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
           >{loading ? 'Loading...' : 'Show Reports'}</button>
-        ) : visibleSuburbs.map(s => (
-          <button
-            key={s}
-            onClick={() => {
-              if (reportSuburbFilter === s) {
-                setReportSuburbFilter('');
-              } else {
-                setSuburbFilter(s);
-                setReportSuburbFilter(s);
-              }
-              setReportQuarterFilter('');
-              onClearRunFilter();
-            }}
-            style={{
-              padding: '7px 14px',
-              backgroundColor: reportSuburbFilter === s ? '#2563eb' : 'white',
-              color: reportSuburbFilter === s ? 'white' : '#4a5568',
-              border: reportSuburbFilter === s ? '2px solid #2563eb' : '2px solid #e2e8f0',
-              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
-              fontWeight: reportSuburbFilter === s ? '600' : '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {s}{defaultReport?.suburb === s ? ' ★' : ''}
-          </button>
-        ))}
-        {!showAllSuburbs && hiddenCount > 0 && (
-          <button
-            onClick={() => setShowAllSuburbs(true)}
-            style={{
-              padding: '7px 14px',
-              backgroundColor: '#f1f5f9',
-              color: '#64748b',
-              border: '2px solid #cbd5e1',
-              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            More ({hiddenCount})
-          </button>
-        )}
-        {showAllSuburbs && hiddenCount > 0 && (
-          <button
-            onClick={() => setShowAllSuburbs(false)}
-            style={{
-              padding: '7px 14px',
-              backgroundColor: '#f1f5f9',
-              color: '#64748b',
-              border: '2px solid #cbd5e1',
-              borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            Hide
-          </button>
-        )}
-        {reportSuburbFilter && (
-          <button onClick={() => { setReportSuburbFilter(''); setReportQuarterFilter(''); onClearRunFilter(); }}
-            style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-          >✕ Clear</button>
-        )}
-      </div>
-      {reportSuburbFilter && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-          {orderedQuarters.map(label => (
+        ) : allQuarters.map(label => {
+          const isActive = activeQuarter === label;
+          return (
             <button
-              key={`${reportSuburbFilter}-${label}`}
-              onClick={() => { setReportQuarterFilter(prev => prev === label ? '' : label); onClearRunFilter(); }}
+              key={label}
+              onClick={async () => {
+                setActiveQuarter(label);
+                setReportSuburbFilter('');
+                setSentStatusFilter('all');
+                onClearRunFilter();
+
+                try {
+                  const res = await fetch(`/api/admin/outreach/default-report?quarter=${encodeURIComponent(label)}`);
+                  if (res.ok) {
+                    const d = await res.json();
+                    if (d?.defaultReport?.suburb && d?.defaultReport?.label === label) {
+                      setDefaultReport(d.defaultReport);
+                      setSuburbFilter(d.defaultReport.suburb);
+                      setReportSuburbFilter(d.defaultReport.suburb);
+                      setLastSoldPreset('all');
+                    } else {
+                      setDefaultReport(null);
+                    }
+                  }
+                } catch { /* ignore */ }
+              }}
               style={{
-                padding: '6px 12px',
-                backgroundColor: reportQuarterFilter === label ? '#3b82f6' : '#eff6ff',
-                color: reportQuarterFilter === label ? 'white' : '#2563eb',
-                border: reportQuarterFilter === label ? '2px solid #3b82f6' : '2px solid #bfdbfe',
-                borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem',
-                fontWeight: reportQuarterFilter === label ? '600' : '500',
+                padding: '7px 14px',
+                backgroundColor: isActive ? '#16a34a' : '#fef2f2',
+                color: isActive ? 'white' : '#dc2626',
+                border: isActive ? '2px solid #16a34a' : '2px solid #fecaca',
+                borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                fontWeight: '600',
                 transition: 'all 0.2s ease',
               }}
             >
-              {label}{defaultReport?.suburb === reportSuburbFilter && defaultReport?.label === label ? ' ★' : ''}
+              {label}{isActive ? ' ●' : ' ○'}
             </button>
-          ))}
-        </div>
-      )}
-      {reportSuburbFilter && reportQuarterFilter && (
-        <button
-          onClick={setAsDefault}
-          disabled={savingDefault}
-          title="Set as default report selection"
-          style={{
-            padding: '6px 12px',
-            backgroundColor: isCurrentDefault ? '#fefce8' : '#fffbeb',
-            color: isCurrentDefault ? '#a16207' : '#b45309',
-            border: isCurrentDefault ? '2px solid #fde047' : '2px solid #fcd34d',
-            borderRadius: '8px', cursor: savingDefault ? 'wait' : 'pointer', fontSize: '0.8rem',
-            fontWeight: '600', marginBottom: '10px',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {savingDefault ? 'Saving…' : isCurrentDefault ? '★ Default' : '☆ Set as default report'}
-        </button>
+          );
+        })}
+      </div>
+      {activeQuarter && availableReports.length > 0 && (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+            {visibleSuburbs.map(s => (
+              <button
+                key={s}
+                onClick={() => {
+                  if (reportSuburbFilter === s) {
+                    setReportSuburbFilter('');
+                  } else {
+                    setSuburbFilter(s);
+                    setReportSuburbFilter(s);
+                  }
+                  
+                  onClearRunFilter();
+                }}
+                style={{
+                  padding: '7px 14px',
+                  backgroundColor: reportSuburbFilter === s ? '#2563eb' : 'white',
+                  color: reportSuburbFilter === s ? 'white' : '#4a5568',
+                  border: reportSuburbFilter === s ? '2px solid #2563eb' : '2px solid #e2e8f0',
+                  borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                  fontWeight: reportSuburbFilter === s ? '600' : '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {s}{defaultReport?.suburb === s ? ' ★' : ''}
+              </button>
+            ))}
+            {!showAllSuburbs && hiddenCount > 0 && (
+              <button
+                onClick={() => setShowAllSuburbs(true)}
+                style={{
+                  padding: '7px 14px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: '2px solid #cbd5e1',
+                  borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                More ({hiddenCount})
+              </button>
+            )}
+            {showAllSuburbs && hiddenCount > 0 && (
+              <button
+                onClick={() => setShowAllSuburbs(false)}
+                style={{
+                  padding: '7px 14px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  border: '2px solid #cbd5e1',
+                  borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Hide
+              </button>
+            )}
+            {reportSuburbFilter && (
+              <button onClick={() => { setReportSuburbFilter('');  onClearRunFilter(); }}
+                style={{ padding: '7px 14px', backgroundColor: '#fef2f2', color: '#dc2626', border: '2px solid #fecaca', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
+              >✕ Clear</button>
+            )}
+          </div>
+          {reportSuburbFilter && (
+            <button
+              onClick={setAsDefault}
+              disabled={savingDefault}
+              title="Set as default report selection"
+              style={{
+                padding: '6px 12px',
+                backgroundColor: isCurrentDefault ? '#fefce8' : '#fffbeb',
+                color: isCurrentDefault ? '#16a34a' : '#b45309',
+                border: isCurrentDefault ? '2px solid #fde047' : '2px solid #fcd34d',
+                borderRadius: '8px', cursor: savingDefault ? 'wait' : 'pointer', fontSize: '0.8rem',
+                fontWeight: '600', marginBottom: '10px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {savingDefault ? 'Saving…' : isCurrentDefault ? '★ Default' : '☆ Set as default report'}
+            </button>
+          )}
+        </>
       )}
       <div style={{ display: "flex", gap: "8px" }}>
         {([

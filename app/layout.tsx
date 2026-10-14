@@ -61,7 +61,7 @@ export default function RootLayout({
         <meta name="author" content="Marie Nian" />
         <meta charSet="UTF-8" />
       </head>
-      <body className={poppins.className}>
+      <body className={poppins.className} suppressHydrationWarning>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

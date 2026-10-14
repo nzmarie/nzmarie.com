@@ -315,4 +315,39 @@ describe('GET /api/admin/outreach/street-clusters', () => {
       { address: '3 Alpha Street', lat: -36.7001, lng: 174.7001, sent: false, status: 'unsent' },
     ]);
   });
+
+  it('computes address sent/status per quarter when report_quarter is set', async () => {
+    mockAuth();
+    vi.mocked(marieDB.query)
+      .mockResolvedValueOnce({
+        rows: [
+          { id: '1', street: 'Alpha Street', property_address: '1 Alpha Street', house_number: 1, lat: -36.7, lng: 174.7, no_junk_mail: false, status: 'sent', sent_at: '2026-05-01T00:00:00Z', total_send_count: 1, last_campaign: '2026_Q2_Oteha' },
+          { id: '2', street: 'Alpha Street', property_address: '3 Alpha Street', house_number: 3, lat: -36.7001, lng: 174.7001, no_junk_mail: false, status: 'pending', last_campaign: null },
+          { id: '3', street: 'Alpha Street', property_address: '5 Alpha Street', house_number: 5, lat: -36.7002, lng: 174.7002, no_junk_mail: false, status: 'sent', last_campaign: '2026_Q3_Oteha' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ rows: [{ outreach_property_id: '3' }] } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/outreach/street-clusters?suburb=Oteha&status=pending&sent_status=all&report_quarter=2026-Q3&address_coords=true')
+    );
+    expect(response.status).toBe(200);
+
+    const listSql = vi.mocked(marieDB.query).mock.calls[0][0] as string;
+    expect(listSql).toContain("op.status IN ('pending', 'sent')");
+
+    const sendSql = vi.mocked(marieDB.query).mock.calls[1][0] as string;
+    const sendParams = vi.mocked(marieDB.query).mock.calls[1][1] as unknown[];
+    expect(sendSql).toContain('campaign_key ~ $5');
+    expect(sendParams).toContain('^2026[_-]Q3');
+
+    const body = await response.json();
+    const alpha = body.runs[0].groups.flatMap((g: any) => g.streets).find((s: any) => s.street === 'Alpha Street');
+    expect(alpha.addressCoords).toEqual([
+      { address: '1 Alpha Street', lat: -36.7, lng: 174.7, sent: false, status: 'unsent' },
+      { address: '3 Alpha Street', lat: -36.7001, lng: 174.7001, sent: false, status: 'unsent' },
+      { address: '5 Alpha Street', lat: -36.7002, lng: 174.7002, sent: true, status: 'sent' },
+    ]);
+  });
 });

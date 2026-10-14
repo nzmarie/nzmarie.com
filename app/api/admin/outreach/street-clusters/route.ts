@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { marieDB } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { buildOutreachFilter } from '@/lib/outreach-filter';
+import { parseReportQuarter } from '@/lib/outreach-quarter';
 import { buildStreetSummaries, toOrderable, AddressRow } from '@/lib/outreach-streets';
 import { orderStreetsGreedily } from '@/lib/street-ordering';
 import { splitOrderedStreets, StreetPoint } from '@/lib/street-clustering';
@@ -95,6 +96,7 @@ export async function GET(request: Request) {
     }
 
     // ── Cache miss — compute from DB ──────────────────────────────────────────
+    const qi = parseReportQuarter(reportQuarter);
     const { sql: where, params } = buildOutreachFilter({
       suburb,
       status,
@@ -106,7 +108,7 @@ export async function GET(request: Request) {
       `
       SELECT op.id AS id, op.street, op.house_number, op.property_address,
              p.latitude AS lat, p.longitude AS lng, p.no_junk_mail AS no_junk_mail,
-             op.sent_at, op.last_sent_at, op.total_send_count, op.status
+             op.sent_at, op.last_sent_at, op.total_send_count, op.status, op.last_campaign
       FROM outreach_properties op
       LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
       WHERE ${where}
@@ -124,45 +126,50 @@ export async function GET(request: Request) {
       lng: r.lng == null ? null : (Number(r.lng) || null),
       no_junk_mail: Boolean(r.no_junk_mail),
       status: r.status == null ? null : String(r.status),
-      sent: Boolean(
-        Number(r.total_send_count) > 0 ||
-        r.last_sent_at != null ||
-        r.sent_at != null ||
-        r.status === 'sent'
-      ),
+      sent: qi
+        ? false
+        : Boolean(
+            Number(r.total_send_count) > 0 ||
+            r.last_sent_at != null ||
+            r.sent_at != null ||
+            r.status === 'sent'
+          ),
     }));
 
-    if (includeAddressCoords && addressRows.length > 0) {
+    if ((qi || includeAddressCoords) && addressRows.length > 0) {
       try {
         const ids = addressRows.map((r) => r.id).filter(Boolean);
         if (ids.length > 0) {
           const sendParams: (string | number | string[])[] = [ids as string[], suburb];
           let sendSql = `SELECT DISTINCT sl.outreach_property_id FROM outreach_send_logs sl LEFT JOIN suburb_reports sr ON sl.suburb_report_id = sr.id WHERE sl.outreach_property_id = ANY($1) AND (sl.suburb = $2 OR sr.suburb = $2 OR sl.suburb IS NULL)`;
-          if (reportQuarter) {
-            const parts = reportQuarter.split('-');
-            if (parts.length === 2) {
-              const year = parseInt(parts[0], 10) || 0;
-              const quarter = parts[1] || '';
-              const qAlt = reportQuarter.replace('-', '_');
-              sendSql += ` AND ((sr.quarter = $3 AND sr.year = $4) OR sl.campaign_key = $5 OR sl.campaign_key = $6)`;
-              sendParams.push(quarter, year, reportQuarter, qAlt);
-            }
+          if (qi) {
+            sendSql += ` AND ((sr.quarter = $3 AND sr.year = $4) OR sl.campaign_key ~ $5)`;
+            sendParams.push(qi.quarter, qi.year, qi.campaignPattern);
           }
           const { rows: sentRows } = await marieDB.query(sendSql, sendParams);
           const sentSet = new Set(sentRows.map((r: { outreach_property_id: unknown }) => String(r.outreach_property_id)));
+          const quarterRe = qi ? new RegExp(qi.campaignPattern) : null;
           for (let i = 0; i < addressRows.length; i++) {
             const ar = addressRows[i];
             const rawObj = (addressRowsRaw as Record<string, unknown>[])[i];
-            const opSent = Boolean(
-              rawObj && (
-                Number(rawObj.total_send_count) > 0 ||
-                rawObj.last_sent_at != null ||
-                rawObj.sent_at != null ||
-                rawObj.status === 'sent'
-              )
-            );
-            if (ar.id && (sentSet.has(ar.id) || opSent)) {
-              ar.sent = true;
+            if (qi) {
+              const lastCampaign = rawObj && rawObj.last_campaign != null ? String(rawObj.last_campaign) : '';
+              const quarterSent = Boolean(ar.id && (sentSet.has(ar.id) || (quarterRe && quarterRe.test(lastCampaign))));
+              ar.sent = quarterSent;
+              ar.status = quarterSent ? 'sent' : 'pending';
+            } else {
+              const opSent = Boolean(
+                rawObj && (
+                  Number(rawObj.total_send_count) > 0 ||
+                  rawObj.last_sent_at != null ||
+                  rawObj.sent_at != null ||
+                  rawObj.status === 'sent'
+                )
+              );
+              if (ar.id && (sentSet.has(ar.id) || opSent)) {
+                ar.sent = true;
+                ar.status = 'sent';
+              }
             }
           }
         }

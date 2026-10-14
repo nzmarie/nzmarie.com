@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { DateTime } from 'luxon';
 import { FaFilePdf, FaPaperPlane, FaTimes, FaCheckCircle } from 'react-icons/fa';
 
 interface PdfReport {
@@ -95,8 +96,11 @@ export default function SendReportModal({
           const data = await res.json();
           setReports(data.reports || []);
           if ((data.reports || []).length === 0) {
-            setCustomTitle(`${suburb || 'Suburbs'} ${new Date().getFullYear()} Q2 Market Report`);
-            setCampaignKey(`${new Date().getFullYear()}_Q2_${suburb || 'General'}`);
+            const now = DateTime.now().setZone('Pacific/Auckland');
+            const year = now.year;
+            const quarter = `Q${Math.ceil(now.month / 3)}`;
+            setCustomTitle(`${suburb || 'Suburbs'} ${year} ${quarter} Market Report`);
+            setCampaignKey(`${year}_${quarter}_${suburb || 'General'}`);
           }
         }
       } catch (err) {

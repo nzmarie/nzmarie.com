@@ -19,6 +19,66 @@ function campaignKeyForSuburb(campaignKey: string, suburb: string): string {
   return trimmed;
 }
 
+function extractQuarterKey(campaignKey: string): string | null {
+  const match = campaignKey.match(/^(\d{4})[_-]([Qq][1-4])/);
+  if (match) {
+    return `${match[1]}-${match[2].toUpperCase()}`;
+  }
+  return null;
+}
+
+async function upsertQuarterStatus(
+  propertyId: string,
+  suburbReportId: string | null,
+  suburb: string | null,
+  campaignKey: string
+) {
+  const quarterKey = extractQuarterKey(campaignKey);
+  if (!quarterKey || !suburb) return;
+
+  const [yearStr, quarter] = quarterKey.split('-');
+  const year = parseInt(yearStr, 10);
+  if (!year) return;
+
+  let reportId = suburbReportId;
+  if (!reportId && suburb) {
+    const reportResult = await marieDB.query(
+      `SELECT id FROM suburb_reports WHERE suburb = $1 AND quarter = $2 AND year = $3 AND status = 'active' LIMIT 1`,
+      [suburb, quarter, year]
+    );
+    if (reportResult.rows.length > 0) {
+      reportId = reportResult.rows[0].id;
+    }
+  }
+
+  if (!reportId) return;
+
+  await marieDB.query(
+    `INSERT INTO outreach_property_quarter_status 
+     (outreach_property_id, suburb_report_id, suburb, quarter, year, status, sent_count, first_sent_at, last_sent_at, campaign_keys)
+     VALUES ($1, $2, $3, $4, $5, 'sent', 1, NOW(), NOW(), ARRAY[$6])
+     ON CONFLICT (outreach_property_id, suburb_report_id) DO UPDATE SET
+       status = CASE 
+         WHEN outreach_property_quarter_status.sent_count = 0 THEN 'sent'
+         ELSE outreach_property_quarter_status.status
+       END,
+       sent_count = outreach_property_quarter_status.sent_count + 1,
+       last_sent_at = NOW(),
+       campaign_keys = array_append(outreach_property_quarter_status.campaign_keys, $6),
+       updated_at = NOW()
+     WHERE outreach_property_quarter_status.outreach_property_id = $1
+       AND outreach_property_quarter_status.suburb_report_id = $2`,
+    [
+      propertyId,
+      reportId,
+      suburb,
+      quarter,
+      year,
+      campaignKey,
+    ]
+  );
+}
+
 export async function POST(request: Request) {
   const session = await auth();
 
@@ -107,6 +167,9 @@ export async function POST(request: Request) {
         [normalizedKey, sendUser, prop.id]
       );
 
+      // Upsert quarter-aware status
+      await upsertQuarterStatus(prop.id, suburb_report_id || null, prop.suburb, normalizedKey);
+
       insertedLogs.push(logRes.rows[0]);
     }
 
@@ -114,6 +177,13 @@ export async function POST(request: Request) {
     for (const suburb of affectedSuburbs) {
       invalidateStreetClustersForSuburb(suburb).catch(() => { });
     }
+
+    // Refresh quarter materialized views asynchronously
+    Promise.all([
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_suburb_quarter_summary'),
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_quarter_overview'),
+      marieDB.query('REFRESH MATERIALIZED VIEW mv_dispatch_timeline'),
+    ]).catch(err => console.error('Quarter MV refresh failed (non-critical):', err));
 
     if (process.env.USE_OUTREACH_MV === 'true') {
       marieDB.query('REFRESH MATERIALIZED VIEW CONCURRENTLY outreach_enriched')

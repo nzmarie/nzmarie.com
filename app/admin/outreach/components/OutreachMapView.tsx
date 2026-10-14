@@ -40,7 +40,7 @@ interface ClusterPayload {
   runs: RunSummary[];
 }
 
-interface OutreachMapViewProps {
+export interface OutreachMapViewProps {
   suburb: string;
   activeRunId: number | null;
   selectedStreet?: string | null;

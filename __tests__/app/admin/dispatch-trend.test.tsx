@@ -221,11 +221,11 @@ describe('DispatchTrendSection', () => {
     expect(screen.queryByText('NORTH CROSS')).toBeNull();
   });
 
-  it('orders columns as Sent, Unsent, Pending', () => {
+  it('orders columns as Suburb, Report, Sent, Unsent, Pending', () => {
     render(<DispatchTrendSection trend={mockTrend} />);
 
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers).toEqual(['Report', 'First Sent', 'Last Sent', 'Sent', 'Junk', 'Unsent', 'Pending', 'Progress']);
+    expect(headers).toEqual(['Suburb', 'Report', 'First Sent', 'Last Sent', 'Sent', 'Junk', 'Unsent', 'Pending', 'Progress']);
   });
 
   it('sorts the timeline with the most recently sent suburb first', () => {
@@ -233,7 +233,7 @@ describe('DispatchTrendSection', () => {
       ...mockTrend,
       bySuburb: [
         {
-          suburb: 'Albany',
+          suburb: 'Albany-Q2-2026',
           sent_count: 3,
           junk_count: 1,
           unsent_count: 0,
@@ -242,7 +242,7 @@ describe('DispatchTrendSection', () => {
           last_sent_at: null,
         },
         {
-          suburb: 'Browns Bay',
+          suburb: 'Browns Bay-Q2-2026',
           sent_count: 5,
           junk_count: 0,
           unsent_count: 0,
@@ -251,7 +251,7 @@ describe('DispatchTrendSection', () => {
           last_sent_at: '2026-07-20T00:00:00.000Z',
         },
         {
-          suburb: 'Torbay',
+          suburb: 'Torbay-Q2-2026',
           sent_count: 15,
           junk_count: 3,
           unsent_count: 2,
@@ -265,9 +265,10 @@ describe('DispatchTrendSection', () => {
     render(<DispatchTrendSection trend={trend} />);
 
     const rows = screen.getAllByRole('row');
-    expect(rows[1].textContent).toContain('Torbay');
-    expect(rows[2].textContent).toContain('Browns Bay');
-    expect(rows[3].textContent).toContain('Albany');
+    expect(rows[1].textContent).toContain('2026-Q2');
+    expect(rows[2].textContent).toContain('Torbay');
+    expect(rows[3].textContent).toContain('Browns Bay');
+    expect(rows[4].textContent).toContain('Albany');
   });
 
   it('merges multiple entries of the same report without duplicating rows', () => {
@@ -298,9 +299,118 @@ describe('DispatchTrendSection', () => {
     render(<DispatchTrendSection trend={trend} />);
 
     const rows = screen.getAllByRole('row');
-    expect(rows).toHaveLength(2);
-    expect(rows[1].textContent).toContain('Torbay-Q2-2026');
-    expect(rows[1].textContent).toContain('358');
-    expect(rows[1].textContent).toContain('115(24%)');
+    expect(rows).toHaveLength(3);
+    expect(rows[2].textContent).toContain('Torbay');
+    expect(rows[2].textContent).not.toContain('Torbay-Q2-2026');
+    expect(rows[2].textContent).toContain('358');
+    expect(rows[2].textContent).toContain('115(24%)');
+  });
+
+  it('groups suburbs under quarter headers with plain suburb names', () => {
+    const trend: DispatchTrend = {
+      ...mockTrend,
+      bySuburb: [
+        {
+          suburb: 'Oteha-Q3-2026',
+          quarter_key: '2026-Q3',
+          sent_count: 5,
+          junk_count: 0,
+          unsent_count: 5,
+          total_count: 10,
+          first_sent_at: '2026-10-01T00:00:00.000Z',
+          last_sent_at: '2026-10-11T00:00:00.000Z',
+        },
+        {
+          suburb: 'Torbay-Q2-2026',
+          quarter_key: '2026-Q2',
+          sent_count: 358,
+          junk_count: 115,
+          unsent_count: 0,
+          total_count: 473,
+          first_sent_at: '2026-08-06T00:00:00.000Z',
+          last_sent_at: '2026-08-27T00:00:00.000Z',
+        },
+        {
+          suburb: 'Oteha-Q2-2026',
+          quarter_key: '2026-Q2',
+          sent_count: 209,
+          junk_count: 0,
+          unsent_count: 67,
+          total_count: 276,
+          first_sent_at: '2026-07-01T00:00:00.000Z',
+          last_sent_at: '2026-10-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    render(<DispatchTrendSection trend={trend} />);
+
+    const rows = screen.getAllByRole('row');
+    expect(rows[1].textContent).toContain('2026-Q3');
+    expect(rows[3].textContent).toContain('2026-Q2');
+
+    expect(screen.getAllByText('Oteha')).toHaveLength(2);
+    expect(screen.queryByText('Oteha-Q3-2026')).toBeNull();
+    expect(screen.queryByText('Oteha-Q2-2026')).toBeNull();
+    expect(screen.getByText('Torbay')).toBeTruthy();
+
+    expect(rows[2].textContent).toContain('Oteha');
+    expect(rows[4].textContent).toContain('Oteha');
+    expect(rows[5].textContent).toContain('Torbay');
+  });
+
+  it('renders report links for each quarter report', () => {
+    const trend: DispatchTrend = {
+      ...mockTrend,
+      bySuburb: [
+        {
+          suburb: 'Oteha-Q3-2026',
+          quarter_key: '2026-Q3',
+          report_url: 'https://example.com/oteha-q3.pdf',
+          sent_count: 5,
+          junk_count: 0,
+          unsent_count: 5,
+          total_count: 10,
+          first_sent_at: '2026-10-01T00:00:00.000Z',
+          last_sent_at: '2026-10-11T00:00:00.000Z',
+        },
+        {
+          suburb: 'Oteha-Q2-2026',
+          quarter_key: '2026-Q2',
+          report_url: 'https://example.com/oteha-q2.pdf',
+          sent_count: 209,
+          junk_count: 0,
+          unsent_count: 67,
+          total_count: 276,
+          first_sent_at: '2026-07-01T00:00:00.000Z',
+          last_sent_at: '2026-10-01T00:00:00.000Z',
+        },
+        {
+          suburb: 'Torbay-Q2-2026',
+          quarter_key: '2026-Q2',
+          sent_count: 358,
+          junk_count: 0,
+          unsent_count: 0,
+          total_count: 358,
+          first_sent_at: '2026-08-06T00:00:00.000Z',
+          last_sent_at: '2026-08-27T00:00:00.000Z',
+        },
+      ],
+    };
+
+    render(<DispatchTrendSection trend={trend} />);
+
+    const links = screen.getAllByText('View Report');
+    expect(links).toHaveLength(2);
+    expect(links[0].getAttribute('href')).toBe('https://example.com/oteha-q3.pdf');
+    expect(links[0].getAttribute('target')).toBe('_blank');
+    expect(links[0].getAttribute('rel')).toBe('noopener noreferrer');
+    expect(links[1].getAttribute('href')).toBe('https://example.com/oteha-q2.pdf');
+
+    fireEvent.click(links[0]);
+    expect(screen.queryByText(/×/)).toBeNull();
+    expect(screen.getByText('All reports')).toBeTruthy();
+
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 });

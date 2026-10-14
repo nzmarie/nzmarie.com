@@ -409,6 +409,75 @@ describe('Dashboard Stats API', () => {
     expect(container.querySelectorAll('div.text-sm.font-semibold.text-slate-800').length).toBeGreaterThan(0);
   });
 
+  it('renders Total Sent quarterly breakdown with suburbs sorted by sent count', async () => {
+    useSessionMock = vi.fn().mockReturnValue({
+      data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },
+      status: 'authenticated',
+    });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          stats: {
+            newLeads: 0,
+            highPriorityLeads: 0,
+            pendingOutreach: 0,
+            todayFollowups: 0,
+            overdueFollowups: 0,
+            todayDownloads: 0,
+            sentSummary: {
+              total_sent: 214,
+              suburb_count: 2,
+              suburbs: [
+                { suburb: 'Oteha', sent_count: 209 },
+                { suburb: 'Torbay', sent_count: 5 },
+              ],
+              quarterly: [
+                {
+                  quarter_key: '2026-Q3',
+                  total_sent: 5,
+                  suburbs: [
+                    { suburb: 'Oteha', sent_count: 5, last_sent_at: '2026-10-11T00:00:00.000Z', report_url: 'https://example.com/oteha-q3.pdf' },
+                  ],
+                },
+                {
+                  quarter_key: '2026-Q2',
+                  total_sent: 209,
+                  suburbs: [
+                    { suburb: 'Oteha', sent_count: 209, last_sent_at: '2026-10-01T00:00:00.000Z', report_url: 'https://example.com/oteha-q2.pdf' },
+                  ],
+                },
+              ],
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+        }),
+      });
+
+    const DashboardPage = (await import('../../../app/admin/dashboard/page')).default;
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Total Sent')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    expect(screen.getByText('214')).toBeTruthy();
+    expect(screen.getByText('2026-Q3')).toBeTruthy();
+    expect(screen.getByText('2026-Q2')).toBeTruthy();
+    expect(screen.getByText('5 sent')).toBeTruthy();
+    expect(screen.getByText('209 sent')).toBeTruthy();
+    expect(screen.getByText('Oteha: 5')).toBeTruthy();
+    expect(screen.getByText('Oteha: 209')).toBeTruthy();
+  });
+
   it('renders Scan Trends chart section', async () => {
     useSessionMock = vi.fn().mockReturnValue({
       data: { user: { email: 'nzmarie.com@gmail.com', name: 'Marie' } },

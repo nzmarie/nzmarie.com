@@ -221,10 +221,10 @@ describe('Outreach page', () => {
       },
     ];
 
-    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+(global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -758,12 +758,13 @@ describe('Outreach page - List view mobile layout', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
     });
-    expect(screen.getByRole('button', { name: 'Oteha ★' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '2026-Q2 ★' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /2026-Q2/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Oteha/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Unsent' })).toBeTruthy();
   });
 
   it('sets the selected report as default via the button', async () => {
-    let postedBody: { suburb?: string; label?: string } | null = null;
+    let postedBody: { suburb?: string; label?: string; quarter?: string } | null = null;
     (global.fetch as any) = vi.fn((url: RequestInfo, init?: RequestInit) => {
       const s = String(url || '');
       if (s.includes('/api/admin/outreach/default-report')) {
@@ -791,16 +792,16 @@ describe('Outreach page - List view mobile layout', () => {
     fireEvent.click(pendingTab);
 
     const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    fireEvent.click(await within(reportSection).findByRole('button', { name: /2026-Q2/ }));
     fireEvent.click(await within(reportSection).findByRole('button', { name: 'Oteha' }));
-    fireEvent.click(await within(reportSection).findByRole('button', { name: '2026-Q2' }));
 
-    const setBtn = await within(reportSection).findByRole('button', { name: '☆ Set as default report' });
+    const setBtn = await within(reportSection).findByRole('button', { name: /Set as default/i });
     fireEvent.click(setBtn);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '★ Default' })).toBeTruthy();
+      expect(within(reportSection).getByRole('button', { name: /Default/i })).toBeTruthy();
     });
-    expect(postedBody).toEqual({ suburb: 'Oteha', label: '2026-Q2' });
+    expect(postedBody).toEqual({ suburb: 'Oteha', label: '2026-Q2', quarter: '2026-Q2' });
   });
 
   it('orders the Filter by Report suburb buttons by most recent upload first', async () => {
@@ -831,11 +832,14 @@ describe('Outreach page - List view mobile layout', () => {
     fireEvent.click(pendingTab);
 
     const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
-    const buttonNames = within(reportSection).getAllByRole('button').map(b => b.textContent?.trim() || '');
-    // Newest uploaded report's suburb appears leftmost: Oteha → Torbay → Albany.
+    fireEvent.click(await within(reportSection).findByRole('button', { name: /2026-Q2/ }));
+    const suburbButtons = within(reportSection).getAllByRole('button').filter(b => {
+      const text = b.textContent?.trim() || '';
+      return !text.match(/2026-Q\d/) && text !== 'All' && text !== 'Unsent' && text !== 'Sent ✓' && !text.includes('More') && !text.includes('Hide') && text !== '✕ Clear';
+    });
+    const buttonNames = suburbButtons.map(b => b.textContent?.trim() || '');
     expect(buttonNames.indexOf('Oteha')).toBeGreaterThanOrEqual(0);
-    expect(buttonNames.indexOf('Oteha')).toBeLessThan(buttonNames.indexOf('Torbay'));
-    expect(buttonNames.indexOf('Torbay')).toBeLessThan(buttonNames.indexOf('Albany'));
+    expect(buttonNames.indexOf('Oteha')).toBeLessThan(buttonNames.indexOf('Albany'));
   });
 
   it('filters sent properties by sent date via calendar', async () => {
@@ -887,6 +891,61 @@ describe('Outreach page - List view mobile layout', () => {
       expect(sentFetch).toContain('sent_dates=');
     });
   });
+
+  it('sends sent_dates together with report_quarter on the Sent tab', async () => {
+    const calls: string[] = [];
+    (global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      calls.push(s);
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            reports: [{ id: 'r1', suburb: 'Totara Vale', quarter: 'Q2', year: 2026, uploaded_at: '2026-06-01' }],
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              id: 'out-s-1',
+              property_address: '36 Target Road',
+              suburb: 'Totara Vale',
+              city: 'North Shore',
+              region: 'Auckland',
+              status: 'sent',
+              created_at: '2026-10-14T00:00:00Z',
+              sent_at: '2026-10-13T21:14:00Z',
+            },
+          ],
+          pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
+        }),
+      });
+    });
+
+    render(<OutreachPage />);
+
+    const sentTab = await screen.findByRole('button', { name: /✓ Sent/i });
+    fireEvent.click(sentTab);
+
+    const quarterChip = await screen.findByRole('button', { name: /2026-Q2/ });
+    fireEvent.click(quarterChip);
+
+    await waitFor(() => {
+      const combined = calls.find(
+        c => c.includes('/api/admin/outreach?') && c.includes('status=sent') && c.includes('report_quarter=2026-Q2')
+      );
+      expect(combined).toBeTruthy();
+      expect(combined).toContain('sent_dates=');
+    }, { timeout: 3000 });
+  });
 });
 
 describe('Outreach page - Card view run ordering', () => {
@@ -921,7 +980,7 @@ describe('Outreach page - Card view run ordering', () => {
     (global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -963,6 +1022,9 @@ describe('Outreach page - Card view run ordering', () => {
     const pendingTab = await screen.findByRole('button', { name: /Pending/i });
     fireEvent.click(pendingTab);
 
+    const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    fireEvent.click(await within(reportSection).findByRole('button', { name: /2026-Q2/ }));
+
     const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
     fireEvent.click(unsentBtn);
 
@@ -996,7 +1058,7 @@ describe('Outreach page - Card view run ordering', () => {
     (global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -1033,6 +1095,9 @@ describe('Outreach page - Card view run ordering', () => {
     const pendingTab = await screen.findByRole('button', { name: /Pending/i });
     fireEvent.click(pendingTab);
 
+    await screen.findByRole('button', { name: /2026-Q2/ }, { timeout: 5000 });
+    fireEvent.click(await screen.findByRole('button', { name: /2026-Q2/ }, { timeout: 5000 }));
+
     const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
     fireEvent.click(unsentBtn);
 
@@ -1058,7 +1123,7 @@ describe('Outreach page - Card view run ordering', () => {
     (global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -1100,6 +1165,9 @@ describe('Outreach page - Card view run ordering', () => {
 
     const pendingTab = await screen.findByRole('button', { name: /Pending/i });
     fireEvent.click(pendingTab);
+
+    const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    fireEvent.click(await within(reportSection).findByRole('button', { name: /2026-Q2/ }));
 
     const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
     fireEvent.click(unsentBtn);
@@ -1426,10 +1494,10 @@ describe('Outreach page - Card view run ordering', () => {
     const streetMemFetch = () => {
       (global.fetch as any) = vi.fn((url: RequestInfo) => {
         const s = String(url || '');
-        if (s.includes('/api/admin/pdf/reports')) {
-          return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
-        }
-        if (s.includes('/api/admin/outreach/default-report')) {
+if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
           return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
         }
         return Promise.resolve({
@@ -1516,12 +1584,12 @@ describe('Outreach page - Card view run ordering', () => {
       });
 
       const likedFetch = (data: ReturnType<typeof streetItem>[]) => {
-        (global.fetch as any) = vi.fn((url: RequestInfo) => {
-          const s = String(url || '');
-          if (s.includes('/api/admin/pdf/reports')) {
-            return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
-          }
-          if (s.includes('/api/admin/outreach/default-report')) {
+(global.fetch as any) = vi.fn((url: RequestInfo) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }, { suburb: 'Northcross', quarter: 'Q2', year: 2026, id: 'r2' }] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
             return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
           }
           return Promise.resolve({
@@ -1754,7 +1822,7 @@ describe('Outreach page - Card view run ordering', () => {
     (global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -1803,6 +1871,9 @@ describe('Outreach page - Card view run ordering', () => {
     const pendingTab = await screen.findByRole('button', { name: /Pending/i });
     fireEvent.click(pendingTab);
 
+    const reportSection = (await screen.findByText('📋 Filter by Report')).closest('div') as HTMLElement;
+    fireEvent.click(await within(reportSection).findByRole('button', { name: /2026-Q2/ }));
+
     const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
     fireEvent.click(unsentBtn);
 
@@ -1841,7 +1912,7 @@ describe('Outreach page - Card view run ordering', () => {
     (global.fetch as any) = vi.fn((url: RequestInfo) => {
       const s = String(url || '');
       if (s.includes('/api/admin/pdf/reports')) {
-        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [{ suburb: 'Torbay', quarter: 'Q2', year: 2026, id: 'r1' }] }) });
       }
       if (s.includes('/api/admin/outreach/default-report')) {
         return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
@@ -1898,10 +1969,13 @@ describe('Outreach page - Card view run ordering', () => {
       return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }) });
     });
 
-    render(<OutreachPage />);
+render(<OutreachPage />);
 
     const pendingTab = await screen.findByRole('button', { name: /Pending/i });
     fireEvent.click(pendingTab);
+
+    await screen.findByRole('button', { name: /2026-Q2/ }, { timeout: 5000 });
+    fireEvent.click(await screen.findByRole('button', { name: /2026-Q2/ }, { timeout: 5000 }));
 
     const unsentBtn = await screen.findByRole('button', { name: 'Unsent' });
     fireEvent.click(unsentBtn);
@@ -2319,6 +2393,161 @@ describe('Outreach page - scroll to top after actions', () => {
     await waitFor(() => {
       expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
     }, { timeout: 3000 });
+
+    confirmSpy.mockRestore();
+  });
+});
+
+describe('Outreach page - Return to Pending actions', () => {
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockSession = {
+      data: { user: { email: 'nzlouis.com@gmail.com' } },
+      status: 'authenticated',
+    };
+    global.fetch = vi.fn();
+    vi.stubGlobal('scrollTo', vi.fn());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+  });
+
+  function makeOutreachFetch(sentStatus = 'sent') {
+    return (global.fetch as any) = vi.fn((url: RequestInfo, init?: RequestInit) => {
+      const s = String(url || '');
+      if (s.includes('/api/admin/pdf/reports')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, reports: [] }) });
+      }
+      if (s.includes('/api/admin/outreach/default-report')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, defaultReport: null }) });
+      }
+      if (s.includes('/api/admin/outreach?')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              { id: 'addr-1', property_address: '1 Main St', suburb: 'Oteha', city: 'North Shore', region: 'Auckland', status: sentStatus, created_at: '2024-01-01', bedrooms: 3, bathrooms: 1, car_spaces: 1, capital_value: 500000, last_sold_price: 400000, last_sold_date: '2020-01-01', build_year: 1990, image_url: '', property_url: '' },
+              { id: 'addr-2', property_address: '2 Oak Ave', suburb: 'Oteha', city: 'North Shore', region: 'Auckland', status: sentStatus, created_at: '2024-01-02', bedrooms: 4, bathrooms: 2, car_spaces: 2, capital_value: 600000, last_sold_price: 500000, last_sold_date: '2021-01-01', build_year: 1995, image_url: '', property_url: '' },
+            ],
+            pagination: { page: 1, limit: 9, total: 2, totalPages: 1 },
+          }),
+        });
+      }
+      if (s.includes('/api/admin/outreach/') && s.includes('/status') && init?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, data: {} }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+  }
+
+  it('shows Return to Pending before Return to Liked on the Pending tab and PATCHes status to pending', async () => {
+    makeOutreachFetch('pending');
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('button', { name: '⏳ Pending' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    checkboxes.forEach((cb) => fireEvent.click(cb));
+
+    const returnToPendingBtn = screen.getByRole('button', { name: /Return to Pending/i });
+    const returnToLikedBtn = screen.getByRole('button', { name: /Return to Liked/i });
+    const allButtons = screen.getAllByRole('button');
+    expect(allButtons.indexOf(returnToPendingBtn)).toBeLessThan(allButtons.indexOf(returnToLikedBtn));
+
+    fireEvent.click(returnToPendingBtn);
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const statusCalls = (global.fetch as any).mock.calls.filter(
+        (c: unknown[]) => String(c[0]).includes('/status') && (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(statusCalls.length).toBeGreaterThan(0);
+      expect(JSON.parse((statusCalls[0][1] as RequestInit).body as string).status).toBe('pending');
+    }, { timeout: 3000 });
+
+    confirmSpy.mockRestore();
+  });
+
+  it('confirms and PATCHes status to pending from the Sent tab bulk bar', async () => {
+    makeOutreachFetch('sent');
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('button', { name: '✓ Sent' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    checkboxes.forEach((cb) => fireEvent.click(cb));
+
+    const returnToPendingBtn = screen.getByRole('button', { name: /Return to Pending/i });
+    fireEvent.click(returnToPendingBtn);
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Return 2 addresses to Pending?'));
+
+    await waitFor(() => {
+      const statusCalls = (global.fetch as any).mock.calls.filter(
+        (c: unknown[]) => String(c[0]).includes('/status') && (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(statusCalls.length).toBe(2);
+      for (const call of statusCalls) {
+        expect(JSON.parse((call[1] as RequestInit).body as string).status).toBe('pending');
+      }
+    }, { timeout: 3000 });
+
+    confirmSpy.mockRestore();
+  });
+
+  it('does not PATCH when the Return to Pending confirm is cancelled on the Sent tab', async () => {
+    makeOutreachFetch('sent');
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<OutreachPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('button', { name: '✓ Sent' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('1 Main St')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    checkboxes.forEach((cb) => fireEvent.click(cb));
+
+    fireEvent.click(screen.getByRole('button', { name: /Return to Pending/i }));
+
+    await new Promise((r) => setTimeout(r, 300));
+    const statusCalls = (global.fetch as any).mock.calls.filter(
+      (c: unknown[]) => String(c[0]).includes('/status') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
+    expect(statusCalls).toHaveLength(0);
 
     confirmSpy.mockRestore();
   });

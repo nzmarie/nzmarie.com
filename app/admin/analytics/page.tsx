@@ -484,8 +484,6 @@ export default function AnalyticsPage() {
         }}
       />
 
-      <SuburbSectionAnalytics />
-
       {/* Market Data Table */}
       <MonthlyDataTable
         monthlyData={monthlyData}
@@ -699,6 +697,8 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+
+      <SuburbSectionAnalytics />
 
              {/* Excel Upload Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

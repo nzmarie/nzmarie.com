@@ -48,12 +48,11 @@ describe('buildOutreachFilter - Unsent Status', () => {
       reportQuarter: '2026-Q2',
     });
 
-    // Should include quarter filter parameters
     expect(filter.params).toContain('Torbay');
     expect(filter.params).toContain('Q2');
     expect(filter.params).toContain(2026);
-    expect(filter.params).toContain('2026-Q2');
-    expect(filter.params).toContain('2026_Q2');
+    expect(filter.params).toContain('^2026[_-]Q2');
+    expect(filter.sql).toContain('campaign_key ~');
   });
 
   it('should combine pending status and unsent filters correctly', () => {
@@ -139,5 +138,48 @@ describe('buildOutreachFilter - Unsent Status', () => {
 
     // Should check that sent_at IS NULL
     expect(filter.sql).toContain('op.sent_at IS NULL');
+  });
+
+  it('should not exclude properties sent in earlier quarters when reportQuarter is set', () => {
+    const filter = buildOutreachFilter({
+      suburb: 'Oteha',
+      status: 'pending',
+      sentStatus: 'unsent',
+      reportQuarter: '2026-Q3',
+    });
+
+    expect(filter.sql).toContain("op.status IN ('pending', 'sent')");
+    expect(filter.sql).not.toContain("op.status = 'pending'");
+    expect(filter.sql).not.toContain('COALESCE(op.total_send_count, 0) = 0');
+    expect(filter.sql).not.toContain('op.last_sent_at IS NULL');
+    expect(filter.sql).toContain('NOT EXISTS');
+  });
+
+  it('should scope sent filter to the quarter send log only when reportQuarter is set', () => {
+    const filter = buildOutreachFilter({
+      suburb: 'Oteha',
+      status: 'pending',
+      sentStatus: 'sent',
+      reportQuarter: '2026-Q3',
+    });
+
+    expect(filter.sql).toContain("op.status IN ('pending', 'sent')");
+    expect(filter.sql).not.toContain("(op.status = 'sent' OR op.status = 'pending')");
+    expect(filter.sql).not.toContain('COALESCE(op.total_send_count, 0) > 0');
+    expect(filter.params).toContain('Q3');
+    expect(filter.params).toContain(2026);
+    expect(filter.params).toContain('^2026[_-]Q3');
+  });
+
+  it('should not use global sent heuristics when reportQuarter is malformed', () => {
+    const filter = buildOutreachFilter({
+      suburb: 'Oteha',
+      status: 'pending',
+      sentStatus: 'unsent',
+      reportQuarter: 'bad-quarter',
+    });
+
+    expect(filter.params).not.toContain('^2026[_-]Q3');
+    expect(filter.sql).toContain('COALESCE(op.total_send_count, 0) = 0');
   });
 });

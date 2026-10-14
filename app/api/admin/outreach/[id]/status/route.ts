@@ -49,6 +49,14 @@ export async function PATCH(
         `DELETE FROM outreach_send_logs WHERE outreach_property_id = $1`,
         [params.id]
       );
+      try {
+        await marieDB.query(
+          `DELETE FROM outreach_property_quarter_status WHERE outreach_property_id = $1`,
+          [params.id]
+        );
+      } catch {
+        // quarter-status table may not exist yet (migration not applied)
+      }
     }
 
     // Invalidate street-clusters cache for this suburb

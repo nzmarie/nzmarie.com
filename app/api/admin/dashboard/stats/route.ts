@@ -76,6 +76,90 @@ interface BuiltTrend {
   bySuburb: Record<string, TrendBucket[]>;
 }
 
+interface QuarterOverviewRow {
+  quarter_key: string;
+  quarter: string;
+  year: number;
+  suburbs_count: string | number;
+  total_properties: string | number;
+  total_sent: string | number;
+  total_unsent: string | number;
+  total_partial: string | number;
+  total_send_events: string | number;
+}
+
+interface SuburbQuarterDetailRow {
+  suburb: string;
+  total_properties: string | number;
+  sent_count: string | number;
+  unsent_count: string | number;
+  partial_count: string | number;
+  last_sent_at: string | null;
+}
+
+interface QuarterlySuburbSentRow {
+  quarter_key?: string | null;
+  suburb?: string;
+  sent_count?: string | number;
+  last_sent_at?: string | Date | null;
+}
+
+interface ActiveReportRow {
+  suburb?: string;
+  quarter?: string;
+  year?: number | string;
+  file_url?: string;
+}
+
+interface QuarterlySentSuburb {
+  suburb: string;
+  sent_count: number;
+  last_sent_at: string | null;
+  report_url: string | null;
+}
+
+interface QuarterlySentSummary {
+  quarter_key: string;
+  total_sent: number;
+  suburbs: QuarterlySentSuburb[];
+}
+
+interface QuarterOverview {
+  quarterKey: string;
+  quarter: string;
+  year: number;
+  suburbsCount: number;
+  totalProperties: number;
+  totalSent: number;
+  totalUnsent: number;
+  totalPartial: number;
+  totalSendEvents: number;
+}
+
+interface SuburbQuarterDetail {
+  suburb: string;
+  total: number;
+  sent: number;
+  unsent: number;
+  partial: number;
+  lastSentAt: string | null;
+}
+
+interface QuarterData {
+  quarterKey: string;
+  quarter: string;
+  year: number;
+  overview: {
+    suburbsCount: number;
+    totalProperties: number;
+    totalSent: number;
+    totalUnsent: number;
+    totalPartial: number;
+    totalSendEvents: number;
+  };
+  suburbs: SuburbQuarterDetail[];
+}
+
 function buildTrend(sentRows: TrendRow[], junkRows: TrendRow[]): BuiltTrend {
   const bySuburb: Record<string, Map<string, TrendBucket>> = {};
   const allMap = new Map<string, TrendBucket>();
@@ -126,11 +210,13 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const suburb = searchParams.get('suburb');
+  const quarterKey = searchParams.get('quarterKey');
+  let targetQuarterKey = quarterKey || '2026-Q2';
 
   try {
     await ensureCampaignTablesExist();
 
-    const cacheKey = `dashboard:stats:${suburb || 'all'}`;
+    const cacheKey = `dashboard:stats:${suburb || 'all'}:${quarterKey || 'all'}`;
 
     const result = await getCachedOrFetch(
       cacheKey,
@@ -138,6 +224,56 @@ export async function GET(request: Request) {
         const suburbFilter = suburb && suburb !== 'all';
         const suburbCondition = suburbFilter ? sql`AND suburb = ${suburb}` : sql``;
 
+        // Fetch quarter overview from materialized view (all quarters)
+        const quarterOverviewResult = await db.execute(sql`
+          SELECT quarter_key, quarter, year, suburbs_count, total_properties, total_sent, total_unsent, total_partial, total_send_events
+          FROM mv_quarter_overview
+          ORDER BY year DESC, quarter DESC
+        `);
+
+        // Determine target quarter
+        // Determine target quarter
+        targetQuarterKey = quarterKey || (quarterOverviewResult.rows[0] as unknown as QuarterOverviewRow)?.quarter_key || '2026-Q2';
+
+        // Fetch suburb detail for target quarter from materialized view
+        const suburbDetailQuery = suburbFilter
+          ? sql`SELECT suburb, total_properties, sent_count, unsent_count, partial_count, last_sent_at
+                FROM mv_suburb_quarter_summary
+                WHERE quarter_key = ${targetQuarterKey}
+                AND suburb = ${suburb}
+                ORDER BY sent_count DESC, suburb`
+          : sql`SELECT suburb, total_properties, sent_count, unsent_count, partial_count, last_sent_at
+                FROM mv_suburb_quarter_summary
+                WHERE quarter_key = ${targetQuarterKey}
+                ORDER BY sent_count DESC, suburb`;
+
+        const suburbDetailResult = await db.execute(suburbDetailQuery);
+
+        const quarterOverview: QuarterOverview[] = (quarterOverviewResult.rows as unknown as QuarterOverviewRow[]).map((row) => ({
+          quarterKey: row.quarter_key,
+          quarter: row.quarter,
+          year: Number(row.year),
+          suburbsCount: Number(row.suburbs_count) || 0,
+          totalProperties: Number(row.total_properties) || 0,
+          totalSent: Number(row.total_sent) || 0,
+          totalUnsent: Number(row.total_unsent) || 0,
+          totalPartial: Number(row.total_partial) || 0,
+          totalSendEvents: Number(row.total_send_events) || 0,
+        }));
+
+        const targetQuarterOverview = quarterOverview.find((q) => q.quarterKey === targetQuarterKey) || quarterOverview[0];
+
+        const suburbDetails: SuburbQuarterDetail[] = (suburbDetailResult.rows as unknown as SuburbQuarterDetailRow[]).map((row) => ({
+          suburb: row.suburb,
+          total: Number(row.total_properties) || 0,
+          sent: Number(row.sent_count) || 0,
+          unsent: Number(row.unsent_count) || 0,
+          partial: Number(row.partial_count) || 0,
+          lastSentAt: row.last_sent_at ? new Date(row.last_sent_at).toISOString() : null,
+        }));
+
+        // Fetch overall stats (non-quarter-aware, for general stats)
+        
         const dbResult = await db.execute(sql`
           WITH
             new_leads_cte AS (
@@ -200,9 +336,9 @@ export async function GET(request: Request) {
             outreach_by_suburb_full_cte AS MATERIALIZED (
               SELECT
                 op.suburb,
-                COUNT(*) FILTER (WHERE LOWER(op.status) IN ('pending', 'sent')) as pending_count,
-                COUNT(*) FILTER (WHERE LOWER(op.status) = 'sent') as sent_count,
-                COUNT(*) as total_count,
+                COUNT(DISTINCT op.id) FILTER (WHERE LOWER(op.status) IN ('pending', 'sent')) as pending_count,
+                COUNT(DISTINCT op.id) FILTER (WHERE LOWER(op.status) = 'sent') as sent_count,
+                COUNT(DISTINCT op.id) as total_count,
                 MAX(sl.sent_at) AS last_sent_at
               FROM outreach_properties op
               LEFT JOIN outreach_send_logs sl ON sl.outreach_property_id = op.id
@@ -306,26 +442,127 @@ export async function GET(request: Request) {
                 AND LOWER(op.status) = 'pending'
                 AND d.id IS NULL
             ),
-            junk_by_suburb_cte AS (
+            quarterly_suburb_sent_cte AS (
+              SELECT
+                CASE WHEN sl.campaign_key ~ '^[0-9]{4}[_-]Q[1-4]'
+                  THEN substring(sl.campaign_key from '^([0-9]{4})') || '-' || substring(sl.campaign_key from '[_-](Q[1-4])')
+                  WHEN sr.quarter IS NOT NULL AND sr.year IS NOT NULL
+                  THEN sr.year || '-' || sr.quarter
+                END AS quarter_key,
+                sl.suburb,
+                COUNT(DISTINCT sl.outreach_property_id) AS sent_count,
+                MAX(sl.sent_at) AS last_sent_at
+              FROM outreach_send_logs sl
+              LEFT JOIN suburb_reports sr ON sr.id = sl.suburb_report_id
+              WHERE sl.suburb IS NOT NULL
+                ${suburbFilter ? sql`AND sl.suburb = ${suburb}` : sql``}
+              GROUP BY 1, 2
+            ),
+            dispatch_report_quarters AS MATERIALIZED (
+              SELECT DISTINCT
+                sr.suburb,
+                (sr.year::int * 4 + (substring(sr.quarter from 'Q([1-4])')::int - 1)) AS q_index,
+                (sr.year::text || '_Q' || substring(sr.quarter from 'Q([1-4])') || '_' || sr.suburb) AS campaign_key
+              FROM suburb_reports sr
+              WHERE sr.status = 'active'
+                AND sr.suburb IS NOT NULL
+                AND sr.quarter IS NOT NULL
+                AND sr.year IS NOT NULL
+                ${suburbFilter ? sql`AND sr.suburb = ${suburb}` : sql``}
+            ),
+            dispatch_send_logs AS MATERIALIZED (
+              SELECT
+                sl.suburb,
+                CASE WHEN sl.campaign_key ~ '^[0-9]{4}[_-]Q[1-4]'
+                  THEN substring(sl.campaign_key from '^([0-9]{4})')::int * 4
+                       + (substring(sl.campaign_key from '[_-]Q([1-4])')::int - 1)
+                END AS q_index,
+                sl.outreach_property_id AS pid,
+                sl.sent_at,
+                sl.campaign_key
+              FROM outreach_send_logs sl
+              WHERE sl.suburb IS NOT NULL
+                ${suburbFilter ? sql`AND sl.suburb = ${suburb}` : sql``}
+            ),
+            dispatch_quarter_sent AS MATERIALIZED (
               SELECT
                 suburb,
-                campaign_key,
-                COUNT(DISTINCT property_id)::int AS junk_count
-              FROM junk_props_buckets
-              GROUP BY suburb, campaign_key
+                q_index,
+                COUNT(DISTINCT pid) AS sent_count,
+                MIN(sent_at) AS first_sent_at,
+                MAX(sent_at) AS last_sent_at,
+                MIN(campaign_key) AS campaign_key
+              FROM dispatch_send_logs
+              WHERE q_index IS NOT NULL
+              GROUP BY suburb, q_index
+            ),
+            dispatch_audience_props AS MATERIALIZED (
+              SELECT rq.suburb, rq.q_index, op.id AS pid
+              FROM dispatch_report_quarters rq
+              LEFT JOIN dispatch_quarter_sent prev
+                ON prev.suburb = rq.suburb AND prev.q_index = rq.q_index - 1
+              JOIN outreach_properties op
+                ON op.suburb = rq.suburb AND LOWER(op.status) IN ('pending', 'sent')
+              WHERE prev.suburb IS NULL
+              UNION
+              SELECT rq.suburb, rq.q_index, prevq.pid
+              FROM dispatch_report_quarters rq
+              JOIN dispatch_send_logs prevq
+                ON prevq.suburb = rq.suburb AND prevq.q_index = rq.q_index - 1
+            ),
+            dispatch_quarter_aud AS MATERIALIZED (
+              SELECT
+                aud.suburb,
+                aud.q_index,
+                COUNT(DISTINCT aud.pid) AS total_count,
+                COUNT(DISTINCT aud.pid) FILTER (
+                  WHERE p.no_junk_mail = TRUE
+                    AND NOT EXISTS (
+                      SELECT 1 FROM dispatch_send_logs sl2
+                      WHERE sl2.suburb = aud.suburb
+                        AND sl2.q_index = aud.q_index
+                        AND sl2.pid = aud.pid
+                    )
+                ) AS junk_count
+              FROM dispatch_audience_props aud
+              LEFT JOIN outreach_properties op ON op.id = aud.pid
+              LEFT JOIN properties p ON REPLACE(op.property_id::text, '-', '') = p.id
+              GROUP BY aud.suburb, aud.q_index
             ),
             dispatch_by_suburb_cte AS (
               SELECT
-                op.suburb,
-                COALESCE(NULLIF(sl.campaign_key, ''), NULLIF(op.campaign, ''), op.suburb) AS campaign_key,
-                COUNT(DISTINCT op.id) FILTER (WHERE sl.id IS NOT NULL OR LOWER(op.status) = 'sent') AS sent_count,
-                COUNT(DISTINCT op.id) FILTER (WHERE LOWER(op.status) IN ('pending', 'sent')) AS total_count,
-                MIN(sl.sent_at) AS first_sent_at,
-                MAX(sl.sent_at) AS last_sent_at
-              FROM outreach_properties op
-              LEFT JOIN outreach_send_logs sl ON sl.outreach_property_id = op.id
-              WHERE op.suburb IS NOT NULL
-              GROUP BY op.suburb, COALESCE(NULLIF(sl.campaign_key, ''), NULLIF(op.campaign, ''), op.suburb)
+                rq.suburb,
+                COALESCE(s.campaign_key, rq.campaign_key) AS campaign_key,
+                COALESCE(s.sent_count, 0) AS sent_count,
+                COALESCE(a.junk_count, 0) AS junk_count,
+                COALESCE(a.total_count, 0) AS total_count,
+                s.first_sent_at,
+                s.last_sent_at
+              FROM dispatch_report_quarters rq
+              LEFT JOIN dispatch_quarter_aud a
+                ON a.suburb = rq.suburb AND a.q_index = rq.q_index
+              LEFT JOIN dispatch_quarter_sent s
+                ON s.suburb = rq.suburb AND s.q_index = rq.q_index
+              UNION ALL
+              SELECT
+                n.suburb,
+                n.campaign_key,
+                n.sent_count,
+                0::bigint AS junk_count,
+                n.sent_count AS total_count,
+                n.first_sent_at,
+                n.last_sent_at
+              FROM (
+                SELECT
+                  suburb,
+                  campaign_key,
+                  COUNT(DISTINCT pid) AS sent_count,
+                  MIN(sent_at) AS first_sent_at,
+                  MAX(sent_at) AS last_sent_at
+                FROM dispatch_send_logs
+                WHERE q_index IS NULL
+                GROUP BY suburb, campaign_key
+              ) n
             )
           SELECT
             (SELECT count FROM new_leads_cte) as new_leads,
@@ -345,6 +582,7 @@ export async function GET(request: Request) {
             (SELECT json_agg(row_to_json(s)) FROM sent_summary_cte s) as sent_summary_suburbs,
             (SELECT COUNT(*) FROM sent_summary_cte) as sent_summary_suburb_count,
             (SELECT COALESCE(SUM(sent_count), 0) FROM sent_summary_cte) as sent_summary_total_sent,
+            (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT * FROM quarterly_suburb_sent_cte WHERE quarter_key IS NOT NULL) s) as quarterly_suburb_sent,
             (SELECT total_pv FROM scans_summary_cte) as total_scans,
             (SELECT total_uv FROM scans_summary_cte) as total_unique_scans,
             (SELECT total_new_devices FROM scans_summary_cte) as total_new_devices,
@@ -359,11 +597,10 @@ export async function GET(request: Request) {
             (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(month_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, month_bucket ORDER BY month_bucket) s) as junk_monthly,
             (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (SELECT suburb, campaign_key, TO_CHAR(quarter_bucket, 'YYYY-MM-DD') AS bucket, COUNT(DISTINCT property_id)::int AS junk FROM junk_props_buckets GROUP BY suburb, campaign_key, quarter_bucket ORDER BY quarter_bucket) s) as junk_quarterly,
             (SELECT COALESCE(json_agg(row_to_json(s)), '[]') FROM (
-              SELECT d.suburb, d.campaign_key, d.sent_count, COALESCE(j.junk_count, 0) AS junk_count,
-                     GREATEST(0, d.total_count - d.sent_count - COALESCE(j.junk_count, 0)) AS unsent_count,
+              SELECT d.suburb, d.campaign_key, d.sent_count, COALESCE(d.junk_count, 0) AS junk_count,
+                     GREATEST(0, d.total_count - d.sent_count - COALESCE(d.junk_count, 0)) AS unsent_count,
                      d.total_count, d.first_sent_at, d.last_sent_at
               FROM dispatch_by_suburb_cte d
-              LEFT JOIN junk_by_suburb_cte j ON j.suburb = d.suburb AND (j.campaign_key = d.campaign_key OR j.campaign_key IS NULL)
             ) s) as dispatch_by_suburb,
             (SELECT json_agg(row_to_json(r)) FROM recent_downloads_cte r) as recent_downloads
         `);
@@ -386,6 +623,47 @@ export async function GET(request: Request) {
           suburb: item?.suburb || 'Unknown',
           sent_count: Number(item?.sent_count) || 0,
         }));
+
+        const reportsResult = await db.execute(sql`
+          SELECT suburb, quarter, year, file_url
+          FROM suburb_reports
+          WHERE status = 'active' AND (doc_label = 'Main Report' OR doc_label IS NULL)
+          ORDER BY uploaded_at DESC
+        `);
+
+        const reportsMap = new Map<string, string>();
+        for (const r of (Array.isArray(reportsResult.rows) ? reportsResult.rows as unknown as ActiveReportRow[] : [])) {
+          if (!r.suburb || !r.quarter || r.year == null) continue;
+          const key = `${r.suburb.trim().toLowerCase()}|${r.year}-${r.quarter.toUpperCase()}`;
+          if (!reportsMap.has(key)) reportsMap.set(key, r.file_url || '');
+        }
+
+        const quarterlyMap = new Map<string, QuarterlySentSuburb[]>();
+        for (const item of (Array.isArray(row.quarterly_suburb_sent) ? row.quarterly_suburb_sent as QuarterlySuburbSentRow[] : [])) {
+          if (!item.quarter_key || !item.suburb) continue;
+          const reportUrl = reportsMap.get(`${item.suburb.trim().toLowerCase()}|${item.quarter_key.toUpperCase()}`) || null;
+          let arr = quarterlyMap.get(item.quarter_key);
+          if (!arr) { arr = []; quarterlyMap.set(item.quarter_key, arr); }
+          arr.push({
+            suburb: item.suburb,
+            sent_count: Number(item.sent_count) || 0,
+            last_sent_at: item.last_sent_at ? new Date(item.last_sent_at).toISOString() : null,
+            report_url: reportUrl,
+          });
+        }
+
+        const quarterlySentSummaries: QuarterlySentSummary[] = Array.from(quarterlyMap.entries())
+          .map(([quarterKey, suburbs]) => ({
+            quarter_key: quarterKey,
+            total_sent: suburbs.reduce((sum, s) => sum + s.sent_count, 0),
+            suburbs: suburbs.sort((a, b) => {
+              if (b.sent_count !== a.sent_count) return b.sent_count - a.sent_count;
+              const ta = a.last_sent_at ? new Date(a.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+              const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
+              return tb - ta;
+            }),
+          }))
+          .sort((a, b) => b.quarter_key.localeCompare(a.quarter_key));
 
         const scanCampaigns: ScanCampaignItem[] = Array.isArray(row.scan_campaigns) ? (row.scan_campaigns as ScanCampaignRow[]).map((item) => ({
           campaign_key: item?.campaign_key || '',
@@ -412,6 +690,8 @@ export async function GET(request: Request) {
         const dispatchMap = new Map<string, {
           suburb: string;
           raw_suburb: string;
+          quarter_key: string | null;
+          report_url: string | null;
           sent_count: number;
           junk_count: number;
           unsent_count: number;
@@ -427,12 +707,17 @@ export async function GET(request: Request) {
           const total = Number(item.total_count) || 0;
           const unsent = Number.isFinite(Number(item.unsent_count)) ? Number(item.unsent_count) : Math.max(0, total - sent - junk);
           const reportKey = formatReportKey(item.campaign_key || item.suburb, item.suburb as string);
+          const ckMatch = (item.campaign_key || '').match(/^(\d{4})[_-](Q[1-4])/i);
+          const quarterKey = ckMatch ? `${ckMatch[1]}-${ckMatch[2].toUpperCase()}` : null;
+          const reportUrl = quarterKey ? reportsMap.get(`${(item.suburb as string).trim().toLowerCase()}|${quarterKey.toUpperCase()}`) || null : null;
 
           const existing = dispatchMap.get(reportKey);
           if (!existing) {
             dispatchMap.set(reportKey, {
               suburb: reportKey,
               raw_suburb: item.suburb as string,
+              quarter_key: quarterKey,
+              report_url: reportUrl,
               sent_count: sent,
               junk_count: junk,
               unsent_count: unsent,
@@ -445,6 +730,10 @@ export async function GET(request: Request) {
             existing.junk_count += junk;
             existing.unsent_count += unsent;
             existing.total_count += total;
+            if (!existing.quarter_key && quarterKey) {
+              existing.quarter_key = quarterKey;
+              existing.report_url = reportUrl;
+            }
             if (item.first_sent_at) {
               const d = new Date(item.first_sent_at).toISOString();
               if (!existing.first_sent_at || d < existing.first_sent_at) existing.first_sent_at = d;
@@ -456,7 +745,7 @@ export async function GET(request: Request) {
           }
         }
 
-        const dispatchBySuburb: Array<{ suburb: string; sent_count: number; junk_count: number; unsent_count: number; total_count: number; first_sent_at: string | null; last_sent_at: string | null }> =
+        const dispatchBySuburb: Array<{ suburb: string; quarter_key: string | null; report_url: string | null; sent_count: number; junk_count: number; unsent_count: number; total_count: number; first_sent_at: string | null; last_sent_at: string | null }> =
           Array.from(dispatchMap.values())
             .filter((item) => !suburbFilter || item.suburb === suburb || item.raw_suburb === suburb || item.suburb.toLowerCase().startsWith(suburb.toLowerCase()))
             .sort((a, b) => {
@@ -464,6 +753,27 @@ export async function GET(request: Request) {
               const tb = b.last_sent_at ? new Date(b.last_sent_at).getTime() : Number.NEGATIVE_INFINITY;
               return tb - ta;
             });
+
+        // Build quarter data structure
+        const quarterData: QuarterData = {
+          quarterKey: quarterOverview[0]?.quarterKey || '2026-Q2',
+          quarter: quarterOverview[0]?.quarter || 'Q2',
+          year: quarterOverview[0]?.year || 2026,
+          overview: {
+            suburbsCount: targetQuarterOverview?.suburbsCount || 0,
+            totalProperties: targetQuarterOverview?.totalProperties || 0,
+            totalSent: targetQuarterOverview?.totalSent || 0,
+            totalUnsent: targetQuarterOverview?.totalUnsent || 0,
+            totalPartial: targetQuarterOverview?.totalPartial || 0,
+            totalSendEvents: targetQuarterOverview?.totalSendEvents || 0,
+          },
+          suburbs: suburbDetails,
+        };
+
+        // Calculate totals from quarter overviews
+        const totalSentAllQuarters = quarterOverview.reduce((sum, q) => sum + q.totalSent, 0);
+        const totalPropertiesAllQuarters = quarterOverview.reduce((sum, q) => sum + q.totalProperties, 0);
+        const totalUnsentAllQuarters = quarterOverview.reduce((sum, q) => sum + q.totalUnsent, 0);
 
         return {
           newLeads: Number(row.new_leads) || 0,
@@ -481,9 +791,12 @@ export async function GET(request: Request) {
           pdfReportsTotal: Number(row.pdf_reports_total) || 0,
           outreachBySuburb,
           sentSummary: {
-            total_sent: Number(row.sent_summary_total_sent) || sentSummary.reduce((sum: number, item) => sum + Number(item.sent_count || 0), 0),
+            total_sent: quarterlySentSummaries.length > 0
+              ? quarterlySentSummaries.reduce((sum, q) => sum + q.total_sent, 0)
+              : Number(row.sent_summary_total_sent) || sentSummary.reduce((sum: number, item) => sum + Number(item.sent_count || 0), 0),
             suburb_count: Number(row.sent_summary_suburb_count) || sentSummary.length,
             suburbs: sentSummary,
+            quarterly: quarterlySentSummaries,
           },
           scanStats: {
             total_scans: Number(row.total_scans) || 0,
@@ -509,6 +822,12 @@ export async function GET(request: Request) {
             },
             bySuburb: dispatchBySuburb,
           },
+          quarterData,
+          quarterOverviews: quarterOverview,
+          targetQuarterKey,
+          totalSentAllQuarters,
+          totalPropertiesAllQuarters,
+          totalUnsentAllQuarters,
         };
       },
       600
@@ -518,6 +837,7 @@ export async function GET(request: Request) {
       success: true,
       stats: result,
       suburb: suburb || 'all',
+      quarterKey: targetQuarterKey,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

@@ -24,7 +24,27 @@ describe('default-report API', () => {
     vi.mocked(auth).mockResolvedValueOnce({ user: { email: 'admin@test.com' } } as any);
   });
 
-  it('POST saves the default report as JSON in admin_settings', async () => {
+  it('POST saves the default report as JSON in admin_settings with quarter', async () => {
+    vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
+
+    const response = await POST(
+      new Request('http://localhost:3000/api/admin/outreach/default-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: 'Oteha', label: '2026-Q2', quarter: '2026-Q2' }),
+      })
+    );
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.success).toBe(true);
+
+    expect(marieDB.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO admin_settings'),
+      ['default_outreach_report_2026-Q2', JSON.stringify({ suburb: 'Oteha', label: '2026-Q2' }), 'admin@test.com']
+    );
+  });
+
+  it('POST saves default report without quarter (legacy)', async () => {
     vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
 
     const response = await POST(
@@ -63,18 +83,29 @@ describe('default-report API', () => {
       new Request('http://localhost:3000/api/admin/outreach/default-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ suburb: 'Oteha', label: '2026-Q2' }),
+        body: JSON.stringify({ suburb: 'Oteha', label: '2026-Q2', quarter: '2026-Q2' }),
       })
     );
     expect(response.status).toBe(401);
   });
 
-  it('GET returns the stored default report', async () => {
+  it('GET returns the stored default report for quarter', async () => {
     vi.mocked(marieDB.query).mockResolvedValueOnce({
       rows: [{ setting_value: JSON.stringify({ suburb: 'Oteha', label: '2026-Q2' }) }],
     } as any);
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach/default-report?quarter=2026-Q2'));
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.defaultReport).toEqual({ suburb: 'Oteha', label: '2026-Q2' });
+  });
+
+  it('GET returns the stored default report without quarter (legacy)', async () => {
+    vi.mocked(marieDB.query).mockResolvedValueOnce({
+      rows: [{ setting_value: JSON.stringify({ suburb: 'Oteha', label: '2026-Q2' }) }],
+    } as any);
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach/default-report'));
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.defaultReport).toEqual({ suburb: 'Oteha', label: '2026-Q2' });
@@ -83,7 +114,7 @@ describe('default-report API', () => {
   it('GET returns null default when nothing is stored', async () => {
     vi.mocked(marieDB.query).mockResolvedValueOnce({ rows: [] } as any);
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost:3000/api/admin/outreach/default-report?quarter=2026-Q2'));
     const data = await response.json();
     expect(data.defaultReport).toBeNull();
   });

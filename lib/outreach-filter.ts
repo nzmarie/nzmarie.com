@@ -1,3 +1,5 @@
+import { parseReportQuarter } from '@/lib/outreach-quarter';
+
 export interface OutreachFilterOptions {
   suburb: string;
   status: string;
@@ -13,11 +15,14 @@ export interface OutreachFilter {
 export function buildOutreachFilter(opts: OutreachFilterOptions): OutreachFilter {
   const params: unknown[] = [opts.suburb];
   let idx = 2;
+  const qi = parseReportQuarter(opts.reportQuarter);
   let sql = `op.suburb = $1
     AND op.street IS NOT NULL AND TRIM(op.street) <> ''`;
 
   if (opts.status === 'pending') {
-    if (opts.sentStatus === 'all') {
+    if (qi) {
+      sql += ` AND op.status IN ('pending', 'sent')`;
+    } else if (opts.sentStatus === 'all') {
       sql += ` AND op.status IN ('pending', 'sent')`;
     } else if (opts.sentStatus === 'sent') {
       sql += ` AND (op.status = 'sent' OR op.status = 'pending')`;
@@ -38,21 +43,23 @@ export function buildOutreachFilter(opts: OutreachFilterOptions): OutreachFilter
         AND (sl3.suburb = $${idx} OR sr3.suburb = $${idx} OR sl3.suburb IS NULL)`;
     params.push(opts.suburb);
     idx++;
-    if (opts.reportQuarter) {
-      const parts = opts.reportQuarter.split('-');
-      if (parts.length === 2) {
-        const y = parseInt(parts[0], 10);
-        const q = parts[1];
-        const qAlt = opts.reportQuarter.replace('-', '_');
-        sub += ` AND ((sr3.quarter = $${idx} AND sr3.year = $${idx + 1}) OR sl3.campaign_key = $${idx + 2} OR sl3.campaign_key = $${idx + 3} OR op.last_campaign = $${idx + 2} OR op.last_campaign = $${idx + 3})`;
-        params.push(q, isNaN(y) ? 0 : y, opts.reportQuarter, qAlt);
-        idx += 4;
-      }
+    if (qi) {
+      sub += ` AND ((sr3.quarter = $${idx} AND sr3.year = $${idx + 1}) OR sl3.campaign_key ~ $${idx + 2} OR op.last_campaign ~ $${idx + 2})`;
+      params.push(qi.quarter, qi.year, qi.campaignPattern);
+      idx += 3;
     }
     if (opts.sentStatus === 'sent') {
-      sql += ` AND (${exists} (${sub}) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
+      if (qi) {
+        sql += ` AND (${exists} (${sub}))`;
+      } else {
+        sql += ` AND (${exists} (${sub}) OR op.status = 'sent' OR COALESCE(op.total_send_count, 0) > 0 OR op.last_sent_at IS NOT NULL OR op.sent_at IS NOT NULL)`;
+      }
     } else {
-      sql += ` AND (${exists} (${sub}) AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
+      if (qi) {
+        sql += ` AND (${exists} (${sub}))`;
+      } else {
+        sql += ` AND (${exists} (${sub}) AND COALESCE(op.total_send_count, 0) = 0 AND op.last_sent_at IS NULL AND op.sent_at IS NULL)`;
+      }
       sql += ` AND NOT EXISTS (
         SELECT 1
         FROM properties p2
