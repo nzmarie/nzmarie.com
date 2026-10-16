@@ -2540,7 +2540,7 @@ export default function OutreachPage() {
 
       {/* Bulk Actions */}
       {activeTab === 'liked' && selected.size > 0 && (
-        <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 flex items-center gap-3">
+        <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 flex items-center gap-3" style={{ flexWrap: "wrap" }}>
           <span className="text-sm font-medium text-pink-800">
             {selected.size} address{selected.size === 1 ? '' : 'es'} selected
           </span>
@@ -2567,7 +2567,7 @@ export default function OutreachPage() {
       )}
 
       {activeTab === 'pending' && selected.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3" style={{ flexWrap: "wrap" }}>
           <span className="text-sm font-medium text-blue-800">
             {selected.size} address{selected.size === 1 ? '' : 'es'} selected
           </span>
@@ -2608,7 +2608,7 @@ export default function OutreachPage() {
       )}
 
       {activeTab === 'sent' && selected.size > 0 && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-3">
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-3" style={{ flexWrap: "wrap" }}>
           <span className="text-sm font-medium text-purple-800">
             {selected.size} address{selected.size === 1 ? '' : 'es'} selected
           </span>
@@ -2672,7 +2672,7 @@ export default function OutreachPage() {
         <>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))",
             gap: "20px",
           }}>
             {cardOrderedItems.map((prop) => (
@@ -3863,7 +3863,7 @@ export default function OutreachPage() {
       {!isClassic && loadingMore && (activeTab !== 'pending' || viewMode !== 'map') && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
+          gridTemplateColumns: viewMode === 'card' ? 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))' : '1fr',
           gap: viewMode === 'card' ? '20px' : '0',
         }}>
           {Array.from({ length: pageSize }).map((_, i) => (
