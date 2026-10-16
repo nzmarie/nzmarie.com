@@ -25,6 +25,8 @@ build/
 # misc
 .DS_Store
 *.pem
+Thumbs.db
+* - Copy.*
 
 # ignore generated PDF reports (stored on R2 only)
 /pdf/
