@@ -48,7 +48,19 @@ function quarterToSlug(quarter: string): string {
 
 const SUBURB_ORDER = ['North Shore', ...SUBURB_PRIORITY_ORDER];
 
-const REPORT_QUARTERS = ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4', '2027-Q1', '2027-Q2', '2027-Q3', '2027-Q4'];
+const REPORT_QUARTERS = ['2025-Q1', '2025-Q2', '2025-Q3', '2025-Q4', '2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4', '2027-Q1', '2027-Q2', '2027-Q3', '2027-Q4'];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth() + 1;
+
+function monthToQuarter(year: number, month: number): string {
+  return `${year}-Q${Math.ceil(month / 3)}`;
+}
+const REPORT_YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const REPORT_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 function buildDataQuarters(): string[] {
   const result: string[] = [];
@@ -73,9 +85,11 @@ export default function ReportToolbar({
   const setSlugMap = useReportStore(s => s.setSlugMap);
   const bumpRefreshKey = useReportStore(s => s.bumpRefreshKey);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [genReportQuarter, setGenReportQuarter] = useState(REPORT_QUARTERS[0]);
-  const [genStartQuarter, setGenStartQuarter] = useState(REPORT_QUARTERS[0]);
-  const [genEndQuarter, setGenEndQuarter] = useState(REPORT_QUARTERS[0]);
+  const [genReportQuarter, setGenReportQuarter] = useState(monthToQuarter(CURRENT_YEAR, CURRENT_MONTH));
+  const [genStartQuarter, setGenStartQuarter] = useState('2025-Q1');
+  const [genEndQuarter, setGenEndQuarter] = useState(monthToQuarter(CURRENT_YEAR, CURRENT_MONTH));
+  const [genYear, setGenYear] = useState(CURRENT_YEAR);
+  const [genMonth, setGenMonth] = useState(CURRENT_MONTH);
   const [genSuburbId, setGenSuburbId] = useState(suburbId || '');
   const [genSuburbName, setGenSuburbName] = useState(suburbName || '');
   const [genLoading, setGenLoading] = useState(false);
@@ -108,6 +122,8 @@ export default function ReportToolbar({
           quarter: genReportQuarter,
           start_quarter: genStartQuarter,
           end_quarter: genEndQuarter,
+          report_year: genYear,
+          report_month: genMonth,
         }),
       });
       const data = await res.json();
@@ -171,7 +187,7 @@ export default function ReportToolbar({
         </button>
 
         {!hideExtraButtons && (
-          <button onClick={() => { setGenSuburbId(suburbId || ''); setGenSuburbName(suburbName || ''); setShowGenerate(true); }} style={{
+          <button onClick={() => { setGenSuburbId(suburbId || ''); setGenSuburbName(suburbName || ''); setGenYear(CURRENT_YEAR); setGenMonth(CURRENT_MONTH); setGenReportQuarter(monthToQuarter(CURRENT_YEAR, CURRENT_MONTH)); setGenEndQuarter(monthToQuarter(CURRENT_YEAR, CURRENT_MONTH)); setGenStartQuarter('2025-Q1'); setShowGenerate(true); }} style={{
             padding: '4px 12px', fontSize: '0.8rem', borderRadius: 6,
             border: '1px solid #059669', background: '#ecfdf5', cursor: 'pointer',
             color: '#059669', fontWeight: 500,
@@ -276,9 +292,51 @@ export default function ReportToolbar({
                   </div>
                 </div>
 
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label htmlFor="gen-report-year" className="block text-sm text-slate-500 mb-1">Report Year</label>
+                    <select
+                      id="gen-report-year"
+                      value={genYear}
+                      onChange={(e) => {
+                        const y = Number(e.target.value);
+                        setGenYear(y);
+                        const q = monthToQuarter(y, genMonth);
+                        setGenReportQuarter(q);
+                        setGenEndQuarter(q);
+                      }}
+                      className={fieldStyles}
+                    >
+                      {REPORT_YEARS.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label htmlFor="gen-report-month" className="block text-sm text-slate-500 mb-1">Report Month</label>
+                    <select
+                      id="gen-report-month"
+                      value={genMonth}
+                      onChange={(e) => {
+                        const m = Number(e.target.value);
+                        setGenMonth(m);
+                        const q = monthToQuarter(genYear, m);
+                        setGenReportQuarter(q);
+                        setGenEndQuarter(q);
+                      }}
+                      className={fieldStyles}
+                    >
+                      {REPORT_MONTHS.map((name, i) => (
+                        <option key={name} value={i + 1}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm text-slate-500 mb-1">Report Quarter</label>
+                  <label htmlFor="gen-report-quarter" className="block text-sm text-slate-500 mb-1">Report Quarter</label>
                   <select
+                    id="gen-report-quarter"
                     value={genReportQuarter}
                     onChange={(e) => {
                       setGenReportQuarter(e.target.value);
@@ -293,8 +351,9 @@ export default function ReportToolbar({
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-500 mb-1">Data Start Quarter</label>
+                  <label htmlFor="gen-data-start-quarter" className="block text-sm text-slate-500 mb-1">Data Start Quarter</label>
                   <select
+                    id="gen-data-start-quarter"
                     value={genStartQuarter}
                     onChange={(e) => setGenStartQuarter(e.target.value)}
                     className={fieldStyles}
@@ -306,8 +365,9 @@ export default function ReportToolbar({
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-500 mb-1">Data End Quarter</label>
+                  <label htmlFor="gen-data-end-quarter" className="block text-sm text-slate-500 mb-1">Data End Quarter</label>
                   <select
+                    id="gen-data-end-quarter"
                     value={genEndQuarter}
                     onChange={(e) => setGenEndQuarter(e.target.value)}
                     className={fieldStyles}

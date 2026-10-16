@@ -166,7 +166,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           padding-top: 0;
         }
 
-        /* Premium Suburb Title Section (H1) Flex Container & Custom SVG Brand Mark */
+        /* Premium Suburb Title Section (H1) Flex Container */
         .is-quarterly-report h1 {
           display: flex !important;
           align-items: center !important;
@@ -174,18 +174,6 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
           gap: 16px !important; /* flex items-center gap-4 */
           text-decoration: none !important;
           border-bottom: none !important;
-        }
-
-        .is-quarterly-report h1::before {
-          content: '';
-          display: block !important;
-          width: 2.25rem !important; /* w-9 */
-          height: 2.25rem !important; /* h-9 */
-          flex-shrink: 0 !important;
-          background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231e40af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3L22 18H2Z'/><path d='M2 22H22'/></svg>") !important;
-          background-size: contain !important;
-          background-repeat: no-repeat !important;
-          background-position: center !important;
         }
 
         @media print {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDaysToSellDescription, filterOutDaysToSellFromIntro } from '../../../../../../../app/api/admin/reports/templates/generate/intro-utils';
+import { extractDaysToSellDescription, filterOutDaysToSellFromIntro, updateIntroMonthYear } from '../../../../../../../app/api/admin/reports/templates/generate/intro-utils';
 
 describe('extractDaysToSellDescription', () => {
   it('returns null for null input', () => {
@@ -199,5 +199,98 @@ describe('filterOutDaysToSellFromIntro', () => {
       { type: 'paragraph', content: 'Average days to sell: 28 days.' },
     ];
     expect(filterOutDaysToSellFromIntro(blocks)).toEqual([]);
+  });
+});
+
+describe('updateIntroMonthYear', () => {
+  it('returns null for null input', () => {
+    expect(updateIntroMonthYear(null, 2026, 9)).toBeNull();
+  });
+
+  it('rewrites the featuring date in a string content block', () => {
+    const blocks = [
+      { type: 'paragraph', content: 'Spring Market Update (Featuring Latest October 2026 Data)' },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 9) as any[];
+    expect(result[0].content).toBe('Spring Market Update (Featuring Latest September 2026 Data)');
+  });
+
+  it('rewrites the featuring date in a text object content array', () => {
+    const blocks = [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Featuring Latest October 2026 Data', styles: {} }] },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 9) as any[];
+    expect(result[0].content[0].text).toBe('Featuring Latest September 2026 Data');
+    expect(result[0].content[0].styles).toEqual({});
+  });
+
+  it('rewrites the featuring date in a string array content', () => {
+    const blocks = [
+      { type: 'paragraph', content: ['Autumn Insights — ', 'Featuring Latest April 2025 Data'] },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 1) as any[];
+    expect(result[0].content[1]).toBe('Featuring Latest January 2026 Data');
+    expect(result[0].content[0]).toBe('Autumn Insights — ');
+  });
+
+  it('keeps surrounding copy such as the season name untouched', () => {
+    const blocks = [
+      { type: 'heading', props: { level: 3 }, content: [{ type: 'text', text: 'Spring Market Update', styles: {} }] },
+      { type: 'paragraph', content: 'Featuring Latest October 2026 Data' },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 7) as any[];
+    expect(result[0].content[0].text).toBe('Spring Market Update');
+    expect(result[1].content).toBe('Featuring Latest July 2026 Data');
+  });
+
+  it('updates across years', () => {
+    const blocks = [
+      { type: 'paragraph', content: 'Featuring Latest December 2025 Data' },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 2) as any[];
+    expect(result[0].content).toBe('Featuring Latest February 2026 Data');
+  });
+
+  it('rewrites the featuring date when it is split across styled text runs', () => {
+    const blocks = [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Spring Market Update (Featuring Latest ', styles: {} },
+          { type: 'text', text: 'October 2026', styles: { bold: true } },
+          { type: 'text', text: ' Data)', styles: {} },
+        ],
+      },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 9) as any[];
+    const texts = result[0].content.map((c: any) => (typeof c === 'string' ? c : c.text));
+    expect(texts.join('')).toBe('Spring Market Update (Featuring Latest September 2026 Data)');
+    expect(texts.some((t: string) => t.includes('October'))).toBe(false);
+  });
+
+  it('leaves text without the featuring pattern unchanged', () => {
+    const blocks = [
+      { type: 'paragraph', content: 'Median prices rose across the shore.' },
+    ];
+    const result = updateIntroMonthYear(blocks, 2026, 9);
+    expect((result as any[])[0].content).toBe('Median prices rose across the shore.');
+  });
+
+  it('returns the same block object when nothing changes', () => {
+    const block = { type: 'paragraph', content: 'No dates here.' };
+    const result = updateIntroMonthYear([block], 2026, 9) as any[];
+    expect(result[0]).toBe(block);
+  });
+
+  it('ignores non-object entries', () => {
+    const blocks = [null, 'text-entry', 42];
+    const result = updateIntroMonthYear(blocks, 2026, 9);
+    expect(result).toEqual([null, 'text-entry', 42]);
+  });
+
+  it('ignores entries without a content field', () => {
+    const blocks = [{ type: 'paragraph' }];
+    const result = updateIntroMonthYear(blocks, 2026, 9);
+    expect(result).toEqual([{ type: 'paragraph' }]);
   });
 });

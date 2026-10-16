@@ -6,12 +6,14 @@ import type { ReportSuburb } from '@/types/report';
 export function useTemplate() {
   const [generating, setGenerating] = useState(false);
 
-  const generateReport = useCallback(async (suburbId: string, reportQuarter: string, startQuarter?: string, endQuarter?: string) => {
+  const generateReport = useCallback(async (suburbId: string, reportQuarter: string, startQuarter?: string, endQuarter?: string, reportYear?: number, reportMonth?: number) => {
     setGenerating(true);
     try {
       const body: Record<string, string> = { suburb_id: suburbId, quarter: reportQuarter };
       if (startQuarter) body.start_quarter = startQuarter;
       if (endQuarter) body.end_quarter = endQuarter;
+      if (reportYear) body.report_year = String(reportYear);
+      if (reportMonth) body.report_month = String(reportMonth);
       const res = await fetch('/api/admin/reports/templates/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

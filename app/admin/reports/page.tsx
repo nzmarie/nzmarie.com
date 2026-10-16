@@ -193,8 +193,8 @@ export default function ReportsPage() {
       <TemplateSelector
         open={showTemplate}
         onClose={() => { setShowTemplate(false); setSelectedSuburbId(null); }}
-        onGenerate={async (suburbId, reportQuarter, startQuarter, endQuarter) => {
-          const id = await generateReport(suburbId, reportQuarter, startQuarter, endQuarter);
+        onGenerate={async (suburbId, reportQuarter, startQuarter, endQuarter, reportYear, reportMonth) => {
+          const id = await generateReport(suburbId, reportQuarter, startQuarter, endQuarter, reportYear, reportMonth);
           if (id) {
             bumpRefreshKey();
             router.push(`/admin/reports/${id}`);

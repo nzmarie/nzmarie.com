@@ -3,9 +3,9 @@ import { auth } from '@/lib/auth';
 import { query as marieQuery } from '@/lib/db';
 import { isAdmin } from '@/lib/permissions';
 import { generateChartImageUrl } from '@/lib/report-charts';
-import { getMonthlyData, type MonthlyDataPoint } from '@/lib/market-data-aggregator';
-import { aggregateToQuarterly } from '@/lib/quarterly-aggregator';
-import { extractDaysToSellDescription, filterOutDaysToSellFromIntro } from './intro-utils';
+import { getMonthlyData } from '@/lib/market-data-aggregator';
+import { computeMarketPulse, formatMillions, monthLabel, shiftMonth, type MarketPulseResult } from '@/lib/market-pulse';
+import { extractDaysToSellDescription, filterOutDaysToSellFromIntro, updateIntroMonthYear } from './intro-utils';
 
 interface TrendRow {
   region_name: string;
@@ -38,10 +38,7 @@ interface CampaignRow {
   conversions: number;
 }
 
-const fmtM = (v: number | null | undefined): string => {
-  if (v == null) return '-';
-  return `$${(v / 1000000).toFixed(1)}M`;
-};
+const fmtM = (v: number | null | undefined): string => formatMillions(v, '-');
 
 function toLocalDateStr(d: unknown): string {
   if (typeof d === 'string') return d;
@@ -172,205 +169,67 @@ function sum(arr: (number | null)[]): number {
   return arr.filter((v): v is number => v != null).map(v => Number(v)).reduce((a, b) => a + b, 0);
 }
 
-function formatQuarterLabel(quarter: string): string {
-  return quarter.replace(/-Q/, ' Q');
-}
-
-function previousQuarter(quarter: string): string | null {
-  const [yearStr, qStr] = quarter.split('-Q');
-  if (!yearStr || !qStr) return null;
+function quarterEndYearMonth(quarter: string): { year: number; month: number } {
+  const [yearStr, qStr] = (quarter || '').split('-Q');
   const year = Number(yearStr);
   const q = Number(qStr);
-  if (Number.isNaN(year) || Number.isNaN(q) || q < 1 || q > 4) return null;
-  if (q === 1) {
-    return `${year - 1}-Q4`;
+  if (!Number.isInteger(year) || !Number.isInteger(q) || q < 1 || q > 4) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
   }
-  return `${year}-Q${q - 1}`;
-}
-
-function quarterMonthRange(quarter: string): { startYM: string; endYM: string } | null {
-  const [yearStr, qStr] = quarter.split('-Q');
-  const year = Number(yearStr);
-  const q = Number(qStr);
-  if (!yearStr || !qStr || Number.isNaN(year) || Number.isNaN(q) || q < 1 || q > 4) return null;
-  const firstMonth = (q - 1) * 3 + 1;
-  const lastMonth = firstMonth + 2;
-  return {
-    startYM: `${year}-${String(firstMonth).padStart(2, '0')}`,
-    endYM: `${year + (lastMonth > 12 ? 1 : 0)}-${String(lastMonth > 12 ? lastMonth - 12 : lastMonth).padStart(2, '0')}`,
-  };
-}
-
-function medianForQuarter(rows: TrendRow[], quarter: string): number | null {
-  const range = quarterMonthRange(quarter);
-  if (!range) return null;
-  const inRange = rows.filter(r => {
-    const ym = getYearMonth(r.period_month);
-    return ym >= range.startYM && ym <= range.endYM;
-  });
-  return agg(inRange.map(r => r.median_price));
-}
-
-// Quarter-over-quarter median price change, computed from monthly rows.
-function qoqPctFromRows(rows: TrendRow[], quarter: string): number | null {
-  const prevQuarterKey = previousQuarter(quarter);
-  if (!prevQuarterKey) return null;
-  const cur = medianForQuarter(rows, quarter);
-  const prev = medianForQuarter(rows, prevQuarterKey);
-  if (cur == null || prev == null || prev === 0) return null;
-  return Math.round(((cur - prev) / prev) * 10000) / 100;
+  return { year, month: q * 3 };
 }
 
 function buildBlocks(
   suburbName: string,
   quarter: string,
   marketTrends: TrendRow[] | null,
-  quarterAggs: MonthlyDataPoint[],
+  pulse: MarketPulseResult,
   lastSold: LastSoldRow | null,
   campaign: CampaignRow | null,
   chartImageUrl: string | null,
   suburbIntroContent: unknown[] | null,
-  endQuarter?: string
+  reportYear: number,
+  reportMonth: number
 ): unknown[] {
   const blocks: unknown[] = [];
   const displayName = suburbName === 'North Shore City' ? 'North Shore' : suburbName;
-  const displayQuarter = endQuarter && endQuarter !== quarter
-    ? `${formatQuarterLabel(quarter)} – ${formatQuarterLabel(endQuarter)}`
-    : formatQuarterLabel(quarter);
-
-  // Extract Days to Sell description from introduction content
-  const daysToSellFromIntro = extractDaysToSellDescription(suburbIntroContent);
+  const monthTitle = monthLabel(reportYear, reportMonth);
 
   // Page 1: Cover
-  blocks.push({ type: 'heading', props: { level: 1, textAlignment: 'center' }, content: [`${displayName}`] });
-  blocks.push({ type: 'heading', props: { level: 2, textAlignment: 'center' }, content: [`${displayQuarter} Market Report`] });
-  // Add introduction content, stripping any Days to Sell heading/paragraph (handled by KPI card instead)
-  const filteredIntroContent = filterOutDaysToSellFromIntro(suburbIntroContent);
+  blocks.push({
+    type: 'heading',
+    props: { level: 1, textAlignment: 'center' },
+    content: [
+      { type: 'delta', props: { height: '26px', strokeColor: '#2563eb' } },
+      ` ${displayName} ${reportYear} Market Report`,
+    ],
+  });
+  const filteredIntroContent = updateIntroMonthYear(
+    filterOutDaysToSellFromIntro(suburbIntroContent),
+    reportYear,
+    reportMonth
+  );
   if (filteredIntroContent && filteredIntroContent.length > 0) {
     blocks.push(...filteredIntroContent);
   }
 
-  // Page 2: Quarterly Data — custom card block
-  blocks.push({ type: 'heading', props: { level: 2 }, content: [`${displayName} Quarterly Data`] });
+  // Page 2: Market Pulse — custom monthly card block
+  blocks.push({ type: 'heading', props: { level: 2 }, content: [`${displayName} Market Pulse (${monthTitle})`] });
 
-  if (marketTrends && marketTrends.length > 0) {
-    // Prefer quarter-level aggregates computed in SQL when available
-    let kpiTotalVolume: number | null = null;
-    let kpiSales: number = 0;
-    let kpiDays: number | null = null;
-    let pricePct: number | null = null;
-    let salesDiff: number | null = null;
-    let salesUp = false;
-    let salesChange = '\u2014';
-    let compareDaysChange = '\u2014';
-    let compareDaysUp = false;
-    let compareLabel = 'Compared to Previous Period';
-
-    const qParts = (quarter || '').split('-Q');
-    const qYear = qParts.length === 2 ? Number(qParts[0]) : NaN;
-    const qNum = qParts.length === 2 ? Number(qParts[1]) : NaN;
-
-    const subData = marketTrends.filter((r) => r.region_name === suburbName);
-
-    const periodKey = !isNaN(qYear) && !isNaN(qNum) ? `${qYear}-Q${qNum}` : null;
-
-    // Use analytics-compatible quarterly aggregates when available
-    if (quarterAggs.length > 0 && periodKey) {
-      const qData = quarterAggs.find(d => d.period === periodKey);
-      const sd = qData?.suburbs[suburbName];
-      if (sd) {
-        kpiTotalVolume = sd.totalVolume ?? null;
-        kpiSales = sd.sales ?? 0;
-        kpiDays = sd.days ?? null;
-        // The card compares against the previous quarter, so the median price
-        // delta must be quarter-over-quarter (not the REINZ 1-year figure).
-        pricePct = sd.priceDiffMomPct ?? null;
-      }
-    }
-    // Fallback: compute directly from monthly rows
-    if (kpiSales === 0) {
-      const vols = subData.map(r => r.total_volume).filter((v): v is number => v != null).map(Number);
-      kpiTotalVolume = vols.length ? vols.reduce((a, b) => a + b, 0) : null;
-      kpiSales = sum(subData.map(r => r.sales_count));
-      kpiDays = agg(subData.map(r => r.days_to_sell));
-      pricePct = qoqPctFromRows(subData, quarter);
-    }
-
-    const prevQuarter = previousQuarter(quarter);
-    if (prevQuarter && periodKey) {
-      let prevSales = 0;
-      let prevDays: number | null = null;
-
-      const prevData = quarterAggs.find(d => d.period === prevQuarter);
-      const prevSd = prevData?.suburbs[suburbName];
-      if (prevSd) {
-        prevSales = prevSd.sales ?? 0;
-        prevDays = prevSd.days ?? null;
+  if (pulse.hasData) {
+    blocks.push({ type: 'marketPulse', props: { ...pulse.props } });
+    let insight = extractDaysToSellDescription(suburbIntroContent);
+    if (pulse.days != null) {
+      if (insight) {
+        insight = insight.replace(/The average Days to Sell of \d+ days/i, `The average Days to Sell of ${pulse.days} days`);
       } else {
-        const [pYearStr, pQStr] = prevQuarter.split('-Q');
-        const pYear = Number(pYearStr);
-        const pNum = Number(pQStr);
-        const prevStartYM = `${pYear}-${String((pNum - 1) * 3 + 1).padStart(2, '0')}`;
-        const prevEndYM = `${pYear + (pNum === 4 ? 1 : 0)}-${String((pNum * 3) > 12 ? (pNum * 3 - 12) : (pNum * 3)).padStart(2, '0')}`;
-        const prevRows = subData.filter(r => {
-          const ym = getYearMonth(r.period_month);
-          return ym >= prevStartYM && ym <= prevEndYM;
-        });
-        prevSales = sum(prevRows.map(r => r.sales_count));
-        prevDays = agg(prevRows.map(r => r.days_to_sell));
+        insight = `The average Days to Sell of ${pulse.days} days during ${monthTitle} reflects current market liquidity.`;
       }
-
-      if (prevSales > 0 && kpiSales > 0) {
-        const salesDiffVal = ((kpiSales - prevSales) / prevSales) * 100;
-        const salesUpVal = salesDiffVal >= 0;
-        salesDiff = salesDiffVal;
-        salesUp = salesUpVal;
-        salesChange = `${salesUpVal ? '+' : ''}${salesDiffVal.toFixed(1)}%`;
-      }
-
-      if (prevDays != null && kpiDays != null) {
-        const daysDiffVal = kpiDays - prevDays;
-        compareDaysUp = daysDiffVal > 0;
-        compareDaysChange = `${daysDiffVal > 0 ? '+' : ''}${daysDiffVal}`;
-      }
-      compareLabel = 'Compared to Previous Quarter';
+      blocks.push({ type: 'paragraph', content: [insight] });
     }
-
-    const priceUp = (pricePct ?? 0) >= 0;
-    const priceChange = pricePct != null && !Number.isNaN(pricePct) ? `${priceUp ? '+' : ''}${pricePct.toFixed(1)}%` : '\u2014';
-
-    const hasCompare = pricePct != null || salesDiff != null;
-    let insightText = daysToSellFromIntro || '';
-    if (insightText && kpiDays != null) {
-      insightText = insightText.replace(/The average Days to Sell of \d+ days/i, `The average Days to Sell of ${kpiDays} days`);
-    } else if (!insightText && kpiDays != null) {
-      insightText = `The average Days to Sell of ${kpiDays} days during ${displayQuarter} reflects current market liquidity. Family homes in premium school zones trade quickly, while properties with development potential require longer negotiation periods.`;
-    }
-
-    blocks.push({
-      type: 'quarterlyData',
-      props: {
-suburbName: displayName,
-        // keep the human-readable formatted value for existing consumers
-        totalVolume: fmtM(kpiTotalVolume),
-        // also include raw numeric values to avoid downstream formatting ambiguities
-        totalVolumeNumeric: kpiTotalVolume,
-        totalSales: String(kpiSales),
-        totalSalesNumeric: kpiSales,
-        avgDaysToSell: kpiDays != null ? String(kpiDays) : '',
-        periodText: displayQuarter,
-        compareLabel: hasCompare ? compareLabel : '',
-        comparePriceChange: priceChange,
-        comparePriceUp: String(priceUp),
-        compareSalesChange: salesChange,
-        compareSalesUp: String(salesUp),
-        compareDaysChange,
-        compareDaysUp: String(compareDaysUp),
-        insightText,
-      },
-    });
   } else {
-    blocks.push({ type: 'paragraph', content: ['Quarterly data is not yet available for this suburb.'] });
+    blocks.push({ type: 'paragraph', content: [`Monthly data is not yet available for ${monthTitle}.`] });
   }
 
   // Page 3: REINZ Market Trends
@@ -539,14 +398,23 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { suburb_id, quarter, start_quarter, end_quarter } = body;
+    const { suburb_id, quarter, start_quarter, end_quarter, report_year, report_month } = body;
 
-    const reportQuarter = quarter; // label displayed on report cover
+    const reportQuarter = quarter; // stored on the report row, drives the REINZ quarter range
     const dataStart = start_quarter || quarter; // data query range start
     const dataEnd = end_quarter || quarter; // data query range end
 
     if (!suburb_id || !reportQuarter) {
       return NextResponse.json({ success: false, error: 'suburb_id and quarter are required' }, { status: 400 });
+    }
+
+    let reportYear = Number(report_year);
+    let reportMonth = Number(report_month);
+    if (!Number.isInteger(reportYear) || reportYear < 1990 || reportYear > 2100 ||
+        !Number.isInteger(reportMonth) || reportMonth < 1 || reportMonth > 12) {
+      const derived = quarterEndYearMonth(reportQuarter);
+      reportYear = derived.year;
+      reportMonth = derived.month;
     }
 
     const suburbResult = await marieQuery<{ id: string; name: string }>(
@@ -569,10 +437,10 @@ export async function POST(request: Request) {
     );
     const userId = adminResult.rows[0].id;
 
-    // Cover both report quarter(s) and previous quarter in one unified data fetch (same as Analytics)
-    const prevQuarter = previousQuarter(reportQuarter);
-    const monthlyRangeStart = quarterToRange(prevQuarter || dataStart)?.start ?? '2025-01-01';
-    const monthlyRangeEnd = quarterToRange(dataEnd || dataStart)?.end ?? '2026-12-31';
+    // Cover both report month and previous month in one unified data fetch
+    const prevMonth = shiftMonth(reportYear, reportMonth, -1);
+    const monthlyRangeStart = `${prevMonth.year}-${String(prevMonth.month).padStart(2, '0')}-01`;
+    const monthlyRangeEnd = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01`;
 
     const [monthlyRaw, marketTrends, lastSold, campaign, chartImageUrl, suburbIntroContent] = await Promise.all([
       getMonthlyData([suburb.name], 'North Shore City', monthlyRangeStart, monthlyRangeEnd),
@@ -583,10 +451,9 @@ export async function POST(request: Request) {
       fetchSuburbIntroduction(suburb_id),
     ]);
 
-    const quarterAggs = aggregateToQuarterly(monthlyRaw);
-
-    const title = `${displayName} ${formatQuarterLabel(reportQuarter)} Market Report`;
-    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, quarterAggs, lastSold, campaign, chartImageUrl, suburbIntroContent);
+    const pulse = computeMarketPulse(monthlyRaw, suburb.name, reportYear, reportMonth);
+    const title = `${displayName} ${reportYear} Market Report`;
+    const content = buildBlocks(suburb.name, reportQuarter, marketTrends, pulse, lastSold, campaign, chartImageUrl, suburbIntroContent, reportYear, reportMonth);
 
     const result = await marieQuery<{ id: string }>(
       `INSERT INTO report_documents (user_id, doc_type, suburb_id, quarter, title, content)

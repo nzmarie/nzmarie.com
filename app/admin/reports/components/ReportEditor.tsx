@@ -10,6 +10,7 @@ import '@blocknote/mantine/style.css';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useReportStore } from '../stores/report-store';
+import { buildMarketPulseHTML, statDirection } from '@/lib/market-pulse';
 import type { ReportEditorContent } from '@/types/report';
 
 function createDeltaSVG(height: string, strokeColor: string): SVGElement {
@@ -202,9 +203,10 @@ const quarterlyDataBlock = createBlockSpec(
         </div>
       `;
 
-      const statCol = (label: string, value: string, up: boolean) => {
+      const statCol = (label: string, value: string, up: boolean, invertColor = false) => {
         const arrow = up ? '\u25B2' : '\u25BC';
-        const col = up ? '#16a34a' : '#dc2626';
+        const green = invertColor ? !up : up;
+        const col = green ? '#16a34a' : '#dc2626';
         return `
           <div style="text-align:center;flex:1;">
             <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;">${label}</div>
@@ -232,7 +234,7 @@ const quarterlyDataBlock = createBlockSpec(
               <div style="display:flex;gap:8px;">
                 ${statCol('Median Price', p.comparePriceChange || '\u2014', priceUp)}
                 ${statCol('Sales Count', p.compareSalesChange || '\u2014', salesUp)}
-                ${statCol('Days to Sell', p.compareDaysChange || '\u2014', daysUp)}
+                ${statCol('Days to Sell', p.compareDaysChange || '\u2014', daysUp, true)}
               </div>
             </div>` : ''}
           </div>` : ''}
@@ -247,8 +249,144 @@ const quarterlyDataBlock = createBlockSpec(
   }
 );
 
+const marketPulseEdits = new Map<string, { flush: () => void; token: object }>();
+
+function flushMarketPulseEdits(): void {
+  for (const entry of Array.from(marketPulseEdits.values())) {
+    entry.flush();
+  }
+}
+
+const marketPulseBlock = createBlockSpec(
+  {
+    type: 'marketPulse' as const,
+    content: 'none',
+    propSchema: {
+      medianPrice: { default: '' },
+      salesCount: { default: '' },
+      daysToSell: { default: '' },
+      medianLabel: { default: '' },
+      salesLabel: { default: '' },
+      daysLabel: { default: '' },
+      card2Note: { default: '' },
+      districtLine: { default: '' },
+      priceNote: { default: '' },
+      compareLabel: { default: '' },
+      comparePrice: { default: '' },
+      compareSales: { default: '' },
+      compareDays: { default: '' },
+      statPriceLabel: { default: '' },
+      statSalesLabel: { default: '' },
+      statDaysLabel: { default: '' },
+    },
+  },
+  {
+    render: (block: any, editor: any) => {
+      const p = block.props;
+      const blockId = block.id as string;
+      const container = document.createElement('div');
+      container.style.cssText =
+        'font-family:inherit;flex-grow:1;flex-shrink:1;flex-basis:0;width:100%;min-width:0;box-sizing:border-box;';
+      container.innerHTML = buildMarketPulseHTML(p);
+
+      const focusOrigins = new Map<string, string>();
+
+      const readValue = (prop: string): string => {
+        const el = container.querySelector<HTMLElement>(`[data-prop="${prop}"]`);
+        return (el?.textContent ?? '').trim();
+      };
+
+      const updateArrow = (prop: string) => {
+        const arrowEl = container.querySelector<HTMLElement>(`[data-arrow="${prop}"]`);
+        if (!arrowEl) return;
+        const dir = statDirection(readValue(prop));
+        arrowEl.textContent = dir === 'up' ? '\u25B2' : dir === 'down' ? '\u25BC' : '';
+        const valueCol = arrowEl.parentElement;
+        if (valueCol) {
+          const invert = prop === 'compareDays';
+          const upColor = invert ? '#dc2626' : '#16a34a';
+          const downColor = invert ? '#16a34a' : '#dc2626';
+          valueCol.style.color = dir === 'up' ? upColor : dir === 'down' ? downColor : '#0f172a';
+        }
+      };
+
+      const flush = () => {
+        const changes: Record<string, string> = {};
+        container.querySelectorAll<HTMLElement>('[data-prop]').forEach((el) => {
+          const prop = el.dataset.prop;
+          if (!prop) return;
+          const value = (el.textContent ?? '').trim();
+          if (value !== String(p[prop] ?? '')) changes[prop] = value;
+        });
+        if (Object.keys(changes).length === 0) return;
+        if (!editor || typeof editor.updateBlock !== 'function') return;
+        const current = typeof editor.getBlock === 'function' ? editor.getBlock(blockId) : null;
+        const base = (current?.props ?? p) as Record<string, unknown>;
+        editor.updateBlock(blockId, { props: { ...base, ...changes } });
+      };
+
+      const token = {};
+      marketPulseEdits.set(blockId, { flush, token });
+
+      container.querySelectorAll<HTMLElement>('[data-prop]').forEach((el) => {
+        const prop = el.dataset.prop as string;
+
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => e.stopPropagation());
+        el.addEventListener('beforeinput', (e) => e.stopPropagation());
+        el.addEventListener('drop', (e) => e.preventDefault());
+        el.addEventListener('paste', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const text = e.clipboardData?.getData('text/plain') ?? '';
+          if (text) document.execCommand('insertText', false, text);
+        });
+        el.addEventListener('focus', () => {
+          focusOrigins.set(prop, el.textContent ?? '');
+          el.style.boxShadow = '0 0 0 1px #93c5fd';
+        });
+        el.addEventListener('input', () => updateArrow(prop));
+        el.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.isComposing) return;
+          const isSave = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's';
+          if (isSave) return;
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            el.blur();
+            return;
+          }
+          if (e.key === 'Escape') {
+            el.textContent = focusOrigins.get(prop) ?? String(p[prop] ?? '');
+            updateArrow(prop);
+            el.blur();
+          }
+        });
+        el.addEventListener('blur', () => {
+          el.style.boxShadow = '';
+        });
+      });
+
+      container.addEventListener('focusout', (e: FocusEvent) => {
+        const next = e.relatedTarget as Node | null;
+        if (next && container.contains(next)) return;
+        flush();
+      });
+
+      return {
+        dom: container,
+        ignoreMutation: () => true,
+        destroy: () => {
+          const existing = marketPulseEdits.get(blockId);
+          if (existing && existing.token === token) marketPulseEdits.delete(blockId);
+        },
+      };
+    },
+  }
+);
+
 const schema = BlockNoteSchema.create({
-  blockSpecs: { ...defaultBlockSpecs, quarterlyData: quarterlyDataBlock() } as any,
+  blockSpecs: { ...defaultBlockSpecs, quarterlyData: quarterlyDataBlock(), marketPulse: marketPulseBlock() } as any,
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     delta: deltaInlineContent,
@@ -293,8 +431,10 @@ function normalizeBlock(block: any): any {
       }
       if (item && typeof item === 'object') {
         if (!item.type) item.type = 'text';
-        if (!item.styles) item.styles = {};
-        if (item.text === undefined) item.text = '';
+        if (item.type === 'text') {
+          if (!item.styles) item.styles = {};
+          if (item.text === undefined) item.text = '';
+        }
       }
       return item;
     });
@@ -398,6 +538,7 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
   }, [setLastSaved, updateDocument, onContentChange]);
 
   const saveContent = useCallback(async () => {
+    flushMarketPulseEdits();
     const blocks = editor.document;
     const safeBlocks = sanitize(blocks) as ReportEditorContent | null;
 
@@ -434,7 +575,10 @@ export default function ReportEditor({ docId, initialContent, onContentChange, c
 
   useEffect(() => {
     if (getContentRef) {
-      getContentRef.current = () => sanitize(editor.document) as ReportEditorContent | null;
+      getContentRef.current = () => {
+        flushMarketPulseEdits();
+        return sanitize(editor.document) as ReportEditorContent | null;
+      };
     }
     return () => {
       if (getContentRef) {
