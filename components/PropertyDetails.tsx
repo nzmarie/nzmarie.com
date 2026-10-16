@@ -3,18 +3,21 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Box, Heading, Text, Flex, Badge, IconButton } from "@radix-ui/themes";
-import { X, MapPin, Bed, Bath, Car, Square, Ruler, DollarSign } from "lucide-react";
+import { X, MapPin, Bed, Bath, Car, Square, Ruler, DollarSign, ExternalLink, Video, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Property {
   id: number;
   title: string;
   price: string;
   location: string;
-  bedrooms: number;
-  bathrooms: number;
-  parking: number;
-  area: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  parking?: number;
+  area?: string;
   landArea: string;
+  propertyType?: string;
+  videoUrl?: string;
+  listingUrl?: string;
   imageUrl: string;
   images?: string[];
   status: "For Sale" | "Under Offer" | "Sold" | "Deadline Sale" | "Coming Soon" | "Withdrawn";
@@ -48,6 +51,10 @@ export default function PropertyDetails({ property, onClose, lang = "en" }: Prop
     }
     setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
   };
+
+  const youTubeId = property.videoUrl
+    ? (property.videoUrl.match(/(?:youtu\.be\/|v=|shorts\/)([A-Za-z0-9_-]{6,})/) || [])[1]
+    : undefined;
 
   return (
     <Box
@@ -106,44 +113,132 @@ export default function PropertyDetails({ property, onClose, lang = "en" }: Prop
         </Flex>
 
         <Flex gap="4" wrap="wrap" mb="4">
-          <Flex align="center" gap="2">
-            <Bed size={20} />
-            <Text size="3">{property.bedrooms} {t.bed}</Text>
-          </Flex>
-          <Flex align="center" gap="2">
-            <Bath size={20} />
-            <Text size="3">{property.bathrooms} {t.bath}</Text>
-          </Flex>
-          <Flex align="center" gap="2">
-            <Car size={20} />
-            <Text size="3">{property.parking} {t.parking}</Text>
-          </Flex>
-          <Flex align="center" gap="2">
-            <Square size={20} />
-            <Text size="3">{t.floor} {property.area}</Text>
-          </Flex>
+          {property.bedrooms !== undefined && (
+            <Flex align="center" gap="2">
+              <Bed size={20} />
+              <Text size="3">{property.bedrooms} {t.bed}</Text>
+            </Flex>
+          )}
+          {property.bathrooms !== undefined && (
+            <Flex align="center" gap="2">
+              <Bath size={20} />
+              <Text size="3">{property.bathrooms} {t.bath}</Text>
+            </Flex>
+          )}
+          {property.parking !== undefined && (
+            <Flex align="center" gap="2">
+              <Car size={20} />
+              <Text size="3">{property.parking} {t.parking}</Text>
+            </Flex>
+          )}
+          {property.area && (
+            <Flex align="center" gap="2">
+              <Square size={20} />
+              <Text size="3">{t.floor} {property.area}</Text>
+            </Flex>
+          )}
           <Flex align="center" gap="2">
             <Ruler size={20} />
             <Text size="3">{t.land} {property.landArea}</Text>
           </Flex>
+          {property.propertyType && (
+            <Flex align="center" gap="2">
+              <Square size={20} />
+              <Text size="3">{property.propertyType}</Text>
+            </Flex>
+          )}
         </Flex>
 
         {hasImages && (
           <Box mb="4">
-            <Image
-              src={images[currentImageIndex]}
-              alt={property.title}
-              onClick={handleMainImageClick}
-              width={800}
-              height={600}
+            <Box
               style={{
-                width: "100%",
-                height: "auto",
-                borderRadius: "8px",
+                position: "relative",
                 marginBottom: "1rem",
-                cursor: images.length > 1 ? "pointer" : "default",
+                borderRadius: "8px",
+                overflow: "hidden",
               }}
-            />
+            >
+              <Image
+                src={images[currentImageIndex]}
+                alt={property.title}
+                onClick={handleMainImageClick}
+                width={800}
+                height={600}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                  cursor: images.length > 1 ? "pointer" : "default",
+                }}
+              />
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label={lang === "zh" ? "上一张图片" : "Previous image"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentImageIndex(
+                        (prevIndex) => (prevIndex - 1 + images.length) % images.length
+                      );
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "12px",
+                      transform: "translateY(-50%)",
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "50%",
+                      border: "none",
+                      backgroundColor: "rgba(255, 255, 255, 0.6)",
+                      backdropFilter: "blur(4px)",
+                      WebkitBackdropFilter: "blur(4px)",
+                      color: "var(--gray-12)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    <ChevronLeft size={28} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={lang === "zh" ? "下一张图片" : "Next image"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      right: "12px",
+                      transform: "translateY(-50%)",
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "50%",
+                      border: "none",
+                      backgroundColor: "rgba(255, 255, 255, 0.6)",
+                      backdropFilter: "blur(4px)",
+                      WebkitBackdropFilter: "blur(4px)",
+                      color: "var(--gray-12)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    <ChevronRight size={28} />
+                  </button>
+                </>
+              )}
+            </Box>
             {images.length > 1 && (
               <Flex gap="2" wrap="wrap">
                 {images.map((image, index) => (
@@ -179,6 +274,64 @@ export default function PropertyDetails({ property, onClose, lang = "en" }: Prop
                 ))}
               </Flex>
             )}
+          </Box>
+        )}
+
+        {youTubeId && (
+          <Box mb="4">
+            <Heading as="h3" size="4" weight="bold" mb="2">
+              <Flex align="center" gap="2">
+                <Video size={20} />
+                {lang === "zh" ? "视频" : "Video"}
+              </Flex>
+            </Heading>
+            <Box
+              style={{
+                position: "relative",
+                width: "100%",
+                paddingTop: "56.25%",
+                borderRadius: "8px",
+                overflow: "hidden",
+              }}
+            >
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${youTubeId}`}
+                title={`${property.title} video`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </Box>
+          </Box>
+        )}
+
+        {property.listingUrl && (
+          <Box mb="4">
+            <Heading as="h3" size="4" weight="bold" mb="2">
+              {lang === "zh" ? "外部房源" : "Listing"}
+            </Heading>
+            <a
+              href={property.listingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                color: "var(--accent-11)",
+                fontWeight: 500,
+              }}
+            >
+              <ExternalLink size={18} />
+              {lang === "zh" ? "在 realestate.co.nz 上查看" : "View on realestate.co.nz"}
+            </a>
           </Box>
         )}
 

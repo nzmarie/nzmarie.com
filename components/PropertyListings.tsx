@@ -16,16 +16,28 @@ import {
 import { Bed, Bath, Car, Square, Ruler } from "lucide-react";
 import PropertyDetails from "./PropertyDetails";
 
+interface PropertyZh {
+  price?: string;
+  propertyType?: string;
+  description: string;
+  details: string;
+  openHomes?: string[];
+  deadline?: string;
+}
+
 interface Property {
   id: number;
   title: string;
   price: string;
   location: string;
-  bedrooms: number;
-  bathrooms: number;
-  parking: number;
-  area: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  parking?: number;
+  area?: string;
   landArea: string;
+  propertyType?: string;
+  videoUrl?: string;
+  listingUrl?: string;
   imageUrl: string;
   images?: string[];
   status: "For Sale" | "Under Offer" | "Sold" | "Deadline Sale" | "Coming Soon" | "Withdrawn";
@@ -33,9 +45,82 @@ interface Property {
   details: string;
   openHomes: string[];
   deadline?: string;
+  zh?: PropertyZh;
+}
+
+function localizeProperty(property: Property, lang: Language): Property {
+  if (lang !== "zh" || !property.zh) return property;
+  return {
+    ...property,
+    price: property.zh.price ?? property.price,
+    propertyType: property.zh.propertyType ?? property.propertyType,
+    description: property.zh.description,
+    details: property.zh.details,
+    openHomes: property.zh.openHomes ?? property.openHomes,
+    deadline: property.zh.deadline ?? property.deadline,
+  };
 }
 
 const properties: Property[] = [
+  {
+    id: 5,
+    title: "1 Wake Road, Coatesville, Rodney",
+    price: "Negotiation",
+    location: "1 Wake Road, Coatesville, Rodney 0627",
+    landArea: "10,000m²",
+    propertyType: "Lifestyle Section",
+    videoUrl: "https://youtu.be/TcFgLRdiLPM",
+    listingUrl: "https://www.realestate.co.nz/43134985/rural/sale/1-wake-road-coatesville",
+    imageUrl: "/img/1-wake-road-coatesville/photo-01.jpg",
+    images: [
+      "/img/1-wake-road-coatesville/photo-01.jpg",
+      "/img/1-wake-road-coatesville/concept.jpg",
+      "/img/1-wake-road-coatesville/photo-11.jpg",
+      "/img/1-wake-road-coatesville/photo-02.jpg",
+      "/img/1-wake-road-coatesville/photo-05.jpg",
+      "/img/1-wake-road-coatesville/photo-03.jpg",
+      "/img/1-wake-road-coatesville/photo-08.jpg",
+      "/img/1-wake-road-coatesville/photo-16.jpg",
+    ],
+    status: "For Sale",
+    description: "Your Coatesville Lifestyle Starts Here — a rare 1-hectare (10,000sqm) lifestyle section in sought-after Coatesville.",
+    details: `A rare opportunity to secure a 1-hectare (10,000sqm) Lifestyle Title in sought-after Coatesville.
+
+Elevated and peaceful, this generous bare section offers a blank canvas to build your dream country home, with plenty of space for family, gardens and outdoor living.
+
+Best of all, you can enjoy the peace and space of rural living without giving up convenience. Albany Mega Centre and the wider Albany amenities are approximately 15 minutes drive away, with schools, Massey University, shopping, dining and everyday services all within easy reach.
+
+The property is zoned for Albany Junior High School, Albany Senior High School, and Coatesville School, making it an attractive option for families planning their future home.
+Enjoy nearby reserves, golf and outdoor recreation, while having easy road access for commuting.
+
+With 10,000sqm of land and the freedom to build from the ground up, opportunities like this are becoming increasingly hard to find.
+
+The vendor's plans have changed — now it's your chance to make this special piece of Coatesville your own!
+Contact us now for the full information pack or to arrange a private viewing!
+
+Listing # 941361 | Listed on 25 September`,
+    openHomes: [],
+    zh: {
+      price: "价格面议",
+      propertyType: "生活区分契土地",
+      description: "开启您的 Coatesville 生活方式——备受追捧的 Coatesville 地区一块罕见的 1 公顷（10,000 平方米）生活区分契土地。",
+      details: `一个难得的机会，在备受追捧的 Coatesville 拥有一块 1 公顷（10,000 平方米）的生活区分契土地。
+
+地势高且宁静，这块宽敞的空地为您提供建造梦想乡村住宅的空白画布，拥有充足的空间供家庭生活、花园和户外活动使用。
+
+最棒的是，您可以享受乡村生活的宁静与宽敞，同时不必牺牲便利性。Albany Mega Centre（Albany 大型购物中心）及 Albany 周边生活设施距离约 15 分钟车程，学校、梅西大学、购物、餐饮和日常服务均近在咫尺。
+
+该房产属于 Albany 初中、Albany 高中及 Coatesville 小学校区，是规划未来家园的家庭理想选择。
+享受附近的自然保护区、高尔夫球场和户外休闲活动，同时拥有便捷的道路通勤条件。
+
+拥有 10,000 平方米的土地和从零开始建造的自由，这样的机会正变得越来越难得。
+
+卖家的计划已改变——现在是您将这片 Coatesville 特别之地变为己有的机会！
+立即联系我们获取完整信息资料或安排私人看房！
+
+房源编号 # 941361 | 挂牌日期 9 月 25 日`,
+    },
+  },
   {
     id: 1,
     title: "62 Lord Street, STOKES VALLEY, Lower Hutt City",
@@ -68,6 +153,21 @@ The outdoor areas are a true highlight! A spacious yard provides plenty of off-s
 With convenient transport options, it’s just a 2-minute walk to the bus stop - don’t miss this opportunity to make this peaceful retreat your new family home. Come to an open home or book a private viewing today!`,
     openHomes: ["Sat, 1 Nov 2025, 1:00-1:30pm", "Sun, 2 Nov 2025, 1:00-1:30pm"],
     deadline: "Wednesday 12 November 2025 @ 1pm (unless sold prior)",
+    zh: {
+      price: "估值: $630,000",
+      description: "属于您的一片自然天地",
+      details: `在这个精心维护的 1970 年代家庭住宅中，尽享舒适、空间与宁静的完美平衡。住宅坐落在约 2,271 平方米的宽敞土地上，提供约 190 平方米的生活空间，专为轻松的家庭生活而精心设计。
+
+踏入室内，全新地毯和全新粉刷的墙面映入眼帘——让家从进门那一刻起就充满明亮温馨的感觉。三间宽敞的双人卧室均配有嵌入式衣柜，一间设施齐全的卫浴配独立厕所。楼下，串联式双车库用途多样——可用作工作坊、兴趣空间或额外储藏，此外还有一间额外的厕所——非常适合在花园里忙碌而不想脱掉胶靴的时候！
+
+现代化的厨房让烹饪成为一种享受，用餐区与温馨的客厅无缝衔接。两台热泵和燃气壁炉让家在冬季保持温暖舒适，大面积窗户和滑动门让空间充满自然光，通向一个阳光明媚的露台——您可以在那里享受清晨咖啡或招待朋友，同时欣赏远处的景色。
+
+户外区域才是真正的一大亮点！宽敞的院子提供充足的路边停车位，可停放汽车、船只或拖车，为您的生活方式提供灵活性，还有一个可爱的开放式露台，非常适合家庭烧烤或尽情享受阳光与宁静。后花园邀请您种植花卉和蔬菜，甚至养几只母鸡或小宠物——非常适合那些喜爱一点乡村生活的人。
+
+交通便利，步行 2 分钟即可到达公交车站——不要错过这个机会，让这个宁静的避风港成为您的新家庭住宅。今天就来参加开放日或预约私人看房吧！`,
+      openHomes: ["2025年11月1日 星期六 下午1:00-1:30", "2025年11月2日 星期日 下午1:00-1:30"],
+      deadline: "2025年11月12日 星期三 下午1点（除非提前售出）",
+    },
   },
   {
     id: 3,
@@ -80,19 +180,32 @@ With convenient transport options, it’s just a 2-minute walk to the bus stop -
     area: "75m²",
     landArea: "-",
     imageUrl: "/img/1B-Arawa-Road-Hataitai/6dgaz4ppoqi6tftmy6nrtdtc5a.jpg",
-    status: "For Sale",
-    description: "Modern apartment now on the market in sought-after Hataitai.",
-    details: `Welcome to 1b Arawa Road — a beautifully presented apartment in the heart of Hataitai, now available for sale.
+    status: "Sold",
+    description: "Modern apartment in the heart of Hataitai — now sold.",
+    details: `Welcome to 1b Arawa Road — a beautifully presented apartment in the heart of Hataitai. This property has now been sold.
 
 Key Details:
 - Year Built: 1994
 - Property Type: Residential Apartment
 - Floor Area: 75m²
 
-This well-maintained apartment offers a fantastic opportunity for first home buyers or investors looking to secure a property in one of Wellington's most desirable inner-city suburbs. Enjoy proximity to public transport, local cafes, and the stunning Wellington harbour.
+This well-maintained apartment offered a fantastic opportunity for first home buyers or investors looking to secure a property in one of Wellington's most desirable inner-city suburbs. Enjoy proximity to public transport, local cafes, and the stunning Wellington harbour.
 
-Contact Marie Nian today to arrange a private viewing.`,
+If you have a similar property to sell, contact Marie Nian today.`,
     openHomes: [],
+    zh: {
+      description: "Hataitai 核心地段的现代公寓——现已售出。",
+      details: `欢迎来到 1b Arawa Road——位于 Hataitai 核心地段的精美公寓。该房产现已售出。
+
+主要信息：
+- 建成年份：1994 年
+- 房产类型：住宅公寓
+- 室内面积：75 平方米
+
+这栋维护良好的公寓为首次购房者或投资者提供了一个绝佳的机会，可以在惠灵顿最受欢迎的内城区之一置业。邻近公共交通、当地咖啡馆和迷人的惠灵顿海港。
+
+如果您有类似的房产需要出售，请立即联系 Marie Nian。`,
+    },
   },
   {
     id: 4,
@@ -142,6 +255,22 @@ Property History & Valuation:
 
 Status: This property was previously listed by Marie. After several open homes, the seller has decided to withdraw the property from the market for the time being.`,
     openHomes: [],
+    zh: {
+      price: "已撤回",
+      description: "宽敞的住宅物业，潜力巨大。建于 1967 年。",
+      details: `关于 198 Sievers Grove, Cannons Creek, Porirua, 5024：
+198 Sievers Grove 是一座建于 1967 年的住宅物业，拥有 3 间卧室、1 间浴室和 1 个停车位。该物业估价在 $550,000 至 $600,000 之间。
+
+房产历史与估价：
+- 上次售出：2019 年 6 月 3 日，售价 $390,000（由 Double Winkel Real Estate Ltd Professionals, Porirua 出售）
+- 市场时间：2019 年以 22 天售出。
+- 评级估价（2022 年 10 月 1 日）：
+  * 总资本价值：$590,000
+  * 土地价值：$365,000
+  * 改良物价值：$225,000
+
+状态：此房产此前由 Marie 代理销售。经过数次开放日后，卖家决定暂时将该房产撤出市场。`,
+    },
   },
 ];
 
@@ -211,7 +340,9 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
 
         {/* Properties Grid */}
         <Grid columns={{ initial: "1", md: "2" }} gap="6" justify="center">
-          {properties.map((property) => (
+          {properties.map((rawProperty) => {
+            const property = localizeProperty(rawProperty, lang);
+            return (
             <Card
               key={property.id}
               className="property-card"
@@ -316,33 +447,41 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
 
                 {/* Property Features */}
                 <Flex wrap="wrap" gap="4" mb="4">
-                  <Flex align="center" gap="1">
-                    <Bed size={16} style={{ color: "var(--gray-9)" }} />
-                    <Text size="2" style={{ color: "var(--gray-11)" }}>
-                      {property.bedrooms} {t.bed}
-                    </Text>
-                  </Flex>
+                  {property.bedrooms !== undefined && (
+                    <Flex align="center" gap="1">
+                      <Bed size={16} style={{ color: "var(--gray-9)" }} />
+                      <Text size="2" style={{ color: "var(--gray-11)" }}>
+                        {property.bedrooms} {t.bed}
+                      </Text>
+                    </Flex>
+                  )}
 
-                  <Flex align="center" gap="1">
-                    <Bath size={16} style={{ color: "var(--gray-9)" }} />
-                    <Text size="2" style={{ color: "var(--gray-11)" }}>
-                      {property.bathrooms} {t.bath}
-                    </Text>
-                  </Flex>
+                  {property.bathrooms !== undefined && (
+                    <Flex align="center" gap="1">
+                      <Bath size={16} style={{ color: "var(--gray-9)" }} />
+                      <Text size="2" style={{ color: "var(--gray-11)" }}>
+                        {property.bathrooms} {t.bath}
+                      </Text>
+                    </Flex>
+                  )}
 
-                  <Flex align="center" gap="1">
-                    <Car size={16} style={{ color: "var(--gray-9)" }} />
-                    <Text size="2" style={{ color: "var(--gray-11)" }}>
-                      {property.parking} {t.parking}
-                    </Text>
-                  </Flex>
+                  {property.parking !== undefined && (
+                    <Flex align="center" gap="1">
+                      <Car size={16} style={{ color: "var(--gray-9)" }} />
+                      <Text size="2" style={{ color: "var(--gray-11)" }}>
+                        {property.parking} {t.parking}
+                      </Text>
+                    </Flex>
+                  )}
 
-                  <Flex align="center" gap="1">
-                    <Square size={16} style={{ color: "var(--gray-9)" }} />
-                    <Text size="2" style={{ color: "var(--gray-11)" }}>
-                      {t.floor} {property.area}
-                    </Text>
-                  </Flex>
+                  {property.area && (
+                    <Flex align="center" gap="1">
+                      <Square size={16} style={{ color: "var(--gray-9)" }} />
+                      <Text size="2" style={{ color: "var(--gray-11)" }}>
+                        {t.floor} {property.area}
+                      </Text>
+                    </Flex>
+                  )}
 
                   <Flex align="center" gap="1">
                     <Ruler size={16} style={{ color: "var(--gray-9)" }} />
@@ -350,6 +489,15 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
                       {t.land} {property.landArea}
                     </Text>
                   </Flex>
+
+                  {property.propertyType && (
+                    <Flex align="center" gap="1">
+                      <Square size={16} style={{ color: "var(--gray-9)" }} />
+                      <Text size="2" style={{ color: "var(--gray-11)" }}>
+                        {property.propertyType}
+                      </Text>
+                    </Flex>
+                  )}
                 </Flex>
 
                 {/* Action Buttons */}
@@ -370,7 +518,8 @@ export default function PropertyListings({ lang = "en" }: { lang?: Language }) {
                 </Flex>
               </Box>
             </Card>
-          ))}
+            );
+          })}
         </Grid>
 
 
